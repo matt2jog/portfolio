@@ -187,28 +187,34 @@
     padding: 1.5rem;
     box-sizing: border-box;
     border: 1px solid hsl(var(--primary));
-    box-shadow: 0 0 12px hsl(var(--primary) / 0.5);
   }
 
-  .project-cube-face--1::before,
-  .project-cube-face--1::after {
-    content: "";
+  .project-cube-pulse {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 30%;
-    height: 2px;
-    background: hsl(var(--primary) / 0.95);
-    box-shadow: 0 0 10px hsl(var(--primary) / 0.7);
-    filter: blur(0.3px);
+    inset: -3px;
     pointer-events: none;
   }
 
-  .project-cube-face--1::before {
+  .project-cube-face--1 .project-cube-pulse::before,
+  .project-cube-face--1 .project-cube-pulse::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.95), hsl(var(--primary) / 0.95)),
+      linear-gradient(hsl(var(--primary) / 0.95), hsl(var(--primary) / 0.95)),
+      linear-gradient(hsl(var(--primary) / 0.45), hsl(var(--primary) / 0.45)),
+      linear-gradient(hsl(var(--primary) / 0.45), hsl(var(--primary) / 0.45));
+    filter: blur(1.2px) drop-shadow(0 0 10px hsl(var(--primary) / 0.85));
+    pointer-events: none;
+  }
+
+  .project-cube-face--1 .project-cube-pulse::before {
     animation: cube-border-trace-cw 3.6s linear infinite;
   }
 
-  .project-cube-face--1::after {
+  .project-cube-face--1 .project-cube-pulse::after {
     animation: cube-border-trace-ccw 3.6s linear infinite;
   }
 
@@ -265,82 +271,66 @@
 
 @keyframes cube-border-trace-cw {
   0% {
-    top: 0;
-    left: 0;
-    width: 30%;
-    height: 2px;
-    opacity: 0;
+    opacity: 0.4;
+    background-size: 5% 2px, 2px 0, 5% 6px, 6px 0;
+    background-position: 0% 0%, 100% 0%, 0% 0%, 100% 0%;
   }
-  8% {
+  2.8% {
     opacity: 0.85;
+    background-size: 30% 2px, 2px 0, 30% 6px, 6px 0;
+    background-position: 0% 0%, 100% 0%, 0% 0%, 100% 0%;
   }
   45% {
-    top: 0;
-    left: 70%;
-    width: 30%;
-    height: 2px;
     opacity: 0.85;
+    background-size: 30% 2px, 2px 0, 30% 6px, 6px 0;
+    background-position: 100% 0%, 100% 0%, 100% 0%, 100% 0%;
   }
   50% {
-    top: 0;
-    left: calc(100% - 2px);
-    width: 2px;
-    height: 30%;
     opacity: 0.65;
+    background-size: 0 2px, 2px 30%, 0 6px, 6px 30%;
+    background-position: 100% 0%, 100% 0%, 100% 0%, 100% 0%;
   }
   90% {
-    top: 70%;
-    left: calc(100% - 2px);
-    width: 2px;
-    height: 30%;
     opacity: 0.65;
+    background-size: 0 2px, 2px 30%, 0 6px, 6px 30%;
+    background-position: 100% 0%, 100% 100%, 100% 0%, 100% 100%;
   }
   100% {
-    top: calc(100% - 2px);
-    left: calc(100% - 2px);
-    width: 2px;
-    height: 2px;
     opacity: 0;
+    background-size: 0 2px, 2px 0, 0 6px, 6px 0;
+    background-position: 100% 0%, 100% 100%, 100% 0%, 100% 100%;
   }
 }
 
 @keyframes cube-border-trace-ccw {
   0% {
-    top: 0;
-    left: 0;
-    width: 2px;
-    height: 30%;
-    opacity: 0;
+    opacity: 0.4;
+    background-size: 2px 5%, 0 2px, 6px 5%, 0 6px;
+    background-position: 0% 0%, 0% 100%, 0% 0%, 0% 100%;
   }
-  8% {
+  2.8% {
     opacity: 0.85;
+    background-size: 2px 30%, 0 2px, 6px 30%, 0 6px;
+    background-position: 0% 0%, 0% 100%, 0% 0%, 0% 100%;
   }
   45% {
-    top: 70%;
-    left: 0;
-    width: 2px;
-    height: 30%;
     opacity: 0.85;
+    background-size: 2px 30%, 0 2px, 6px 30%, 0 6px;
+    background-position: 0% 100%, 0% 100%, 0% 100%, 0% 100%;
   }
   50% {
-    top: calc(100% - 2px);
-    left: 0;
-    width: 30%;
-    height: 2px;
     opacity: 0.65;
+    background-size: 2px 0, 30% 2px, 6px 0, 30% 6px;
+    background-position: 0% 100%, 0% 100%, 0% 100%, 0% 100%;
   }
   90% {
-    top: calc(100% - 2px);
-    left: 70%;
-    width: 30%;
-    height: 2px;
     opacity: 0.65;
+    background-size: 2px 0, 30% 2px, 6px 0, 30% 6px;
+    background-position: 0% 100%, 100% 100%, 0% 100%, 100% 100%;
   }
   100% {
-    top: calc(100% - 2px);
-    left: calc(100% - 2px);
-    width: 2px;
-    height: 2px;
     opacity: 0;
+    background-size: 2px 0, 0 2px, 6px 0, 0 6px;
+    background-position: 0% 100%, 100% 100%, 0% 100%, 100% 100%;
   }
 }

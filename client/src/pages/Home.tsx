@@ -147,6 +147,7 @@ export default function Home() {
                      key={faceIndex}
                      className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                    >
+                     <span className="project-cube-pulse" aria-hidden="true" />
                      <div className="project-face-grid grid grid-cols-1 md:grid-cols-2 gap-6 w-full h-full min-h-0">
                        {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
                          const project = faceProjects[projectIndex];
