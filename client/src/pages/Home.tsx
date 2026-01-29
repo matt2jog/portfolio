@@ -140,11 +140,12 @@ export default function Home() {
                      key={faceIndex}
                      className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                    >
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full h-full">
+                     <div className="project-face-grid grid grid-cols-1 md:grid-cols-2 gap-6 w-full h-full min-h-0">
                        {faceProjects.map((project, projectIndex) => (
                          <BlueprintCard
                            key={`${faceIndex}-${projectIndex}-${project.title}`}
                            {...project}
+                           className="min-h-0"
                          />
                        ))}
                      </div>

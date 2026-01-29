@@ -9,14 +9,15 @@ interface ProjectProps {
   description: string;
   tech: string[];
   image?: string; // Optional real image, defaults to blueprint
+  className?: string;
 }
 
-export function BlueprintCard({ title, category, description, tech, image }: ProjectProps) {
+export function BlueprintCard({ title, category, description, tech, image, className }: ProjectProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
     <motion.div
-      className="group relative h-[400px] w-full cursor-pointer overflow-hidden rounded-sm border border-white/10 bg-black/40"
+      className={`group relative h-full min-h-[240px] w-full cursor-pointer overflow-hidden rounded-sm border border-white/10 bg-black/40 ${className ?? ""}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {

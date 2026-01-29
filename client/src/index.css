@@ -183,7 +183,25 @@
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
-    backface-visibility: hidden;
+    box-sizing: border-box;
+  }
+
+  .project-cube-face::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid hsl(var(--primary));
+    box-shadow: 0 0 12px hsl(var(--primary) / 0.35);
+    pointer-events: none;
+  }
+
+  .project-cube-face > .grid {
+    height: 100%;
+    align-content: stretch;
+  }
+
+  .project-face-grid {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 
   .project-cube-face--1 {
