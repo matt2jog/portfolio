@@ -50,41 +50,48 @@ export default function Home() {
       category: "Networking",
       description: "Self-healing mesh network protocol for planetary-scale communications in low-connectivity environments.",
       tech: ["Go", "Protobuf", "WebRTC"],
-    },
-    {
-      title: "Helix Engine",
-      category: "Graphics",
-      description: "Custom physically-based rendering engine optimized for mobile ray-tracing hardware.",
-      tech: ["C++", "Vulkan", "GLSL"],
     }
   ];
 
   const facesCount = 4;
   const projectsPerFace = 4;
-  const totalSlots = facesCount * projectsPerFace;
+  const totalGroups = Math.max(1, Math.ceil(projects.length / projectsPerFace));
 
-  const cubeProjects = useMemo(
-    () =>
-      Array.from({ length: totalSlots }, (_, i) => projects[i % projects.length]),
-    [projects, totalSlots]
-  );
+  const [rotationStep, setRotationStep] = useState(0);
+  const [groupIndex, setGroupIndex] = useState(0);
 
-  const faces = useMemo(
-    () =>
-      Array.from({ length: facesCount }, (_, faceIndex) =>
-        cubeProjects.slice(
-          faceIndex * projectsPerFace,
-          (faceIndex + 1) * projectsPerFace
-        )
-      ),
-    [cubeProjects, facesCount, projectsPerFace]
-  );
+  const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
 
-  const [activeFace, setActiveFace] = useState(0);
-  const totalFaces = faces.length;
+  const groups = useMemo(() => {
+    const chunks = [] as typeof projects[];
+    for (let i = 0; i < projects.length; i += projectsPerFace) {
+      chunks.push(projects.slice(i, i + projectsPerFace));
+    }
+    return chunks.length > 0 ? chunks : [[]];
+  }, [projects, projectsPerFace]);
 
-  const nextFace = () => setActiveFace((prev) => (prev + 1) % totalFaces);
-  const prevFace = () => setActiveFace((prev) => (prev - 1 + totalFaces) % totalFaces);
+  const cubeGroups = useMemo(() => {
+    return Array.from({ length: facesCount }, (_, faceIndex) => {
+      const offset = (faceIndex - rotationIndex + facesCount) % facesCount;
+      const index = (groupIndex + offset) % totalGroups;
+      const group = groups[index] ?? [];
+      return group;
+    });
+  }, [facesCount, rotationIndex, groupIndex, totalGroups, groups]);
+
+  const currentProjectPage = Math.min(totalGroups, groupIndex + 1);
+
+  const totalFaces = cubeGroups.length;
+
+  const nextFace = () => {
+    setRotationStep((prev) => prev + 1);
+    setGroupIndex((prev) => (prev + 1) % totalGroups);
+  };
+
+  const prevFace = () => {
+    setRotationStep((prev) => prev - 1);
+    setGroupIndex((prev) => (prev - 1 + totalGroups) % totalGroups);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden selection:bg-primary/30">
@@ -111,7 +118,7 @@ export default function Home() {
                    <h2 className="text-4xl md:text-5xl font-display font-bold text-white mb-4">DEPLOYED <br /><span className="text-gray-500">MODULES</span></h2>
                    <p className="text-gray-400 font-mono text-sm max-w-md">
                      /root/projects <br/>
-                     Listing directories... {projects.length} found. [Face {activeFace + 1}/{totalFaces}]
+                     Listing directories... {projects.length} found. [Project Page {currentProjectPage}/{totalGroups}]
                    </p>
                 </div>
                 <div className="flex gap-4">
@@ -133,21 +140,29 @@ export default function Home() {
              <div className="project-cube-scene mx-auto mb-20">
                <div
                  className="project-cube"
-                 style={{ transform: `rotateX(5deg) rotateY(${12 + activeFace * -90}deg)` }}
+                 style={{ transform: `rotateX(5deg) rotateY(${12 + rotationStep * -90}deg)` }}
                >
-                 {faces.map((faceProjects, faceIndex) => (
+                 {cubeGroups.map((faceProjects, faceIndex) => (
                    <div
                      key={faceIndex}
                      className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                    >
                      <div className="project-face-grid grid grid-cols-1 md:grid-cols-2 gap-6 w-full h-full min-h-0">
-                       {faceProjects.map((project, projectIndex) => (
-                         <BlueprintCard
-                           key={`${faceIndex}-${projectIndex}-${project.title}`}
-                           {...project}
-                           className={`min-h-0 ${faceIndex === activeFace ? "" : "project-card--inactive"}`}
-                         />
-                       ))}
+                       {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
+                         const project = faceProjects[projectIndex];
+                         return project ? (
+                           <BlueprintCard
+                             key={`${faceIndex}-${projectIndex}-${project.title}`}
+                             {...project}
+                             className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
+                           />
+                         ) : (
+                           <div
+                             key={`${faceIndex}-${projectIndex}-placeholder`}
+                             className="project-card-placeholder"
+                           />
+                         );
+                       })}
                      </div>
                    </div>
                  ))}
