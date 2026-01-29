@@ -1,0 +1,59 @@
+import { motion } from "framer-motion";
+import { ArrowDown } from "lucide-react";
+
+export function Hero() {
+  return (
+    <section className="relative min-h-screen flex flex-col justify-center px-6 md:px-20 pt-20 overflow-hidden">
+      
+      <div className="relative z-10 max-w-4xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="space-y-6"
+        >
+          <div className="flex items-center gap-3">
+             <div className="w-2 h-2 bg-primary animate-pulse rounded-full" />
+             <span className="font-mono text-primary text-sm tracking-widest uppercase">System Status: Online</span>
+          </div>
+
+          <h1 className="text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
+            FULL STACK <br />
+            <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white">
+              ARCHITECT
+            </span>
+          </h1>
+
+          <p className="max-w-xl text-lg md:text-xl text-gray-400 font-light leading-relaxed border-l-2 border-primary/20 pl-6">
+            Designing resilient digital ecosystems. 
+            Bridging the gap between conceptual schematics and deployed reality.
+          </p>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1, duration: 1 }}
+          className="mt-12 flex gap-6"
+        >
+          <button className="group relative px-6 py-3 bg-white text-black font-bold tracking-wide overflow-hidden">
+             <span className="relative z-10">EXPLORE WORK</span>
+             <div className="absolute inset-0 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
+          </button>
+          <button className="px-6 py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-mono text-sm">
+             INITIATE_CONTACT()
+          </button>
+        </motion.div>
+      </div>
+
+      <motion.div 
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/30 animate-bounce"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 2 }}
+      >
+        <ArrowDown size={24} />
+      </motion.div>
+    </section>
+  );
+}
