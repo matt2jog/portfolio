@@ -2,6 +2,7 @@ import { Hero } from "@/components/Hero";
 import { Navbar } from "@/components/Navbar";
 import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
+import Cubes from "@/components/Cubes";
 import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -172,30 +173,37 @@ export default function Home() {
           </div>
         </section>
 
-        {/* About / Skills Section with Galaxy BG */}
-        <section id="about" className="py-32 relative overflow-hidden flex items-center">
-           {/* Parallax Background */}
-           <div className="absolute inset-0 z-0">
-              <img 
-                src={galaxyImage} 
-                alt="Code Galaxy" 
-                className="w-full h-full object-cover opacity-30 mix-blend-screen scale-110" 
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-background" />
-           </div>
+          {/* About / Skills Section */}
+          <section id="about" className="py-32 relative overflow-hidden flex items-center">
+            <div className="absolute inset-0 z-0 bg-gradient-to-b from-background via-transparent to-background" />
 
            <div className="relative z-10 px-6 md:px-20 w-full max-w-7xl mx-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-                 <div className="space-y-8 backdrop-blur-sm bg-black/30 p-8 border border-white/10 rounded-lg">
-                    <h2 className="text-3xl font-display font-bold text-white">THE KERNEL</h2>
-                    <p className="text-gray-300 leading-relaxed text-lg">
+                  <div className="relative space-y-8 backdrop-blur-sm bg-black/30 p-8 border border-white/10 rounded-lg overflow-hidden">
+                    <div className="absolute -inset-8 opacity-80 pointer-events-auto overflow-hidden">
+                      <Cubes
+                       gridSize={9}
+                       maxAngle={95}
+                       radius={2}
+                         cellGap={2}
+                        borderStyle="1.5px solid rgba(255,255,255,0.12)"
+                       faceColor="#0a0a12"
+                       rippleColor="#c17bbf"
+                       rippleSpeed={1.5}
+                       autoAnimate
+                       rippleOnClick={false}
+                      />
+                    </div>
+                    <div className="absolute -inset-8 bg-black/20 pointer-events-none" />
+                    <h2 className="relative z-10 text-3xl font-display font-bold text-white">THE KERNEL</h2>
+                    <p className="relative z-10 text-gray-300 leading-relaxed text-lg">
                        I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.
                     </p>
-                    <p className="text-gray-400 font-light">
+                    <p className="relative z-10 text-gray-400 font-light">
                        Currently exploring distributed systems consensus algorithms and high-performance graphics programming.
                     </p>
                     
-                    <div className="pt-4">
+                    <div className="relative z-10 pt-4">
                        <h3 className="font-mono text-primary text-xs tracking-widest mb-4">CORE_DEPENDENCIES</h3>
                        <div className="flex flex-wrap gap-2">
                           {["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(skill => (
@@ -208,24 +216,22 @@ export default function Home() {
                  </div>
                  
                  {/* Visual Decorator / Headshot */}
-                 <div className="hidden md:flex justify-center items-center">
-                    <div className="relative w-72 h-72 border border-primary/30 rounded-full flex items-center justify-center">
-                       <div className="absolute inset-0 border border-dashed border-white/20 rounded-full animate-[spin_30s_linear_infinite]" />
-                       <div className="absolute inset-4 border border-primary/10 rounded-full" />
-                       <div className="relative w-56 h-56 rounded-full overflow-hidden border border-primary/20 bg-black/50 z-10 shadow-[0_0_50px_rgba(0,255,255,0.15)]">
+                    <div className="hidden md:flex justify-center items-center">
+                      <div className="relative w-72 h-72 flex items-center justify-center">
+                        <div className="relative w-56 h-56 rounded-2xl overflow-hidden border border-primary/30 bg-black/60 shadow-[0_0_40px_rgba(0,255,255,0.2)]">
                           <img 
-                            src="/src/assets/images/headshot.jpg" 
-                            alt="Engineer Headshot" 
-                            className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
+                           src="/src/assets/images/headshot.jpg" 
+                           alt="Engineer Headshot" 
+                           className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
                           />
-                          <div className="absolute inset-0 bg-primary/5 mix-blend-overlay pointer-events-none" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-                       </div>
-                       <div className="absolute -bottom-2 bg-black px-4 py-1 border border-primary/30 z-20 shadow-lg shadow-primary/10">
-                          <span className="font-mono text-[9px] text-primary tracking-[0.2em] font-bold animate-pulse uppercase">Core_Identity</span>
-                       </div>
+                          <div className="absolute inset-0 bg-primary/10 mix-blend-screen pointer-events-none" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+                        </div>
+                        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-black px-4 py-1 border border-primary/40 z-20 shadow-lg shadow-primary/20 rounded-full">
+                          <span className="font-mono text-[9px] text-primary tracking-[0.2em] font-bold uppercase">Core_Identity</span>
+                        </div>
+                      </div>
                     </div>
-                 </div>
               </div>
            </div>
         </section>
