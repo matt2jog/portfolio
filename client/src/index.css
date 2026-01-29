@@ -159,11 +159,13 @@
   }
 
   .project-cube-scene {
-    --cube-size: min(82vw, 720px);
+    --cube-margin-top: clamp(1.5rem, 4vh, 3rem);
+    --cube-size: min(78vw, 72vh, 640px);
     perspective: 2000px;
     width: var(--cube-size);
     height: var(--cube-size);
     position: relative;
+    margin-top: var(--cube-margin-top);
   }
 
   .project-cube {
@@ -191,8 +193,16 @@
     position: absolute;
     inset: 0;
     border: 1px solid hsl(var(--primary));
-    box-shadow: 0 0 12px hsl(var(--primary) / 0.35);
+    box-shadow: 0 0 12px hsl(var(--primary) / 0.5);
     pointer-events: none;
+  }
+
+  .project-card--inactive .project-card-bg,
+  .project-card--inactive .project-card-bg-hover,
+  .project-card--inactive .project-card-overlay,
+  .project-card--inactive .project-card-content,
+  .project-card--inactive .project-card-corner {
+    opacity: 0;
   }
 
   .project-cube-face > .grid {

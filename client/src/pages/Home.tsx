@@ -104,9 +104,9 @@ export default function Home() {
         <Hero />
 
         {/* Projects Section */}
-        <section id="projects" className="py-32 px-6 md:px-20 relative border-t border-white/5 bg-black/20">
+        <section id="projects" className="min-h-screen py-20 md:py-24 px-6 md:px-20 relative border-t border-white/5 bg-black/20">
           <div className="max-w-7xl mx-auto">
-             <div className="flex items-end justify-between mb-16">
+             <div className="flex items-end justify-between mb-[calc(var(--spacing)*30)]">
                 <div>
                    <h2 className="text-4xl md:text-5xl font-display font-bold text-white mb-4">DEPLOYED <br /><span className="text-gray-500">MODULES</span></h2>
                    <p className="text-gray-400 font-mono text-sm max-w-md">
@@ -133,7 +133,7 @@ export default function Home() {
              <div className="project-cube-scene mx-auto mb-20">
                <div
                  className="project-cube"
-                 style={{ transform: `rotateY(${activeFace * -90}deg)` }}
+                 style={{ transform: `rotateX(5deg) rotateY(${12 + activeFace * -90}deg)` }}
                >
                  {faces.map((faceProjects, faceIndex) => (
                    <div
@@ -145,7 +145,7 @@ export default function Home() {
                          <BlueprintCard
                            key={`${faceIndex}-${projectIndex}-${project.title}`}
                            {...project}
-                           className="min-h-0"
+                           className={`min-h-0 ${faceIndex === activeFace ? "" : "project-card--inactive"}`}
                          />
                        ))}
                      </div>

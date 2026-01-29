@@ -1,0 +1,3 @@
+#rotates cube by initial factor, preserved after pagination
+remember @ Home.tsx:
+    style={{ transform: `rotateY(${-10 + activeFace * -90}deg)` }}
