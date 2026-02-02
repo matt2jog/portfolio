@@ -5,10 +5,11 @@ import { BlueprintCard } from "@/components/BlueprintCard";
 import Cubes from "@/components/Cubes";
 import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function Home() {
-  const projects = [
+  const fallbackProjects = [
     {
       title: "Nebula Stream",
       category: "Infrastructure",
@@ -53,6 +54,30 @@ export default function Home() {
       tech: ["Go", "Protobuf", "WebRTC"],
     }
   ];
+
+  const projectsQuery = useQuery({ queryKey: ["/api/public/projects"] });
+  const bioQuery = useQuery({ queryKey: ["/api/public/bio"] });
+  const skillsQuery = useQuery({ queryKey: ["/api/public/skills"] });
+
+  const projects =
+    Array.isArray(projectsQuery.data) && projectsQuery.data.length > 0
+      ? projectsQuery.data
+      : fallbackProjects;
+
+  const bio = bioQuery.data || {
+    headline: "MATTHEW TUJAGUE",
+    description:
+      "I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.",
+    paragraph:
+      "Currently exploring distributed systems consensus algorithms and high-performance graphics programming.",
+  };
+
+  const skills =
+    Array.isArray(skillsQuery.data) && skillsQuery.data.length > 0
+      ? skillsQuery.data
+      : ["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(
+          (label) => ({ label })
+        );
 
   const facesCount = 4;
   const projectsPerFace = 4;
@@ -208,22 +233,22 @@ export default function Home() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                       </div>
                       <div className="flex-1 text-left">
-                        <h2 className="text-3xl font-display font-bold text-white mb-2">MATTHEW TUJAGUE</h2>
+                        <h2 className="text-3xl font-display font-bold text-white mb-2">
+                          {bio.headline || "MATTHEW TUJAGUE"}
+                        </h2>
                         <p className="text-gray-300 leading-relaxed text-lg mb-3">
-                           I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.
+                          {bio.description}
                         </p>
-                        <p className="text-gray-400 font-light">
-                           Currently exploring distributed systems consensus algorithms and high-performance graphics programming.
-                        </p>
+                        <p className="text-gray-400 font-light">{bio.paragraph}</p>
                       </div>
                     </div>
                     
                        <div className="relative z-10 mt-auto pt-8 flex flex-col items-center pointer-events-none">
                         <h3 className="font-mono text-primary text-xs tracking-widest mb-4 pointer-events-none">CORE_DEPENDENCIES</h3>
                         <div className="flex flex-wrap gap-2 pointer-events-none">
-                          {["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(skill => (
-                            <span key={skill} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-mono text-gray-300 pointer-events-none">
-                                {skill}
+                          {skills.map((skill: any) => (
+                            <span key={skill.id ?? skill.label} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-mono text-gray-300 pointer-events-none">
+                                {skill.label}
                              </span>
                           ))}
                        </div>

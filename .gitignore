@@ -1,1 +1,3 @@
 /node_modules/
+/gcp_settings/
+.env
