@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ArrowUpRight, Github, ExternalLink } from "lucide-react";
 import blueprintImage from "@assets/generated_images/blueprint_wireframe_of_a_complex_software_architecture.png";
 
@@ -10,16 +10,22 @@ interface ProjectProps {
   tech: string[];
   image?: string; // Optional real image, defaults to blueprint
   className?: string;
+  activeCardId?: string | null;
+  setActiveCardId?: (id: string | null) => void;
+  id?: string;
 }
 
-export function BlueprintCard({ title, category, description, tech, image, className }: ProjectProps) {
-  const [isHovered, setIsHovered] = useState(false);
+export function BlueprintCard({ title, category, description, tech, image, className, activeCardId, setActiveCardId, id }: ProjectProps) {
+  const cardId = id || `card-${title.replace(/\s+/g, '-')}`;
+  const isActive = activeCardId === cardId;
   const [scrollAmount, setScrollAmount] = useState(0);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = () => {
-    setIsHovered(true);
+    if (setActiveCardId) {
+      setActiveCardId(cardId);
+    }
     if (descriptionRef.current && containerRef.current) {
       const descHeight = descriptionRef.current.scrollHeight;
       const containerHeight = containerRef.current.clientHeight;
@@ -28,16 +34,22 @@ export function BlueprintCard({ title, category, description, tech, image, class
     }
   };
 
+  const handleTouchOrClick = () => {
+    if (setActiveCardId && !isActive) {
+      handleMouseEnter();
+    }
+    window.dispatchEvent(new CustomEvent('terminal-log', { 
+      detail: { source: 'USR', message: `Project clicked: interest logged in [${title}]`, type: 'telemetry' } 
+    }));
+  };
+
   return (
     <motion.div
       className={`project-card group relative h-full min-h-[120px] sm:min-h-[240px] w-full cursor-pointer overflow-hidden rounded-sm border border-white/10 bg-black/40 ${className ?? ""}`}
       onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => {
-        window.dispatchEvent(new CustomEvent('terminal-log', { 
-          detail: { source: 'USR', message: `Project clicked: interest logged in [${title}]`, type: 'telemetry' } 
-        }));
-      }}
+      onMouseLeave={() => setActiveCardId && setActiveCardId(null)}
+      onTouchStart={handleTouchOrClick}
+      onClick={handleTouchOrClick}
       whileHover={{ scale: 1.01 }}
     >
       {/* Background Layer: Blueprint (Default) */}
@@ -48,7 +60,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
       
       {/* Background Layer: Real Image (Hover) - Simulating with Galaxy image for now if no image provided */}
       <div 
-        className={`project-card-bg project-card-bg-hover absolute inset-0 bg-cover bg-center transition-opacity duration-500 ease-out ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+        className={`project-card-bg project-card-bg-hover absolute inset-0 bg-cover bg-center transition-opacity duration-500 ease-out ${isActive ? 'opacity-100' : 'opacity-0'}`}
         style={{ 
           backgroundImage: image ? `url(${image})` : `url(${blueprintImage})`,
           filter: image ? 'none' : 'hue-rotate(90deg) contrast(1.2)' // Just to show a change if using same image
@@ -88,7 +100,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
                 className="text-[8px] sm:text-xs text-gray-400 max-w-[90%] font-light"
                 style={{
                   ['--scroll-amount' as any]: `${scrollAmount}px`,
-                  animation: isHovered ? 'scroll-boomerang-dynamic 8s ease-in-out infinite' : 'none'
+                  animation: isActive ? 'scroll-boomerang-dynamic 8s ease-in-out infinite' : 'none'
                 }}
               >
                 {description}
