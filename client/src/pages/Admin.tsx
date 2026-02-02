@@ -7,8 +7,13 @@ interface ProjectFormState {
   title: string;
   category: string;
   description: string;
+  longDescription: string;
+  epilogue: string;
   tech: string;
   image: string;
+  hoverImage: string;
+  deployedUrl: string;
+  githubUrl: string;
 }
 
 interface BioFormState {
@@ -54,8 +59,13 @@ export default function Admin() {
     title: "",
     category: "",
     description: "",
+    longDescription: "",
+    epilogue: "",
     tech: "",
     image: "",
+    hoverImage: "",
+    deployedUrl: "",
+    githubUrl: "",
   });
 
   const [bioForm, setBioForm] = useState<BioFormState>({
@@ -82,11 +92,16 @@ export default function Admin() {
         title: projectForm.title,
         category: projectForm.category,
         description: projectForm.description,
+        longDescription: projectForm.longDescription || null,
+        epilogue: projectForm.epilogue || null,
         tech: projectForm.tech
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
         image: projectForm.image || null,
+        hoverImage: projectForm.hoverImage || null,
+        deployedUrl: projectForm.deployedUrl || null,
+        githubUrl: projectForm.githubUrl || null,
       };
 
       if (projectForm.id) {
@@ -97,7 +112,7 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
-      setProjectForm({ title: "", category: "", description: "", tech: "", image: "" });
+      setProjectForm({ title: "", category: "", description: "", longDescription: "", epilogue: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" });
     },
   });
 
@@ -264,12 +279,44 @@ export default function Admin() {
             placeholder="Image URL (optional)"
             className="bg-black/60 border border-white/20 p-2"
           />
+          <input
+            value={projectForm.hoverImage}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, hoverImage: e.target.value }))}
+            placeholder="Hover Image URL (optional)"
+            className="bg-black/60 border border-white/20 p-2"
+          />
           <textarea
             value={projectForm.description}
             onChange={(e) => setProjectForm((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="Description"
+            placeholder="Description (short)"
+            className="bg-black/60 border border-white/20 p-2"
+            rows={2}
+          />
+          <textarea
+            value={projectForm.longDescription}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, longDescription: e.target.value }))}
+            placeholder="Long Description (optional)"
+            className="bg-black/60 border border-white/20 p-2"
+            rows={4}
+          />
+          <textarea
+            value={projectForm.epilogue}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, epilogue: e.target.value }))}
+            placeholder="Epilogue (optional)"
             className="bg-black/60 border border-white/20 p-2"
             rows={3}
+          />
+          <input
+            value={projectForm.deployedUrl}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, deployedUrl: e.target.value }))}
+            placeholder="Deployed URL (optional)"
+            className="bg-black/60 border border-white/20 p-2"
+          />
+          <input
+            value={projectForm.githubUrl}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, githubUrl: e.target.value }))}
+            placeholder="GitHub URL (optional)"
+            className="bg-black/60 border border-white/20 p-2"
           />
           <input
             value={projectForm.tech}
@@ -287,7 +334,7 @@ export default function Admin() {
           </button>
           {projectForm.id && (
             <button
-              onClick={() => setProjectForm({ title: "", category: "", description: "", tech: "", image: "" })}
+              onClick={() => setProjectForm({ title: "", category: "", description: "", longDescription: "", epilogue: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" })}
               className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
             >
               Cancel
@@ -311,8 +358,13 @@ export default function Admin() {
                         title: project.title,
                         category: project.category,
                         description: project.description,
+                        longDescription: project.longDescription || "",
+                        epilogue: project.epilogue || "",
                         tech: (project.tech || []).join(", "),
                         image: project.image || "",
+                        hoverImage: project.hoverImage || "",
+                        deployedUrl: project.deployedUrl || "",
+                        githubUrl: project.githubUrl || "",
                       });
                     }}
                     className="px-3 py-1 border border-white/20"

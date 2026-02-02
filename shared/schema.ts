@@ -24,8 +24,13 @@ export const projects = pgTable("projects", {
   title: text("title").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
+  longDescription: text("long_description"),
+  epilogue: text("epilogue"),
   tech: text("tech").array().notNull().default(sql`'{}'::text[]`),
   image: text("image"),
+  hoverImage: text("hover_image"),
+  deployedUrl: text("deployed_url"),
+  githubUrl: text("github_url"),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -66,8 +71,13 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   title: true,
   category: true,
   description: true,
+  longDescription: true,
+  epilogue: true,
   tech: true,
   image: true,
+  hoverImage: true,
+  deployedUrl: true,
+  githubUrl: true,
 });
 
 export const updateProjectSchema = insertProjectSchema.partial();
