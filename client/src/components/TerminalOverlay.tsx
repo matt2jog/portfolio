@@ -10,6 +10,38 @@ type Log = {
   isTelemetry?: boolean;
 };
 
+function parseFormattedText(text: string) {
+  const parts: Array<{ text: string; bold?: boolean; italic?: boolean }> = [];
+  let current = "";
+  let i = 0;
+  
+  while (i < text.length) {
+    if (text[i] === '*' && text[i + 1] === '*') {
+      if (current) parts.push({ text: current });
+      current = "";
+      i += 2;
+      const start = i;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '*')) i++;
+      parts.push({ text: text.substring(start, i), bold: true });
+      i += 2;
+    } else if (text[i] === '*') {
+      if (current) parts.push({ text: current });
+      current = "";
+      i++;
+      const start = i;
+      while (i < text.length && text[i] !== '*') i++;
+      parts.push({ text: text.substring(start, i), italic: true });
+      i++;
+    } else {
+      current += text[i];
+      i++;
+    }
+  }
+  
+  if (current) parts.push({ text: current });
+  return parts;
+}
+
 export function TerminalOverlay() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [isOpen, setIsOpen] = useState(true);
@@ -281,7 +313,7 @@ export function TerminalOverlay() {
 
     switch (cmd) {
       case "help":
-        addLog("SYS", "AVAILABLE COMMANDS:\nhelp - Display this manual\nls - List directory contents\npwd - Print working navigation stack\nclear - Purge system kernel display\ndisable logs - Suspend telemetry logging\nenable logs - Resume telemetry logging\necho [text] - Output text to terminal\ncd [section] - Navigate to target\ncd .. - Return to previous section\nsudo -s - root user logon for admin panel");
+        addLog("SYS", "AVAILABLE COMMANDS:\n\n**help** - *Display this manual*\n\n\n**ls** - *List directory contents*\n\n\n**pwd** - *Print working navigation stack*\n\n\n**clear** - *Purge system kernel display*\n\n\n**disable logs** - *Suspend telemetry logging*\n\n\n**enable logs** - *Resume telemetry logging*\n\n\n**echo [text]** - *Output text to terminal*\n\n\n**cd [section]** - *Navigate to target*\n\n\n**cd ..** - *Return to previous section*\n\n\n**sudo -s** - *root user logon for admin panel*");
         break;
       case "ls":
         addLog("SYS", "projects/  bio/  contact/");
@@ -440,7 +472,16 @@ export function TerminalOverlay() {
                         }`}>
                           {log.source}
                         </span>
-                        <span className="text-white/70 font-medium break-words leading-tight whitespace-pre-wrap flex-1">{log.message}</span>
+                        <span className="text-white/70 font-medium break-words leading-tight whitespace-pre-wrap flex-1">
+                          {parseFormattedText(log.message).map((part, idx) => (
+                            <span 
+                              key={idx}
+                              className={part.bold ? "font-bold" : part.italic ? "italic" : ""}
+                            >
+                              {part.text}
+                            </span>
+                          ))}
+                        </span>
                       </div>
                     ))}
                   </div>
