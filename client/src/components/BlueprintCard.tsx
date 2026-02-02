@@ -61,17 +61,17 @@ export function BlueprintCard({ title, category, description, tech, image, class
       {/* Content Overlay */}
       <div className="project-card-content absolute inset-0 flex flex-col justify-between p-2.5 sm:p-6 bg-linear-to-t from-black/90 via-black/40 to-transparent">
         
-        {/* Header */}
-        <div className="flex justify-between items-start translate-y-[-10px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-          <span className="px-2 py-1 text-[9px] sm:text-[10px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/10 backdrop-blur-sm rounded-sm">
+        {/* Header - Category bar with icons */}
+        <div className="w-full px-3 py-1.5 text-[7px] sm:text-[8px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/10 backdrop-blur-sm rounded-sm translate-y-[-10px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 flex justify-between items-center relative z-30">
+          <span className="text-left">
             {category}
           </span>
           <div className="flex gap-2">
-            <button className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
-              <Github size={18} />
+            <button className="p-1 hover:bg-white/10 rounded transition-colors text-white">
+              <Github size={14} />
             </button>
-            <button className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
-              <ExternalLink size={18} />
+            <button className="p-1 hover:bg-white/10 rounded transition-colors text-white">
+              <ExternalLink size={14} />
             </button>
           </div>
         </div>
@@ -85,7 +85,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
             <div ref={containerRef} className="relative overflow-hidden max-h-[3.6em] sm:max-h-[4.2em] z-10">
               <p 
                 ref={descriptionRef}
-                className="text-[9px] sm:text-sm text-gray-400 max-w-[90%] font-light"
+                className="text-[8px] sm:text-xs text-gray-400 max-w-[90%] font-light"
                 style={{
                   ['--scroll-amount' as any]: `${scrollAmount}px`,
                   animation: isHovered ? 'scroll-boomerang-dynamic 8s ease-in-out infinite' : 'none'
@@ -99,7 +99,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
           {/* Tech Stack - Reveal on Hover */}
           <div className="h-px w-full bg-white/20 group-hover:bg-primary/50 transition-colors" />
           
-          <div className="flex flex-wrap gap-1 text-[7px] sm:text-[10px] font-mono text-gray-400">
+          <div className="flex flex-wrap gap-1 text-[6px] sm:text-[8px] font-mono text-gray-400">
             {tech.map((t, i) => (
               <span key={i} className="group-hover:text-white transition-colors">
                 {`> ${t}`}
