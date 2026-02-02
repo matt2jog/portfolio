@@ -2,12 +2,14 @@ import { Hero } from "@/components/Hero";
 import { Navbar } from "@/components/Navbar";
 import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
+import Cubes from "@/components/Cubes";
 import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function Home() {
-  const projects = [
+  const fallbackProjects = [
     {
       title: "Nebula Stream",
       category: "Infrastructure",
@@ -52,6 +54,30 @@ export default function Home() {
       tech: ["Go", "Protobuf", "WebRTC"],
     }
   ];
+
+  const projectsQuery = useQuery({ queryKey: ["/api/public/projects"] });
+  const bioQuery = useQuery({ queryKey: ["/api/public/bio"] });
+  const skillsQuery = useQuery({ queryKey: ["/api/public/skills"] });
+
+  const projects =
+    Array.isArray(projectsQuery.data) && projectsQuery.data.length > 0
+      ? projectsQuery.data
+      : fallbackProjects;
+
+  const bio = bioQuery.data || {
+    headline: "MATTHEW TUJAGUE",
+    description:
+      "I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.",
+    paragraph:
+      "Currently exploring distributed systems consensus algorithms and high-performance graphics programming.",
+  };
+
+  const skills =
+    Array.isArray(skillsQuery.data) && skillsQuery.data.length > 0
+      ? skillsQuery.data
+      : ["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(
+          (label) => ({ label })
+        );
 
   const facesCount = 4;
   const projectsPerFace = 4;
@@ -117,7 +143,6 @@ export default function Home() {
                 <div>
                    <h2 className="text-4xl md:text-5xl font-display font-bold text-white mb-4">DEPLOYED <br /><span className="text-gray-500">MODULES</span></h2>
                    <p className="text-gray-400 font-mono text-sm max-w-md">
-                     /root/projects <br/>
                      Listing directories... {projects.length} found. [Project Page {currentProjectPage}/{totalGroups}]
                    </p>
                 </div>
@@ -172,57 +197,60 @@ export default function Home() {
           </div>
         </section>
 
-        {/* About / Skills Section with Galaxy BG */}
-        <section id="about" className="py-32 relative overflow-hidden flex items-center">
-           {/* Parallax Background */}
-           <div className="absolute inset-0 z-0">
-              <img 
-                src={galaxyImage} 
-                alt="Code Galaxy" 
-                className="w-full h-full object-cover opacity-30 mix-blend-screen scale-110" 
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-background" />
-           </div>
+          {/* About / Skills Section */}
+          <section id="about" className="py-32 relative overflow-hidden flex items-center">
+            <div className="absolute inset-0 z-0 bg-gradient-to-b from-background via-transparent to-background" />
 
            <div className="relative z-10 px-6 md:px-20 w-full max-w-7xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-                 <div className="space-y-8 backdrop-blur-sm bg-black/30 p-8 border border-white/10 rounded-lg">
-                    <h2 className="text-3xl font-display font-bold text-white">THE KERNEL</h2>
-                    <p className="text-gray-300 leading-relaxed text-lg">
-                       I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.
-                    </p>
-                    <p className="text-gray-400 font-light">
-                       Currently exploring distributed systems consensus algorithms and high-performance graphics programming.
-                    </p>
+              <div className="flex flex-col items-center">
+                  <div className="relative backdrop-blur-sm bg-black/30 p-12 md:p-16 border border-white/10 rounded-lg overflow-hidden w-full max-w-5xl text-center min-h-[520px] flex flex-col">
+                    <div className="absolute -inset-12 opacity-80 pointer-events-auto overflow-hidden">
+                      <Cubes
+                       gridSize={9}
+                       maxAngle={30}
+                       radius={2}
+                         cellGap={2}
+                        borderStyle="1.5px solid rgba(255,255,255,0.18)"
+                       faceColor="#0a0a12"
+                       hoverBorderColor="rgba(255,255,255,0.75)"
+                       rippleColor="#c17bbf"
+                       rippleSpeed={1.5}
+                       autoAnimate
+                       autoAnimateSpeed={0.05}
+                       autoAnimatePause={1400}
+                       rippleOnClick={false}
+                      />
+                    </div>
+                    <div className="absolute -inset-8 bg-black/20 pointer-events-none" />
+                    <div className="relative z-10 flex flex-col md:flex-row-reverse md:items-start md:justify-between gap-6 pointer-events-none">
+                      <div className="relative w-40 h-40 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-primary/20 bg-black/60 shadow-[0_0_30px_rgba(0,255,255,0.12)] mx-auto md:mx-0 md:ml-10 md:shrink-0 opacity-90">
+                        <img 
+                         src="/src/assets/images/headshot.jpg" 
+                         alt="Engineer Headshot" 
+                         className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
+                        />
+                        <div className="absolute inset-0 bg-primary/10 mix-blend-screen pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <h2 className="text-3xl font-display font-bold text-white mb-2">
+                          {bio.headline || "MATTHEW TUJAGUE"}
+                        </h2>
+                        <p className="text-gray-300 leading-relaxed text-lg mb-3">
+                          {bio.description}
+                        </p>
+                        <p className="text-gray-400 font-light">{bio.paragraph}</p>
+                      </div>
+                    </div>
                     
-                    <div className="pt-4">
-                       <h3 className="font-mono text-primary text-xs tracking-widest mb-4">CORE_DEPENDENCIES</h3>
-                       <div className="flex flex-wrap gap-2">
-                          {["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(skill => (
-                             <span key={skill} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-mono text-gray-300 hover:bg-white/10 transition-colors cursor-default">
-                                {skill}
+                       <div className="relative z-10 mt-auto pt-8 flex flex-col items-center pointer-events-none">
+                        <h3 className="font-mono text-primary text-xs tracking-widest mb-4 pointer-events-none">CORE_DEPENDENCIES</h3>
+                        <div className="flex flex-wrap gap-2 pointer-events-none">
+                          {skills.map((skill: any) => (
+                            <span key={skill.id ?? skill.label} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-mono text-gray-300 pointer-events-none">
+                                {skill.label}
                              </span>
                           ))}
-                       </div>
-                    </div>
-                 </div>
-                 
-                 {/* Visual Decorator / Headshot */}
-                 <div className="hidden md:flex justify-center items-center">
-                    <div className="relative w-72 h-72 border border-primary/30 rounded-full flex items-center justify-center">
-                       <div className="absolute inset-0 border border-dashed border-white/20 rounded-full animate-[spin_30s_linear_infinite]" />
-                       <div className="absolute inset-4 border border-primary/10 rounded-full" />
-                       <div className="relative w-56 h-56 rounded-full overflow-hidden border border-primary/20 bg-black/50 z-10 shadow-[0_0_50px_rgba(0,255,255,0.15)]">
-                          <img 
-                            src="/src/assets/images/headshot.jpg" 
-                            alt="Engineer Headshot" 
-                            className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
-                          />
-                          <div className="absolute inset-0 bg-primary/5 mix-blend-overlay pointer-events-none" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-                       </div>
-                       <div className="absolute -bottom-2 bg-black px-4 py-1 border border-primary/30 z-20 shadow-lg shadow-primary/10">
-                          <span className="font-mono text-[9px] text-primary tracking-[0.2em] font-bold animate-pulse uppercase">Core_Identity</span>
                        </div>
                     </div>
                  </div>
