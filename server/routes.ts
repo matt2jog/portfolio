@@ -45,15 +45,10 @@ export async function registerRoutes(
   });
 
   app.get("/api/public/bio", async (_req, res) => {
-    let [row] = await db.select().from(bio).limit(1);
-    if (!row) {
-      [row] = await db.insert(bio).values({
-        headline: "",
-        description: "",
-        paragraph: "",
-      }).returning();
-    }
-    res.json(row);
+    const [row] = await db.select().from(bio)
+      .orderBy(sql`${bio.createdAt} DESC`)
+      .limit(1);
+    res.json(row || { headline: "", description: "", paragraph: "" });
   });
 
   app.get("/api/public/skills", async (_req, res) => {
@@ -135,34 +130,19 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/bio", requireAdmin, async (_req, res) => {
-    let [row] = await db.select().from(bio).limit(1);
-    if (!row) {
-      [row] = await db.insert(bio).values({
-        headline: "",
-        description: "",
-        paragraph: "",
-      }).returning();
-    }
-    res.json(row);
+    const [row] = await db.select().from(bio)
+      .orderBy(sql`${bio.createdAt} DESC`)
+      .limit(1);
+    res.json(row || { headline: "", description: "", paragraph: "" });
   });
 
-  app.put("/api/admin/bio", requireAdmin, async (req, res) => {
+  app.post("/api/admin/bio", requireAdmin, async (req, res) => {
     const parsed = insertBioSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
-    const [existing] = await db.select().from(bio).limit(1);
-    let result;
-    if (existing) {
-      [result] = await db
-        .update(bio)
-        .set({ ...parsed.data, updatedAt: new Date() })
-        .where(eq(bio.id, existing.id))
-        .returning();
-    } else {
-      [result] = await db.insert(bio).values(parsed.data).returning();
-    }
+    const [result] = await db.insert(bio).values(parsed.data).returning();
 
-    await logAudit(req, "bio.update", parsed.data);
+    await logAudit(req, "bio.create", parsed.data);
     res.json(result);
   });
 
