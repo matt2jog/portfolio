@@ -354,3 +354,43 @@
     filter: blur(1.2px) drop-shadow(0 0 12px #D06DCC) hue-rotate(35deg);
   }
 }
+@keyframes scroll-boomerang-dynamic {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(calc(-1 * var(--scroll-amount)));
+  }
+  50% {
+    transform: translateY(calc(-1 * var(--scroll-amount)));
+  }
+  95% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes scroll-boomerang {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-40%);
+  }
+  50% {
+    transform: translateY(-40%);
+  }
+  95% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-scroll-boomerang-hover {
+  animation: scroll-boomerang 8s ease-in-out;
+  animation-play-state: running;
+}

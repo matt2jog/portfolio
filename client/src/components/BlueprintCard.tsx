@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ArrowUpRight, Github, ExternalLink } from "lucide-react";
 import blueprintImage from "@assets/generated_images/blueprint_wireframe_of_a_complex_software_architecture.png";
 
@@ -14,11 +14,24 @@ interface ProjectProps {
 
 export function BlueprintCard({ title, category, description, tech, image, className }: ProjectProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [scrollAmount, setScrollAmount] = useState(0);
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    if (descriptionRef.current && containerRef.current) {
+      const descHeight = descriptionRef.current.scrollHeight;
+      const containerHeight = containerRef.current.clientHeight;
+      const overflow = Math.max(0, descHeight - containerHeight);
+      setScrollAmount(overflow);
+    }
+  };
 
   return (
     <motion.div
       className={`project-card group relative h-full min-h-[120px] sm:min-h-[240px] w-full cursor-pointer overflow-hidden rounded-sm border border-white/10 bg-black/40 ${className ?? ""}`}
-      onMouseEnter={() => setIsHovered(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
         window.dispatchEvent(new CustomEvent('terminal-log', { 
@@ -65,19 +78,28 @@ export function BlueprintCard({ title, category, description, tech, image, class
 
         {/* Footer info */}
         <div className="space-y-2">
-          <div>
-            <h3 className="text-[11px] sm:text-2xl font-display font-bold text-white mb-1 group-hover:text-primary transition-colors leading-tight break-words line-clamp-2 -mt-1 sm:-mt-2">
+          <div className="relative">
+            <h3 className="text-[11px] sm:text-2xl font-display font-bold text-white mb-2 group-hover:text-primary transition-colors leading-tight break-words line-clamp-2 -mt-2 sm:-mt-4 relative z-20 bg-gradient-to-b from-black/90 via-black/80 to-transparent pb-1">
               {title}
             </h3>
-            <p className="text-[9px] sm:text-sm text-gray-400 line-clamp-3 max-w-[90%] font-light">
-              {description}
-            </p>
+            <div ref={containerRef} className="relative overflow-hidden max-h-[3.6em] sm:max-h-[4.2em] z-10">
+              <p 
+                ref={descriptionRef}
+                className="text-[9px] sm:text-sm text-gray-400 max-w-[90%] font-light"
+                style={{
+                  ['--scroll-amount' as any]: `${scrollAmount}px`,
+                  animation: isHovered ? 'scroll-boomerang-dynamic 8s ease-in-out infinite' : 'none'
+                }}
+              >
+                {description}
+              </p>
+            </div>
           </div>
 
           {/* Tech Stack - Reveal on Hover */}
           <div className="h-px w-full bg-white/20 group-hover:bg-primary/50 transition-colors" />
           
-          <div className="flex flex-wrap gap-1 text-[8px] sm:text-xs font-mono text-gray-400">
+          <div className="flex flex-wrap gap-1 text-[7px] sm:text-[10px] font-mono text-gray-400">
             {tech.map((t, i) => (
               <span key={i} className="group-hover:text-white transition-colors">
                 {`> ${t}`}
