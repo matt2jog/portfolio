@@ -86,6 +86,7 @@ export default function Home() {
 
   const [rotationStep, setRotationStep] = useState(0);
   const [groupIndex, setGroupIndex] = useState(0);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
 
@@ -182,6 +183,8 @@ export default function Home() {
                              key={`${faceIndex}-${projectIndex}-${project.title}`}
                              {...project}
                              className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
+                             activeCardId={activeCardId}
+                             setActiveCardId={setActiveCardId}
                            />
                          ) : (
                            <div
@@ -237,10 +240,10 @@ export default function Home() {
                         <h2 className="text-3xl font-display font-bold text-white mb-2">
                           {bio.headline || "MATTHEW TUJAGUE"}
                         </h2>
-                        <p className="text-gray-300 leading-relaxed text-lg mb-3">
+                        <p className="text-gray-300 leading-relaxed text-lg mb-3 whitespace-pre-line">
                           {bio.description}
                         </p>
-                        <p className="text-gray-400 font-light">{bio.paragraph}</p>
+                        <p className="text-gray-400 font-light whitespace-pre-line">{bio.paragraph}</p>
                       </div>
                     </div>
                     
@@ -269,7 +272,6 @@ export default function Home() {
            </div>
            <div className="text-gray-600 text-xs font-mono">
               Matthew Tujague © 2026. ALL RIGHTS RESERVED. <br />
-              <span className="text-gray-700">Latency: 12ms // Status: Stable</span>
            </div>
         </footer>
       </main>
