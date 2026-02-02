@@ -43,8 +43,15 @@ export async function registerRoutes(
   });
 
   app.get("/api/public/bio", async (_req, res) => {
-    const [row] = await db.select().from(bio).limit(1);
-    res.json(row || { headline: "", description: "", paragraph: "" });
+    let [row] = await db.select().from(bio).limit(1);
+    if (!row) {
+      [row] = await db.insert(bio).values({
+        headline: "",
+        description: "",
+        paragraph: "",
+      }).returning();
+    }
+    res.json(row);
   });
 
   app.get("/api/public/skills", async (_req, res) => {
@@ -117,8 +124,15 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/bio", requireAdmin, async (_req, res) => {
-    const [row] = await db.select().from(bio).limit(1);
-    res.json(row || { headline: "", description: "", paragraph: "" });
+    let [row] = await db.select().from(bio).limit(1);
+    if (!row) {
+      [row] = await db.insert(bio).values({
+        headline: "",
+        description: "",
+        paragraph: "",
+      }).returning();
+    }
+    res.json(row);
   });
 
   app.put("/api/admin/bio", requireAdmin, async (req, res) => {

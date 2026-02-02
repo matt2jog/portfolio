@@ -9,10 +9,6 @@ const caCertFromPath = caCertPath ? readFileSync(caCertPath, "utf8") : undefined
 const caCertInlineNormalized = caCertInline ? caCertInline.replace(/\\n/g, "\n") : undefined;
 const caCert = caCertInlineNormalized || caCertFromPath;
 
-if (caCert) {
-  console.log("SUPABASE_CA_CERT loaded:\n", caCert);
-}
-
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
