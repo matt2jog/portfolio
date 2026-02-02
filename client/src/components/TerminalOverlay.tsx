@@ -18,6 +18,7 @@ export function TerminalOverlay() {
   const [isFocused, setIsFocused] = useState(false);
   const [logsEnabled, setLogsEnabled] = useState(true);
   const [history, setHistory] = useState<string[]>([]);
+  const [ipAddress, setIpAddress] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
   // Stale closure protection
@@ -157,20 +158,36 @@ export function TerminalOverlay() {
       }
     };
 
-    // Initial Boot Sequence
-    const bootSequence = [
-      { source: "NET", message: "New user [ip=192.168.1.1] connected..." },
-      { source: "SYS", message: "Initializing Portfolio Kernel v2.0..." },
-      { source: "SYS", message: "System ready. Awaiting input." },
-    ] as const;
+    const runBootSequence = (ip: string) => {
+      const bootSequence = [
+        { source: "NET", message: `New user [ip=${ip}] connected...` },
+        { source: "SYS", message: "Initializing Portfolio Kernel v2.0..." },
+        { source: "SYS", message: "System ready. Awaiting input." },
+      ] as const;
 
-    let delay = 0;
-    bootSequence.forEach((log) => {
-      delay += 800 + Math.random() * 1000;
-      setTimeout(() => {
-        addLog(log.source, log.message);
-      }, delay);
-    });
+      let delay = 0;
+      bootSequence.forEach((log) => {
+        delay += 800 + Math.random() * 1000;
+        setTimeout(() => {
+          addLog(log.source, log.message);
+        }, delay);
+      });
+    };
+
+    const resolveIp = async () => {
+      try {
+        const res = await fetch("/api/public/ip", { credentials: "include" });
+        if (!res.ok) throw new Error("ip lookup failed");
+        const data = await res.json();
+        const ip = data?.ip || "unknown";
+        setIpAddress(ip);
+        runBootSequence(ip);
+      } catch {
+        runBootSequence("unknown");
+      }
+    };
+
+    resolveIp();
 
     window.addEventListener("scroll", handleScroll);
     window.addEventListener("terminal-log", handleCustomLog);
@@ -264,7 +281,7 @@ export function TerminalOverlay() {
 
     switch (cmd) {
       case "help":
-        addLog("SYS", "AVAILABLE COMMANDS:\nhelp - Display this manual\nls - List directory contents\npwd - Print working navigation stack\nclear - Purge system kernel display\ndisable logs - Suspend telemetry logging\nenable logs - Resume telemetry logging\necho [text] - Output text to terminal\ncd [section] - Navigate to target\ncd .. - Return to previous section");
+        addLog("SYS", "AVAILABLE COMMANDS:\nhelp - Display this manual\nls - List directory contents\npwd - Print working navigation stack\nclear - Purge system kernel display\ndisable logs - Suspend telemetry logging\nenable logs - Resume telemetry logging\necho [text] - Output text to terminal\ncd [section] - Navigate to target\ncd .. - Return to previous section\nsudo -s - root user logon for admin panel");
         break;
       case "ls":
         addLog("SYS", "projects/  bio/  contact/");
@@ -322,6 +339,9 @@ export function TerminalOverlay() {
         document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
         addLog("NET", "Navigating to ./contact...");
         updateHistory("contact");
+        break;
+      case "sudo -s":
+        addLog("SYS", "root user logon for admin panel");
         break;
       default:
         if (cmd.startsWith("echo ")) {

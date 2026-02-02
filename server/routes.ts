@@ -52,6 +52,14 @@ export async function registerRoutes(
     res.json(rows);
   });
 
+  app.get("/api/public/ip", (req, res) => {
+    const forwarded = req.headers["x-forwarded-for"];
+    const ip = Array.isArray(forwarded)
+      ? forwarded[0]
+      : forwarded?.split(",")[0]?.trim() || req.ip;
+    res.json({ ip });
+  });
+
   app.get("/api/admin/projects", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(projects).orderBy(asc(projects.position));
     res.json(rows);
