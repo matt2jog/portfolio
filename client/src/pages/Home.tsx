@@ -86,6 +86,7 @@ export default function Home() {
 
   const [rotationStep, setRotationStep] = useState(0);
   const [groupIndex, setGroupIndex] = useState(0);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
 
@@ -182,6 +183,8 @@ export default function Home() {
                              key={`${faceIndex}-${projectIndex}-${project.title}`}
                              {...project}
                              className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
+                             activeCardId={activeCardId}
+                             setActiveCardId={setActiveCardId}
                            />
                          ) : (
                            <div
@@ -269,7 +272,6 @@ export default function Home() {
            </div>
            <div className="text-gray-600 text-xs font-mono">
               Matthew Tujague © 2026. ALL RIGHTS RESERVED. <br />
-              <span className="text-gray-700">Latency: 12ms // Status: Stable</span>
            </div>
         </footer>
       </main>
