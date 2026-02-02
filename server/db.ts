@@ -9,6 +9,9 @@ if (!databaseUrl) {
 
 export const pool = new Pool({
   connectionString: databaseUrl,
+  ssl: databaseUrl.includes("supabase.com")
+    ? { rejectUnauthorized: false }
+    : undefined,
 });
 
 export const db = drizzle(pool);
