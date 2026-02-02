@@ -34,6 +34,7 @@ export function setupAuth(app: Express) {
       saveUninitialized: false,
       store: new PgSession({
         pool,
+        tableName: "session",
         createTableIfMissing: true,
       }),
       cookie: {
