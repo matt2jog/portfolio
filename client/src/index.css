@@ -159,8 +159,8 @@
   }
 
   .project-cube-scene {
-    --cube-margin-top: clamp(1.5rem, 4vh, 3rem);
-    --cube-size: min(78vw, 72vh, 640px);
+    --cube-margin-top: clamp(1rem, 3vh, 2.5rem);
+    --cube-size: min(88vw, 70vh, 600px);
     perspective: 2000px;
     width: var(--cube-size);
     height: var(--cube-size);
@@ -261,6 +261,17 @@
 
   .project-cube-face--4 {
     transform: rotateY(270deg) translateZ(calc(var(--cube-size) / 2));
+  }
+}
+
+@media (max-width: 640px) {
+  .project-cube-scene {
+    --cube-size: min(88vw, 56vh, 340px);
+    max-width: 88vw;
+  }
+
+  .project-cube-face {
+    padding: 0.4rem;
   }
 }
 
