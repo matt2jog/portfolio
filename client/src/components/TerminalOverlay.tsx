@@ -341,7 +341,7 @@ export function TerminalOverlay() {
         updateHistory("contact");
         break;
       case "sudo -s":
-        addLog("SYS", "root user logon for admin panel");
+        window.location.href = "/admin";
         break;
       default:
         if (cmd.startsWith("echo ")) {
