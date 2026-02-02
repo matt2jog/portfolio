@@ -4,6 +4,7 @@ import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
 import Cubes from "@/components/Cubes";
 import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
+import headshotImage from "@/assets/images/headshot.jpg";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -173,7 +174,7 @@ export default function Home() {
                      className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                    >
                      <span className="project-cube-pulse" aria-hidden="true" />
-                     <div className="project-face-grid grid grid-cols-2 gap-3 sm:gap-4 md:gap-6 w-full h-full min-h-0">
+                     <div className="project-face-grid grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 w-full h-full min-h-0">
                        {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
                          const project = faceProjects[projectIndex];
                          return project ? (
@@ -225,7 +226,7 @@ export default function Home() {
                     <div className="relative z-10 flex flex-col md:flex-row-reverse md:items-start md:justify-between gap-6 pointer-events-none">
                       <div className="relative w-40 h-40 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-primary/20 bg-black/60 shadow-[0_0_30px_rgba(0,255,255,0.12)] mx-auto md:mx-0 md:ml-10 md:shrink-0 opacity-90">
                         <img 
-                         src="/src/assets/images/headshot.jpg" 
+                         src={headshotImage} 
                          alt="Engineer Headshot" 
                          className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
                         />
@@ -262,12 +263,12 @@ export default function Home() {
         <footer id="contact" className="py-20 border-t border-white/10 bg-black text-center">
            <h2 className="text-2xl font-display font-bold text-white mb-8">INITIALIZE HANDSHAKE</h2>
            <div className="flex justify-center gap-8 mb-12">
-              <a href="#" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">EMAIL</a>
-              <a href="#" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">LINKEDIN</a>
-              <a href="#" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">GITHUB</a>
+              <a href="mailto:matthew@2jog.dev" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">EMAIL</a>
+              <a href="https://linkedin.com/in/matthewtujague" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">LINKEDIN</a>
+              <a href="https://github.com/binimal101" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">GITHUB</a>
            </div>
            <div className="text-gray-600 text-xs font-mono">
-              SYSTEM.ENG © 2026. ALL RIGHTS RESERVED. <br />
+              Matthew Tujague © 2026. ALL RIGHTS RESERVED. <br />
               <span className="text-gray-700">Latency: 12ms // Status: Stable</span>
            </div>
         </footer>
