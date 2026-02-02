@@ -3,7 +3,6 @@ import { Navbar } from "@/components/Navbar";
 import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
 import Cubes from "@/components/Cubes";
-import FuzzyText from "@/components/FuzzyText";
 import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -203,21 +202,10 @@ export default function Home() {
                          alt="Engineer Headshot" 
                          className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
                         />
-                        <div className="absolute inset-0 bg-primary/10 mix-blend-screen pointer-events-none" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                       </div>
                       <div className="flex-1 text-left">
-                          <FuzzyText
-                            baseIntensity={0.2}
-                            hoverIntensity={0.5}
-                            enableHover
-                            className="block mb-2"
-                            fontSize="clamp(1.75rem, 3.5vw, 2.5rem)"
-                            fontWeight={800}
-                            letterSpacing={1}
-                          >
-                            THE KERNEL
-                          </FuzzyText>
+                        <h2 className="text-3xl font-display font-bold text-white mb-2">THE KERNEL</h2>
                         <p className="text-gray-300 leading-relaxed text-lg mb-3">
                            I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.
                         </p>
