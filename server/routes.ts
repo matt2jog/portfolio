@@ -38,7 +38,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/public/projects", async (_req, res) => {
-    const rows = await db.select().from(projects).orderBy(asc(projects.position));
+    const rows = await db.select().from(projects)
+      .where(sql`${projects.deletedAt} IS NULL`)
+      .orderBy(asc(projects.position));
     res.json(rows);
   });
 
@@ -55,7 +57,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/public/skills", async (_req, res) => {
-    const rows = await db.select().from(skills).orderBy(asc(skills.position));
+    const rows = await db.select().from(skills)
+      .where(sql`${skills.deletedAt} IS NULL`)
+      .orderBy(asc(skills.position));
     res.json(rows);
   });
 
@@ -68,7 +72,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/projects", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(projects).orderBy(asc(projects.position));
+    const rows = await db.select().from(projects)
+      .where(sql`${projects.deletedAt} IS NULL`)
+      .orderBy(asc(projects.position));
     res.json(rows);
   });
 
@@ -105,8 +111,13 @@ export async function registerRoutes(
   });
 
   app.delete("/api/admin/projects/:id", requireAdmin, async (req, res) => {
-    await db.delete(projects).where(eq(projects.id, req.params.id));
-    await logAudit(req, "project.delete", { id: req.params.id });
+    await db.update(projects)
+      .set({ 
+        deletedAt: new Date(),
+        archivedBy: req.user?.id 
+      })
+      .where(eq(projects.id, req.params.id));
+    await logAudit(req, "project.archive", { id: req.params.id });
     res.json({ ok: true });
   });
 
@@ -156,7 +167,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(skills).orderBy(asc(skills.position));
+    const rows = await db.select().from(skills)
+      .where(sql`${skills.deletedAt} IS NULL`)
+      .orderBy(asc(skills.position));
     res.json(rows);
   });
 
@@ -193,8 +206,13 @@ export async function registerRoutes(
   });
 
   app.delete("/api/admin/skills/:id", requireAdmin, async (req, res) => {
-    await db.delete(skills).where(eq(skills.id, req.params.id));
-    await logAudit(req, "skill.delete", { id: req.params.id });
+    await db.update(skills)
+      .set({ 
+        deletedAt: new Date(),
+        archivedBy: req.user?.id 
+      })
+      .where(eq(skills.id, req.params.id));
+    await logAudit(req, "skill.archive", { id: req.params.id });
     res.json({ ok: true });
   });
 
@@ -209,6 +227,39 @@ export async function registerRoutes(
     });
     await logAudit(req, "skill.reorder", { order });
     res.json({ ok: true });
+  });
+
+  // Archived items endpoints
+  app.get("/api/admin/archived/projects", requireAdmin, async (_req, res) => {
+    const rows = await db.select().from(projects)
+      .where(sql`${projects.deletedAt} IS NOT NULL`)
+      .orderBy(asc(projects.deletedAt));
+    res.json(rows);
+  });
+
+  app.get("/api/admin/archived/skills", requireAdmin, async (_req, res) => {
+    const rows = await db.select().from(skills)
+      .where(sql`${skills.deletedAt} IS NOT NULL`)
+      .orderBy(asc(skills.deletedAt));
+    res.json(rows);
+  });
+
+  app.post("/api/admin/projects/:id/restore", requireAdmin, async (req, res) => {
+    const [restored] = await db.update(projects)
+      .set({ deletedAt: null, archivedBy: null })
+      .where(eq(projects.id, req.params.id))
+      .returning();
+    await logAudit(req, "project.restore", { id: req.params.id });
+    res.json(restored);
+  });
+
+  app.post("/api/admin/skills/:id/restore", requireAdmin, async (req, res) => {
+    const [restored] = await db.update(skills)
+      .set({ deletedAt: null, archivedBy: null })
+      .where(eq(skills.id, req.params.id))
+      .returning();
+    await logAudit(req, "skill.restore", { id: req.params.id });
+    res.json(restored);
   });
 
   return httpServer;

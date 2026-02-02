@@ -40,6 +40,16 @@ export default function Admin() {
     enabled: isAdmin,
   });
 
+  const archivedProjectsQuery = useQuery({
+    queryKey: ["/api/admin/archived/projects"],
+    enabled: isAdmin,
+  });
+
+  const archivedSkillsQuery = useQuery({
+    queryKey: ["/api/admin/archived/skills"],
+    enabled: isAdmin,
+  });
+
   const [projectForm, setProjectForm] = useState<ProjectFormState>({
     title: "",
     category: "",
@@ -134,6 +144,26 @@ export default function Admin() {
       await apiRequest("POST", "/api/admin/skills/reorder", { order });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] }),
+  });
+
+  const restoreProject = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/projects/${id}/restore`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/archived/projects"] });
+    },
+  });
+
+  const restoreSkill = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/skills/${id}/restore`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/archived/skills"] });
+    },
   });
 
   const projects = projectsQuery.data ?? [];
@@ -379,6 +409,67 @@ export default function Admin() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-4 border border-white/10 p-6">
+        <h2 className="text-xl font-semibold">Archive</h2>
+        <p className="text-sm text-white/60">Deleted items are archived, not permanently removed. You can restore them anytime.</p>
+        
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Archived Projects ({archivedProjectsQuery.data?.length || 0})</h3>
+            <div className="space-y-2">
+              {archivedProjectsQuery.data?.map((project: any) => (
+                <div key={project.id} className="border border-white/10 p-3 opacity-60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">{project.title}</div>
+                      <div className="text-xs text-white/50">
+                        Archived {new Date(project.deletedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => restoreProject.mutate(project.id)}
+                      className="px-3 py-1 border border-white/20 hover:bg-white/5"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {(!archivedProjectsQuery.data || archivedProjectsQuery.data.length === 0) && (
+                <div className="text-sm text-white/40 italic">No archived projects</div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Archived Skills ({archivedSkillsQuery.data?.length || 0})</h3>
+            <div className="space-y-2">
+              {archivedSkillsQuery.data?.map((skill: any) => (
+                <div key={skill.id} className="border border-white/10 p-2 opacity-60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div>{skill.label}</div>
+                      <div className="text-xs text-white/50">
+                        Archived {new Date(skill.deletedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => restoreSkill.mutate(skill.id)}
+                      className="px-3 py-1 border border-white/20 hover:bg-white/5"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {(!archivedSkillsQuery.data || archivedSkillsQuery.data.length === 0) && (
+                <div className="text-sm text-white/40 italic">No archived skills</div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
     </div>

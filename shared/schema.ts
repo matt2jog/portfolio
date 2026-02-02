@@ -28,6 +28,8 @@ export const projects = pgTable("projects", {
   image: text("image"),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+  archivedBy: varchar("archived_by"),
 });
 
 export const bio = pgTable("bio", {
@@ -42,6 +44,8 @@ export const skills = pgTable("skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   label: text("label").notNull(),
   position: integer("position").notNull().default(0),
+  deletedAt: timestamp("deleted_at"),
+  archivedBy: varchar("archived_by"),
 });
 
 export const auditLogs = pgTable("audit_logs", {
