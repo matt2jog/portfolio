@@ -187,6 +187,7 @@ export default function Home() {
                          cellGap={2}
                         borderStyle="1.5px solid rgba(255,255,255,0.18)"
                        faceColor="#0a0a12"
+                       hoverBorderColor="rgba(255,255,255,0.75)"
                        rippleColor="#c17bbf"
                        rippleSpeed={1.5}
                        autoAnimate
