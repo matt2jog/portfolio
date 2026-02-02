@@ -355,7 +355,7 @@ export function TerminalOverlay() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-full max-w-[340px] font-mono text-xs hidden md:block">
+    <div className="fixed bottom-0 right-4 z-50 w-full max-w-[340px] font-mono text-xs hidden md:block">
       <div className="bg-black/90 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-2xl">
         <div 
           className="flex items-center justify-between px-3 py-2 bg-white/5 border-b border-white/5 cursor-pointer hover:bg-white/10 transition-colors"

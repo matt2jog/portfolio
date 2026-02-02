@@ -12,10 +12,6 @@ export function Hero() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="space-y-6"
         >
-          <div className="flex items-center gap-3">
-             <div className="w-2 h-2 bg-primary animate-pulse rounded-full" />
-             <span className="font-mono text-primary text-sm tracking-widest uppercase">System Status: Online</span>
-          </div>
 
           <h1 className="text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
             FULL STACK <br />
