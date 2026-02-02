@@ -34,13 +34,13 @@ export function Hero() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 1 }}
-          className="mt-12 flex gap-6"
+          className="mt-12 flex flex-col sm:flex-row gap-4 sm:gap-6"
         >
-          <button className="group relative px-6 py-3 bg-white text-black font-bold tracking-wide overflow-hidden">
+          <button className="group relative px-4 py-2 sm:px-6 sm:py-3 bg-white text-black font-bold tracking-wide text-sm sm:text-base overflow-hidden">
              <span className="relative z-10">EXPLORE WORK</span>
              <div className="absolute inset-0 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
           </button>
-          <button className="px-6 py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-mono text-sm">
+          <button className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-mono text-sm">
              INITIATE_CONTACT()
           </button>
         </motion.div>
