@@ -118,7 +118,6 @@ export default function Home() {
                 <div>
                    <h2 className="text-4xl md:text-5xl font-display font-bold text-white mb-4">DEPLOYED <br /><span className="text-gray-500">MODULES</span></h2>
                    <p className="text-gray-400 font-mono text-sm max-w-md">
-                     /root/projects <br/>
                      Listing directories... {projects.length} found. [Project Page {currentProjectPage}/{totalGroups}]
                    </p>
                 </div>
@@ -179,18 +178,20 @@ export default function Home() {
 
            <div className="relative z-10 px-6 md:px-20 w-full max-w-7xl mx-auto">
               <div className="flex flex-col items-center">
-                  <div className="relative space-y-8 backdrop-blur-sm bg-black/30 p-10 md:p-12 border border-white/10 rounded-lg overflow-hidden w-full max-w-4xl text-center">
-                    <div className="absolute -inset-8 opacity-80 pointer-events-auto overflow-hidden">
+                  <div className="relative backdrop-blur-sm bg-black/30 p-12 md:p-16 border border-white/10 rounded-lg overflow-hidden w-full max-w-5xl text-center min-h-[520px] flex flex-col">
+                    <div className="absolute -inset-12 opacity-80 pointer-events-auto overflow-hidden">
                       <Cubes
                        gridSize={9}
-                       maxAngle={95}
+                       maxAngle={30}
                        radius={2}
                          cellGap={2}
-                        borderStyle="1.5px solid rgba(255,255,255,0.12)"
+                        borderStyle="1.5px solid rgba(255,255,255,0.18)"
                        faceColor="#0a0a12"
                        rippleColor="#c17bbf"
                        rippleSpeed={1.5}
                        autoAnimate
+                       autoAnimateSpeed={0.05}
+                       autoAnimatePause={1400}
                        rippleOnClick={false}
                       />
                     </div>
@@ -202,10 +203,11 @@ export default function Home() {
                          alt="Engineer Headshot" 
                          className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
                         />
+                        <div className="absolute inset-0 bg-primary/10 mix-blend-screen pointer-events-none" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                       </div>
                       <div className="flex-1 text-left">
-                        <h2 className="text-3xl font-display font-bold text-white mb-2">THE KERNEL</h2>
+                        <h2 className="text-3xl font-display font-bold text-white mb-2">MATTHEW TUJAGUE</h2>
                         <p className="text-gray-300 leading-relaxed text-lg mb-3">
                            I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.
                         </p>
@@ -215,7 +217,7 @@ export default function Home() {
                       </div>
                     </div>
                     
-                       <div className="relative z-10 pt-4 flex flex-col items-center pointer-events-none">
+                       <div className="relative z-10 mt-auto pt-8 flex flex-col items-center pointer-events-none">
                         <h3 className="font-mono text-primary text-xs tracking-widest mb-4 pointer-events-none">CORE_DEPENDENCIES</h3>
                         <div className="flex flex-wrap gap-2 pointer-events-none">
                           {["Rust", "TypeScript", "Go", "Docker", "Kubernetes", "AWS", "Terraform", "PostgreSQL"].map(skill => (
