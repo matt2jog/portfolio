@@ -313,7 +313,7 @@ export function TerminalOverlay() {
 
     switch (cmd) {
       case "help":
-        addLog("SYS", "AVAILABLE COMMANDS:\n\n**help** - *Display this manual*\n\n\n**ls** - *List directory contents*\n\n\n**pwd** - *Print working navigation stack*\n\n\n**clear** - *Purge system kernel display*\n\n\n**disable logs** - *Suspend telemetry logging*\n\n\n**enable logs** - *Resume telemetry logging*\n\n\n**echo [text]** - *Output text to terminal*\n\n\n**cd [section]** - *Navigate to target*\n\n\n**cd ..** - *Return to previous section*\n\n\n**sudo -s** - *root user logon for admin panel*");
+        addLog("SYS", "AVAILABLE COMMANDS:\n\n**help** - *Display this manual*\n\n**ls** - *List directory contents*\n\n**pwd** - *Print working navigation stack*\n\n**clear** - *Purge system kernel display*\n\n**disable logs** - *Suspend telemetry logging*\n\n**enable logs** - *Resume telemetry logging*\n\n**echo [text]** - *Output text to terminal*\n\n**cd [section]** - *Navigate to target*\n\n**cd ..** - *Return to previous section*\n\n**sudo -s** - *root user logon for admin panel*");
         break;
       case "ls":
         addLog("SYS", "projects/  bio/  contact/");

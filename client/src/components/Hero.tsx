@@ -1,9 +1,76 @@
 import { motion } from "framer-motion";
 import { ArrowDown } from "lucide-react";
 
+function HexagonalMesh() {
+  const size = 60; // hexagon radius
+  const hexHeight = size * Math.sqrt(3);
+  const hexWidth = size * 2;
+  
+  const Hexagon = ({ x, y }: { x: number; y: number }) => {
+    const points = Array.from({ length: 6 }, (_, i) => {
+      const angle = (Math.PI / 3) * i;
+      return `${x + size * Math.cos(angle)},${y + size * Math.sin(angle)}`;
+    }).join(' ');
+    
+    return (
+      <polygon
+        points={points}
+        fill="none"
+        stroke="url(#metalGradient)"
+        strokeWidth="2.5"
+        opacity="0.3"
+      />
+    );
+  };
+
+  // Create honeycomb pattern filling upside-down triangle
+  const hexagons = [];
+  const cols = 25;
+  const rows = 20;
+  
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = col * (size * 3) - size;
+      const y = row * (hexHeight / 2);
+      const offsetX = row % 2 === 0 ? 0 : size * 1.5;
+      
+      hexagons.push(
+        <Hexagon 
+          key={`${row}-${col}`} 
+          x={x + offsetX} 
+          y={y} 
+        />
+      );
+    }
+  }
+
+  return (
+    <svg 
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ mixBlendMode: 'screen' }}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="metalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{ stopColor: '#808080', stopOpacity: 1 }} />
+          <stop offset="50%" style={{ stopColor: '#d0d0d0', stopOpacity: 1 }} />
+          <stop offset="100%" style={{ stopColor: '#505050', stopOpacity: 1 }} />
+        </linearGradient>
+        <clipPath id="triangleClip" clipPathUnits="objectBoundingBox">
+          <polygon points="0,0 1,0 1,1" />
+        </clipPath>
+      </defs>
+      <g clipPath="url(#triangleClip)">
+        {hexagons}
+      </g>
+    </svg>
+  );
+}
+
 export function Hero() {
   return (
     <section className="relative min-h-screen flex flex-col justify-center px-6 md:px-20 pt-20 overflow-hidden">
+      <HexagonalMesh />
       
       <div className="relative z-10 max-w-4xl">
         <motion.div
@@ -13,9 +80,9 @@ export function Hero() {
           className="space-y-6"
         >
 
-          <h1 className="text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
+          <h1 className="relative text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
             FULL STACK <br />
-            <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white">
+            <span className="relative inline-block text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white">
               ARCHITECT
             </span>
           </h1>
@@ -37,7 +104,7 @@ export function Hero() {
              <div className="absolute inset-0 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
           </button>
           <button className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-mono text-sm">
-             INITIATE_CONTACT()
+             REACH OUT
           </button>
         </motion.div>
       </div>
