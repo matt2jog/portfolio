@@ -42,6 +42,7 @@ export const bio = pgTable("bio", {
   headline: text("headline"),
   description: text("description"),
   paragraph: text("paragraph"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
