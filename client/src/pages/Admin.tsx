@@ -45,6 +45,11 @@ export default function Admin() {
     enabled: isAdmin,
   });
 
+  const bioVersionsQuery = useQuery({
+    queryKey: ["/api/admin/bio/versions"],
+    enabled: isAdmin,
+  });
+
   const archivedProjectsQuery = useQuery({
     queryKey: ["/api/admin/archived/projects"],
     enabled: isAdmin,
@@ -469,6 +474,31 @@ export default function Admin() {
         <p className="text-sm text-white/60">Deleted items are archived, not permanently removed. You can restore them anytime.</p>
         
         <div className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Bio Versions ({bioVersionsQuery.data?.length || 0})</h3>
+            <div className="space-y-2">
+              {bioVersionsQuery.data?.map((version: any, index: number) => (
+                <div key={version.id} className="border border-white/10 p-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="text-sm text-white/60 mb-2">
+                        Version {(bioVersionsQuery.data?.length || 0) - index} • Created: {new Date(version.createdAt).toLocaleString()}
+                        {index === 0 && <span className="ml-2 px-2 py-0.5 bg-primary/20 text-primary text-xs rounded">Current</span>}
+                      </div>
+                      <div className="text-sm">
+                        <div className="font-semibold">{version.headline}</div>
+                        <div className="text-white/70 text-xs mt-1 line-clamp-2">{version.description}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(!bioVersionsQuery.data || bioVersionsQuery.data.length === 0) && (
+                <div className="text-sm text-white/40 italic">No bio versions</div>
+              )}
+            </div>
+          </div>
+
           <div>
             <h3 className="text-lg font-semibold mb-3">Archived Projects ({archivedProjectsQuery.data?.length || 0})</h3>
             <div className="space-y-2">

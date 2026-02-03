@@ -146,6 +146,12 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.get("/api/admin/bio/versions", requireAdmin, async (_req, res) => {
+    const rows = await db.select().from(bio)
+      .orderBy(desc(bio.createdAt));
+    res.json(rows);
+  });
+
   app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(skills)
       .where(sql`${skills.deletedAt} IS NULL`)
