@@ -241,9 +241,9 @@ export default function Home() {
                           {bio.headline || "MATTHEW TUJAGUE"}
                         </h2>
                         <p className="text-gray-300 leading-relaxed text-lg mb-3 whitespace-pre-line">
-                          {bio.description}
+                          {bio.paragraph}
                         </p>
-                        <p className="text-gray-400 font-light whitespace-pre-line">{bio.paragraph}</p>
+                        <p className="text-gray-400 font-light whitespace-pre-line">{bio.description}</p>
                       </div>
                     </div>
                     
