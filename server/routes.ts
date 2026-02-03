@@ -13,7 +13,7 @@ import {
   updateSkillSchema,
   auditLogs,
 } from "@shared/schema";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -46,7 +46,7 @@ export async function registerRoutes(
 
   app.get("/api/public/bio", async (_req, res) => {
     const [row] = await db.select().from(bio)
-      .orderBy(sql`${bio.createdAt} DESC`)
+      .orderBy(desc(bio.createdAt))
       .limit(1);
     res.json(row || { headline: "", description: "", paragraph: "" });
   });
@@ -131,7 +131,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/bio", requireAdmin, async (_req, res) => {
     const [row] = await db.select().from(bio)
-      .orderBy(sql`${bio.createdAt} DESC`)
+      .orderBy(desc(bio.createdAt))
       .limit(1);
     res.json(row || { headline: "", description: "", paragraph: "" });
   });
