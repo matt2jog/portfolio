@@ -394,3 +394,21 @@
   animation: scroll-boomerang 8s ease-in-out;
   animation-play-state: running;
 }
+
+@keyframes scroll-boomerang-tech {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-50%);
+  }
+  50% {
+    transform: translateY(-50%);
+  }
+  95% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

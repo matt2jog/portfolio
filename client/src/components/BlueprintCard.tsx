@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import { ArrowUpRight, Github, ExternalLink } from "lucide-react";
 import blueprintImage from "@assets/generated_images/blueprint_wireframe_of_a_complex_software_architecture.png";
+import SkillsMarquee from "./SkillsMarquee";
 
 interface ProjectProps {
   title: string;
@@ -71,10 +72,10 @@ export function BlueprintCard({ title, category, description, tech, image, class
       <div className="project-card-overlay absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
 
       {/* Content Overlay */}
-      <div className="project-card-content absolute inset-0 flex flex-col justify-between p-2.5 sm:p-6 bg-linear-to-t from-black/90 via-black/40 to-transparent">
+      <div className="project-card-content absolute inset-0 flex flex-col p-2.5 sm:p-6 bg-linear-to-t from-black/90 via-black/40 to-transparent">
         
-        {/* Header - Category bar with icons */}
-        <div className="w-full px-3 py-1.5 text-[7px] sm:text-[8px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/10 backdrop-blur-sm rounded-sm translate-y-[-10px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 flex justify-between items-center relative z-30">
+        {/* Header - Category bar with icons - Hidden on mobile, doesn't participate in space on mobile */}
+        <div className="hidden sm:block w-full px-3 py-1.5 text-[7px] sm:text-[8px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/10 backdrop-blur-sm rounded-sm translate-y-[-10px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 sm:flex justify-between items-center relative z-30 mb-auto">
           <span className="text-left">
             {category}
           </span>
@@ -89,9 +90,9 @@ export function BlueprintCard({ title, category, description, tech, image, class
         </div>
 
         {/* Footer info */}
-        <div className="space-y-2">
+        <div className="space-y-2 mt-auto sm:mt-auto">
           <div className="relative">
-            <h3 className="text-[11px] sm:text-2xl font-display font-bold text-white mb-2 group-hover:text-primary transition-colors leading-tight break-words line-clamp-2 -mt-2 sm:-mt-4 relative z-20 bg-gradient-to-b from-black/90 via-black/80 to-transparent pb-1">
+            <h3 className="text-[11px] sm:text-2xl font-display font-bold text-white mb-2 group-hover:text-primary transition-colors leading-tight break-words line-clamp-2 relative z-20 bg-gradient-to-b from-black/90 via-black/80 to-transparent pb-1">
               {title}
             </h3>
             <div ref={containerRef} className="relative overflow-hidden max-h-[3.6em] sm:max-h-[4.2em] z-10">
@@ -109,14 +110,10 @@ export function BlueprintCard({ title, category, description, tech, image, class
           </div>
 
           {/* Tech Stack - Reveal on Hover */}
-          <div className="h-px w-full bg-white/20 group-hover:bg-primary/50 transition-colors" />
+          <div className="h-px w-full bg-white/20 group-hover:bg-primary/50 transition-colors flex-shrink-0" />
           
-          <div className="flex flex-wrap gap-1 text-[6px] sm:text-[8px] font-mono text-gray-400">
-            {tech.map((t, i) => (
-              <span key={i} className="group-hover:text-white transition-colors">
-                {`> ${t}`}
-              </span>
-            ))}
+          <div className="relative overflow-hidden max-h-[2em] sm:max-h-[2.5em] flex-shrink-0">
+            <SkillsMarquee skills={tech} />
           </div>
         </div>
       </div>
