@@ -47,6 +47,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
   return (
     <motion.div
       className={`project-card group relative h-full min-h-[120px] sm:min-h-[240px] w-full cursor-pointer overflow-hidden rounded-sm border border-white/10 bg-black/40 ${className ?? ""}`}
+      data-active={isActive}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setActiveCardId && setActiveCardId(null)}
       onTouchStart={handleTouchOrClick}
@@ -92,7 +93,7 @@ export function BlueprintCard({ title, category, description, tech, image, class
         {/* Footer info */}
         <div className="space-y-2 mt-auto sm:mt-auto">
           <div className="relative">
-            <h3 className="text-[11px] sm:text-2xl font-display font-bold text-white mb-2 group-hover:text-primary transition-colors leading-tight break-words line-clamp-2 relative z-20 bg-gradient-to-b from-black/90 via-black/80 to-transparent pb-1">
+            <h3 className={`text-[11px] sm:text-2xl font-display font-bold mb-2 transition-colors leading-tight break-words line-clamp-2 relative z-20 bg-gradient-to-b from-black/90 via-black/80 to-transparent pb-1 ${isActive ? 'text-primary' : 'text-white group-hover:text-primary'}`}>
               {title}
             </h3>
             <div ref={containerRef} className="relative overflow-hidden max-h-[3.6em] sm:max-h-[4.2em] z-10">
@@ -110,10 +111,10 @@ export function BlueprintCard({ title, category, description, tech, image, class
           </div>
 
           {/* Tech Stack - Reveal on Hover */}
-          <div className="h-px w-full bg-white/20 group-hover:bg-primary/50 transition-colors flex-shrink-0" />
+          <div className={`h-px w-full transition-colors flex-shrink-0 ${isActive ? 'bg-primary/50' : 'bg-white/20 group-hover:bg-primary/50'}`} />
           
           <div className="relative overflow-hidden max-h-[2em] sm:max-h-[2.5em] flex-shrink-0">
-            <SkillsMarquee skills={tech} />
+            <SkillsMarquee skills={tech} isActive={isActive} />
           </div>
         </div>
       </div>

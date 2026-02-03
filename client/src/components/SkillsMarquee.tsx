@@ -3,9 +3,10 @@ import React from 'react';
 interface SkillsMarqueeProps {
   skills: string[];
   className?: string;
+  isActive?: boolean;
 }
 
-const SkillsMarquee = ({ skills, className }: SkillsMarqueeProps) => {
+const SkillsMarquee = ({ skills, className, isActive }: SkillsMarqueeProps) => {
   const duplicatedSkills = [...skills, ...skills, ...skills, ...skills];
 
   return (
@@ -20,7 +21,7 @@ const SkillsMarquee = ({ skills, className }: SkillsMarqueeProps) => {
             {duplicatedSkills.map((skill, index) => (
               <div
                 key={`${setIndex}-${index}`}
-                className="flex items-center gap-2 text-gray-400 group-hover:text-white transition-colors"
+                className={`flex items-center gap-2 text-gray-400 group-hover:text-white transition-colors ${isActive ? 'text-white' : ''}`}
               >
                 <span className="text-[7.5px] sm:text-[10px] font-mono tracking-tight whitespace-nowrap italic">
                   {skill}
