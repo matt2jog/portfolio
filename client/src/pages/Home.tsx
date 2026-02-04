@@ -10,6 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function Home() {
+  // Mobile detection based on screen size (user-agent temporarily disabled for testing)
+  const isMobile = window.innerWidth < 768;
+  
   const fallbackProjects = [
     {
       title: "Nebula Stream",
@@ -125,14 +128,13 @@ export default function Home() {
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden selection:bg-primary/30">
       {/* Global Background Elements */}
       <div className="fixed inset-0 grid-pattern opacity-[0.15] pointer-events-none z-0" />
-      <div className="scanline z-[100]" />
       
       {/* Background Glow */}
-      <div className="fixed top-[-20%] right-[-10%] w-[800px] h-[800px] bg-primary/10 blur-[120px] rounded-full pointer-events-none z-0 mix-blend-screen" />
-      <div className="fixed bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-accent/10 blur-[100px] rounded-full pointer-events-none z-0 mix-blend-screen" />
+      <div className="fixed top-[-20%] right-[-10%] w-[800px] h-[800px] bg-primary/5 blur-[80px] rounded-full pointer-events-none z-0" />
+      <div className="fixed bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-accent/5 blur-[60px] rounded-full pointer-events-none z-0" />
 
       {/* Components */}
-      <TerminalOverlay />
+      {!isMobile && <TerminalOverlay />}
       <Navbar />
       
       <main className="relative z-10">
@@ -151,13 +153,13 @@ export default function Home() {
                 <div className="flex gap-4">
                   <button 
                     onClick={prevFace}
-                    className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/40 backdrop-blur-sm group"
+                    className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
                   >
                     <ChevronLeft size={24} className="group-active:scale-90 transition-transform" />
                   </button>
                   <button 
                     onClick={nextFace}
-                    className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/40 backdrop-blur-sm group"
+                    className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
                   >
                     <ChevronRight size={24} className="group-active:scale-90 transition-transform" />
                   </button>
@@ -202,15 +204,14 @@ export default function Home() {
         </section>
 
           {/* About / Skills Section */}
-          <section id="about" className="py-32 relative overflow-hidden flex items-center">
-            <div className="absolute inset-0 z-0 bg-gradient-to-b from-background via-transparent to-background" />
+          <section id="about" className="py-32 relative overflow-hidden flex items-center bg-black/20 border-t border-white/5">
 
            <div className="relative z-10 px-6 md:px-20 w-full max-w-7xl mx-auto">
               <div className="flex flex-col items-center">
-                  <div className="relative backdrop-blur-sm bg-black/30 p-12 md:p-16 border border-white/10 rounded-lg overflow-hidden w-full max-w-5xl text-center min-h-[520px] flex flex-col">
+                  <div className="relative bg-black/40 p-12 md:p-16 border border-white/10 rounded-lg overflow-hidden w-full max-w-5xl text-center min-h-[520px] flex flex-col">
                     <div className="absolute -inset-12 opacity-80 pointer-events-auto overflow-hidden">
                       <Cubes
-                       gridSize={9}
+                       gridSize={isMobile ? 5 : 9}
                        maxAngle={30}
                        radius={2}
                          cellGap={2}
@@ -219,7 +220,7 @@ export default function Home() {
                        hoverBorderColor="rgba(255,255,255,0.75)"
                        rippleColor="#c17bbf"
                        rippleSpeed={1.5}
-                       autoAnimate
+                       autoAnimate={!isMobile}
                        autoAnimateSpeed={0.05}
                        autoAnimatePause={1400}
                        rippleOnClick={false}
@@ -233,7 +234,7 @@ export default function Home() {
                          alt="Engineer Headshot" 
                          className="w-full h-full object-cover contrast-110 brightness-105 scale-105"
                         />
-                        <div className="absolute inset-0 bg-primary/10 mix-blend-screen pointer-events-none" />
+                        <div className="absolute inset-0 bg-primary/5 pointer-events-none" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                       </div>
                       <div className="flex-1 text-left">
