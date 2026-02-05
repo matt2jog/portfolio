@@ -1,0 +1,52 @@
+[ 1435282ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1435440ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1435551ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1441931ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1447921ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1452995ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1533605ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1533670ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1631844ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1635479ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1635579ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1639809ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891
+[ 1643841ms] [ERROR] [vite] Internal Server Error
+(unknown runtime error)
+    at sendError (http://localhost:5000/:10:13)
+    at http://localhost:5000/:20:3 @ http://localhost:5000/@vite/client:891

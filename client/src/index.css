@@ -224,11 +224,19 @@
   .project-card--inactive .project-card-content,
   .project-card--inactive .project-card-corner {
     opacity: 0;
+    pointer-events: none;
   }
 
   .project-card--inactive {
     border-color: hsl(var(--primary) / 0.18);
     box-shadow: 0 0 6px hsl(var(--primary) / 0.12);
+    /* Avoid intercepting clicks from inactive cards so active faces are clickable */
+    pointer-events: none;
+  }
+
+  /* Ensure no descendant can intercept pointer events on inactive cards (overrides utility classes) */
+  .project-card--inactive, .project-card--inactive * {
+    pointer-events: none !important;
   }
 
   .project-cube-face > .grid {
