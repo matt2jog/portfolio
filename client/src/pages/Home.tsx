@@ -186,7 +186,8 @@ export default function Home() {
                              {...project}
                              className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
                              activeCardId={activeCardId}
-                             setActiveCardId={setActiveCardId}
+                             setActiveCardId={faceIndex === rotationIndex ? setActiveCardId : undefined}
+                             isActiveFace={faceIndex === rotationIndex}
                            />
                          ) : (
                            <div

@@ -42,6 +42,8 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
+    // temporarily disable the HMR overlay so runtime errors don't block the UI
+    hmr: { overlay: false },
     allowedHosts: true,
     proxy: {
       "/api": {

@@ -382,8 +382,8 @@ const Cubes: React.FC<CubesProps> = ({
   } as React.CSSProperties;
 
   return (
-    <div className={`relative w-full h-full ${className ?? ""}`} style={wrapperStyle}>
-      <div ref={sceneRef} className="grid w-full h-full" style={sceneStyle}>
+    <div className={`relative w-full h-full ${className ?? ""}`} style={{ ...wrapperStyle, contain: 'layout style paint' }}>
+      <div ref={sceneRef} className="grid w-full h-full" style={{ ...sceneStyle, contain: 'layout style' }}>
         {cells.map((_, r) =>
           cells.map((__, c) => (
             <div
@@ -391,6 +391,7 @@ const Cubes: React.FC<CubesProps> = ({
               className="cube relative w-full h-full [transform-style:preserve-3d]"
               data-row={r}
               data-col={c}
+              style={{ contain: 'layout style paint', willChange: 'transform' }}
             >
               <span className="absolute pointer-events-none -inset-9" />
 
