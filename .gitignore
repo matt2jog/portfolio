@@ -2,3 +2,4 @@
 /gcp_settings/
 /dist/
 .env
+/.playwright-mcp/
