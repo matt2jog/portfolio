@@ -22,6 +22,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Defensive: ensure `sendError` exists early to avoid runtime throws from external overlays/extensions -->
+    <script>
+      (function(){
+        try {
+          if (typeof window.sendError !== 'function') {
+            window.sendError = function(){
+              try { (window as any).__pageErrors = (window as any).__pageErrors || []; (window as any).__pageErrors.push({ at: Date.now(), kind: 'sendError-preinit', args: Array.from(arguments).map(a => (typeof a === 'string' ? a : (a && a.stack) || String(a))) }); } catch (e) {}
+            };
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

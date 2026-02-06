@@ -41,3 +41,5 @@ Success criteria:
 - No regressions in related areas as confirmed by smoke checks and targeted tests.
 
 You are not done until you verify the work and mark the TODOs as completed. Be explicit in your post-action summary about which verification steps passed and which artifacts you saved.
+
+If you come accross discrepancies using any of the tools you have, add corrective steps to this document to prevent errors going forward /llms.txt

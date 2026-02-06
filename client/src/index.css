@@ -218,8 +218,6 @@
     animation: cube-border-trace-ccw 3.6s linear infinite, cube-border-color-shift 3.6s linear infinite;
   }
 
-  .project-card--inactive .project-card-bg,
-  .project-card--inactive .project-card-bg-hover,
   .project-card--inactive .project-card-overlay,
   .project-card--inactive .project-card-content,
   .project-card--inactive .project-card-corner {

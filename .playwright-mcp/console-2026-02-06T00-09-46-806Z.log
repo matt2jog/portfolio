@@ -1,0 +1,2 @@
+[  414839ms] Unexpected identifier 'as'
+[  414965ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:5000/api/auth/me:0

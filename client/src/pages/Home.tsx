@@ -3,7 +3,6 @@ import { Navbar } from "@/components/Navbar";
 import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
 import Cubes from "@/components/Cubes";
-import galaxyImage from "@assets/generated_images/abstract_visualization_of_code_compiling_into_a_galaxy.png";
 import headshotImage from "@/assets/images/headshot.jpg";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -16,46 +15,52 @@ export default function Home() {
   const fallbackProjects = [
     {
       title: "Nebula Stream",
-      category: "Infrastructure",
       description: "A distributed event streaming platform handling 1M+ OPS with sub-10ms latency. Built for high-throughput financial data pipelines.",
       tech: ["Rust", "Kafka", "gRPC", "Kubernetes"],
-      image: galaxyImage
+      githubUrl: "https://github.com/binimal101",
+      deployedUrl: null,
     },
     {
       title: "Synthetix AI",
-      category: "Machine Learning",
       description: "Generative design engine for architectural layouts. Uses GANs to optimize floor plans based on light efficiency and flow constraints.",
       tech: ["Python", "PyTorch", "React", "WebGL"],
+      githubUrl: "https://github.com/binimal101",
+      deployedUrl: null,
     },
     {
       title: "Void Cache",
-      category: "Backend",
       description: "Zero-allocation caching layer for high-frequency trading systems. Optimized for L2/L3 cache locality.",
       tech: ["C++", "Assembly", "Redis Module"],
+      githubUrl: "https://github.com/binimal101",
+      deployedUrl: null,
     },
     {
       title: "Cipher Mesh",
-      category: "Security",
       description: "Decentralized identity verification protocol using zero-knowledge proofs. Privacy-first authentication layer.",
       tech: ["Solidity", "ZK-Snarks", "Node.js"],
+      githubUrl: "https://github.com/binimal101",
+      deployedUrl: null,
     },
     {
       title: "Quantum Ledger",
-      category: "FinTech",
       description: "Post-quantum cryptographic ledger for securing cross-border settlements against future compute threats.",
       tech: ["Haskell", "Cryptography", "Nix"],
+      githubUrl: null,
+      deployedUrl: null,
     },
     {
       title: "Aether OS",
-      category: "Kernel",
       description: "Microkernel designed for low-power edge devices with hard real-time constraints and formal verification.",
       tech: ["Zig", "ARM Assembly", "LLVM"],
+      githubUrl: null,
+      deployedUrl: null,
     },
     {
       title: "Titan Mesh",
-      category: "Networking",
       description: "Self-healing mesh network protocol for planetary-scale communications in low-connectivity environments.",
       tech: ["Go", "Protobuf", "WebRTC"],
+      githubUrl: "https://github.com/binimal101",
+      deployedUrl: "https://example.com",
     }
   ];
 
@@ -68,7 +73,7 @@ export default function Home() {
       ? projectsQuery.data
       : fallbackProjects;
 
-  const bio = bioQuery.data || {
+  const bio: { headline: string; description: string; paragraph: string } = (bioQuery.data as any) || {
     headline: "MATTHEW TUJAGUE",
     description:
       "I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.",
@@ -177,7 +182,7 @@ export default function Home() {
                      className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                    >
                      <span className="project-cube-pulse" aria-hidden="true" />
-                     <div className="project-face-grid grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 w-full h-full min-h-0">
+                      <div className="project-face-grid grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 w-full h-full min-h-0 p-2 sm:p-4">
                        {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
                          const project = faceProjects[projectIndex];
                          return project ? (
