@@ -33,6 +33,11 @@
   --radius-lg: var(--radius);
 }
 
+/* 
+  Theme: "System Core"
+  Concept: Dark, technical, precise. 
+  Colors: Deep charcoal backgrounds, off-white text, electric cyan accents.
+*/
 :root {
   /* Dark Theme Default */
   --background: 240 10% 4%;    /* Almost black #0a0a0c */
@@ -396,6 +401,7 @@
   animation-play-state: running;
 }
 
+/* ── System Core utilities (Tree page) ── */
 .system-grid {
   background-image:
     linear-gradient(to right, hsl(var(--border) / .12) 1px, transparent 1px),
