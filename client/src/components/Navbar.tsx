@@ -9,9 +9,10 @@ export function Navbar() {
       </a>
 
       <div className="flex items-center gap-4 sm:gap-6 font-mono text-[10px] sm:text-xs tracking-widest text-gray-400">
-        <a href="#projects" className="hover:text-primary transition-colors hover:underline decoration-1 underline-offset-4">01_PROJECTS</a>
-        <a href="#about" className="hover:text-primary transition-colors hover:underline decoration-1 underline-offset-4">02_ABOUT</a>
-        <a href="#contact" className="hover:text-primary transition-colors hover:underline decoration-1 underline-offset-4">03_CONTACT</a>
+        <Link href="/tree" className="hover:text-primary transition-colors">2jog.tree</Link>
+        <Link href="/activity" className="hover:text-primary transition-colors">2jog.activity</Link>
+        <Link href="/" className="hover:text-primary transition-colors">2jog.portfolio</Link>
+        <Link href="/about" className="hover:text-primary transition-colors">2jog.about</Link>
       </div>
     </nav>
   );
