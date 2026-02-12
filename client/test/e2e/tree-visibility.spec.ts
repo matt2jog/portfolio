@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { test, expect } from '@playwright/test';
 
 test('tree page shows niche carousel cards', async ({ page }) => {

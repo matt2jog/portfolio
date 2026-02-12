@@ -212,8 +212,8 @@ function NicheCarousel() {
   const [index, setIndex] = React.useState(0);
   const reduced = useReducedMotion();
 
-  const next = () => setIndex((i) => (i + 1) % LINKS.length);
-  const prev = () => setIndex((i) => (i - 1 + LINKS.length) % LINKS.length);
+  const next = React.useCallback(() => setIndex((i) => (i + 1) % LINKS.length), []);
+  const prev = React.useCallback(() => setIndex((i) => (i - 1 + LINKS.length) % LINKS.length), []);
 
   const getCardPosition = (i: number) => {
     const diff = (i - index + LINKS.length) % LINKS.length;
@@ -223,51 +223,143 @@ function NicheCarousel() {
     return "hidden";
   };
 
+  // Drag/swipe support (pointer events)
+  const startX = React.useRef<number | null>(null);
+  const dragging = React.useRef(false);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const SWIPE_THRESHOLD = 50;
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onPointerDown = (ev: PointerEvent) => {
+      startX.current = ev.clientX;
+      dragging.current = true;
+      (ev.target as Element).setPointerCapture?.(ev.pointerId);
+    };
+
+    const onPointerUp = (ev: PointerEvent) => {
+      if (!dragging.current || startX.current == null) {
+        startX.current = null;
+        dragging.current = false;
+        return;
+      }
+      const dx = ev.clientX - startX.current;
+      startX.current = null;
+      dragging.current = false;
+      (ev.target as Element).releasePointerCapture?.(ev.pointerId);
+
+      if (dx > SWIPE_THRESHOLD) prev();
+      else if (dx < -SWIPE_THRESHOLD) next();
+    };
+
+    const onPointerCancel = () => {
+      dragging.current = false;
+      startX.current = null;
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
+    };
+  }, [next, prev]);
+
+  // keyboard navigation
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') prev();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next, prev]);
+
+  // focus the center card when index changes so :focus-based highlights reset
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const center = el.querySelector(`a[data-index=\"${index}\"]`) as HTMLElement | null;
+    if (center) {
+      // focus without scrolling
+      try {
+        center.focus({ preventScroll: true });
+      } catch (err) {
+        center.focus();
+      }
+    }
+  }, [index]);
+
+  // mount diagnostic (non-JSX logger)
+  React.useEffect(() => {
+    console.debug && console.debug('NicheCarousel mount — items:', LINKS.length);
+  }, []);
+
   return (
-    <div data-testid="niche-carousel" className="relative flex h-[400px] w-full items-center justify-center py-10" style={{ perspective: "1000px" }}>
+    <div
+      ref={containerRef}
+      data-testid="niche-carousel"
+      tabIndex={0}
+      role="region"
+      aria-label="links carousel"
+      className="relative flex h-[400px] w-full items-center justify-center py-10"
+      style={{ perspective: '1000px', touchAction: 'pan-y' }}
+    >
       <div className="relative h-full w-full max-w-[320px] overflow-visible">
-        {console.debug && console.debug('NicheCarousel mount — items:', LINKS.length)}
         <AnimatePresence mode="popLayout">
           {LINKS.map((item, i) => {
             const pos = getCardPosition(i);
             const hue = hueForIndex(i); // deterministic gradient jump per card
 
-            if (pos === "hidden") return null;
+            if (pos === 'hidden') return null;
 
             return (
               <motion.div
                 key={item.id}
                 initial={reduced ? { opacity: 0 } : {
-                  scale: pos === "center" ? 0.8 : 0.6,
-                  x: pos === "right" ? 150 : pos === "left" ? -150 : 0,
+                  scale: pos === 'center' ? 0.8 : 0.6,
+                  x: pos === 'right' ? 150 : pos === 'left' ? -150 : 0,
                   opacity: 0,
-                  rotateY: pos === "right" ? -45 : pos === "left" ? 45 : 0,
-                  z: pos === "center" ? 0 : -100,
+                  rotateY: pos === 'right' ? -45 : pos === 'left' ? 45 : 0,
+                  z: pos === 'center' ? 0 : -100,
                 }}
                 animate={reduced ? { opacity: 1 } : {
-                  scale: pos === "center" ? 1 : 0.8,
-                  x: pos === "right" ? 180 : pos === "left" ? -180 : 0,
-                  opacity: pos === "center" ? 1 : 0.4,
-                  rotateY: pos === "right" ? -35 : pos === "left" ? 35 : 0,
-                  z: pos === "center" ? 100 : 0,
-                  zIndex: pos === "center" ? 30 : 10,
+                  scale: pos === 'center' ? 1 : 0.8,
+                  x: pos === 'right' ? 180 : pos === 'left' ? -180 : 0,
+                  opacity: pos === 'center' ? 1 : 0.4,
+                  rotateY: pos === 'right' ? -35 : pos === 'left' ? 35 : 0,
+                  z: pos === 'center' ? 100 : 0,
+                  zIndex: pos === 'center' ? 30 : 10,
                 }}
                 exit={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 className="absolute inset-0"
               >
                 <a
                   href={item.href}
-                  target={item.href.startsWith("http") ? "_blank" : undefined}
-                  rel={item.href.startsWith("http") ? "noreferrer" : undefined}
+                  target={item.href.startsWith('http') ? '_blank' : undefined}
+                  rel={item.href.startsWith('http') ? 'noreferrer' : undefined}
+                  tabIndex={pos === 'center' ? 0 : -1}
                   className={cn(
-                    "flex h-full w-full flex-col items-center justify-between rounded-3xl border bg-card/80 p-6 text-center shadow-2xl transition-colors hover:bg-card/90",
-                    pos !== "center" && "pointer-events-none select-none"
+                    'flex h-full w-full flex-col items-center justify-between rounded-3xl border bg-card/80 p-6 text-center shadow-2xl transition-colors hover:bg-card/90',
+                    pos !== 'center' ? 'pointer-events-none select-none' : ''
                   )}
+                  data-index={i}
+                  onClick={(e) => {
+                    if (pos !== 'center') {
+                      e.preventDefault();
+                      setIndex(i);
+                    }
+                  }}
                   style={{
-                    boxShadow: pos === "center"
+                    boxShadow: pos === 'center'
                       ? `0 20px 50px -20px hsl(${hue} 100% 50% / 0.3), 0 0 0 1px hsl(var(--border))`
-                      : "0 10px 30px -15px rgba(0,0,0,0.5), 0 0 0 1px hsl(var(--border))",
+                      : '0 10px 30px -15px rgba(0,0,0,0.5), 0 0 0 1px hsl(var(--border))',
                   }}
                 >
                   <div className="absolute inset-0 overflow-hidden rounded-3xl opacity-20">
@@ -293,7 +385,7 @@ function NicheCarousel() {
 
                   <div className="relative z-10 w-full flex items-center justify-between border-t border-border/50 pt-4">
                     <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
-                      {new URL(item.href, window.location.href).host.replace(/^www\./, "") || "local"}
+                      {new URL(item.href, window.location.href).host.replace(/^www\\./, '') || 'local'}
                     </span>
                     <ArrowUpRight className="h-4 w-4 text-primary" />
                   </div>
@@ -388,9 +480,8 @@ export default function Tree() {
               <span className="font-mono">© {new Date().getFullYear()} Matthew Tujague</span>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 text-xs text-muted-foreground">
-              <span className="font-mono">Middletown, NJ // System Core</span>
+              <span className="font-mono">// Middletown, NJ</span>
               <div className="hidden sm:block h-3 w-px bg-border/60" />
-              <span className="font-mono italic">promoting real value</span>
             </div>
           </div>
         </motion.footer>
