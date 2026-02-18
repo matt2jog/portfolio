@@ -66,8 +66,8 @@ export default function About() {
                   </div>
                   <div className="flex-1 text-left">
                     <h2 className="text-3xl font-display font-bold text-white mb-2">{bio.headline || "MATTHEW TUJAGUE"}</h2>
-                    <p className="text-gray-300 leading-relaxed text-lg mb-3 whitespace-pre-line">{bio.paragraph}</p>
-                    <p className="text-gray-400 font-light whitespace-pre-line">{bio.description}</p>
+                    <p className="text-gray-400 font-light whitespace-pre-line text-sm mb-4">{bio.paragraph}</p>
+                    <p className="text-gray-300 leading-relaxed text-base whitespace-pre-line">{bio.description}</p>
                   </div>
                 </div>
 
