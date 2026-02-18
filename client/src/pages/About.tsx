@@ -1,4 +1,5 @@
 import { Navbar } from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import Cubes from "@/components/Cubes";
 import headshotImage from "@/assets/images/headshot.jpg";
 import { useQuery } from "@tanstack/react-query";
@@ -85,6 +86,7 @@ export default function About() {
           </div>
         </section>
       </main>
+      <Footer />
     </div>
   );
 }

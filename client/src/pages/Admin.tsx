@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
+import Footer from "@/components/Footer";
 
 interface ProjectFormState {
   id?: string;
@@ -554,6 +555,7 @@ export default function Admin() {
           </div>
         </div>
       </section>
+      <Footer />
     </div>
   );
 }

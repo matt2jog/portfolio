@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Navbar } from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 type LinkItem = {
   id: string;
@@ -74,6 +75,8 @@ const LINKS: LinkItem[] = [
   },
 ];
 
+/* HeaderStatus and related helpers removed: useNowTick, pad2, formatUptime, useNetworkSnapshot, MonoChip. */
+
 function useNowTick(ms: number) {
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
@@ -87,12 +90,19 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function formatUptime(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return `${pad2(h)}:${pad2(m)}:${pad2(sec)}`;
+function TimeChip() {
+  const now = useNowTick(1000);
+  const dt = new Date(now);
+  const hh = pad2(dt.getHours());
+  const mm = pad2(dt.getMinutes());
+  const ss = pad2(dt.getSeconds());
+
+  return (
+    <div className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium leading-none tracking-tight font-mono bg-[hsl(var(--card)/.6)] text-muted-foreground">
+      <span className="text-muted-foreground">t</span>
+      <span className="text-foreground">{hh}:{mm}:{ss}</span>
+    </div>
+  );
 }
 
 /* Color sequencing: base hue + jump per card gives a predictable gradient-like sequence */
@@ -114,100 +124,6 @@ function hslFromHue(h: number) {
   return `hsl(${h} 85% 56% / 1)`;
 }
 
-function useNetworkSnapshot() {
-  const [snapshot, setSnapshot] = React.useState(() => {
-    const c: any = (navigator as any).connection;
-    return {
-      online: navigator.onLine,
-      effectiveType: c?.effectiveType as string | undefined,
-      downlink: c?.downlink as number | undefined,
-      rtt: c?.rtt as number | undefined,
-    };
-  });
-
-  React.useEffect(() => {
-    const update = () => {
-      const c: any = (navigator as any).connection;
-      setSnapshot({
-        online: navigator.onLine,
-        effectiveType: c?.effectiveType as string | undefined,
-        downlink: c?.downlink as number | undefined,
-        rtt: c?.rtt as number | undefined,
-      });
-    };
-
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    const c: any = (navigator as any).connection;
-    c?.addEventListener?.("change", update);
-
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-      c?.removeEventListener?.("change", update);
-    };
-  }, []);
-
-  return snapshot;
-}
-
-function MonoChip({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "primary" | "accent";
-}) {
-  const base =
-    "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium leading-none tracking-tight";
-  const styles =
-    tone === "primary"
-      ? "border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] text-[hsl(var(--primary))]"
-      : tone === "accent"
-        ? "border-[hsl(var(--accent)/.35)] bg-[hsl(var(--accent)/.10)] text-[hsl(var(--foreground))]"
-        : "border-border/80 bg-[hsl(var(--card)/.6)] text-muted-foreground";
-
-  return (
-    <span className={cn(base, styles, "font-mono")}>
-      {children}
-    </span>
-  );
-}
-
-function HeaderStatus() {
-  const now = useNowTick(1000);
-  const startRef = React.useRef<number>(Date.now());
-  const net = useNetworkSnapshot();
-
-  const dt = new Date(now);
-  const hh = pad2(dt.getHours());
-  const mm = pad2(dt.getMinutes());
-  const ss = pad2(dt.getSeconds());
-
-  const uptime = formatUptime(now - startRef.current);
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <MonoChip tone="neutral">
-        <span className="text-muted-foreground">t</span>
-        <span className="text-foreground">
-          {hh}:{mm}:{ss}
-        </span>
-      </MonoChip>
-      <MonoChip tone="neutral">
-        <span className="text-muted-foreground">up</span>
-        <span className="text-foreground">
-          {uptime}
-        </span>
-      </MonoChip>
-      <MonoChip tone={net.online ? "primary" : "accent"}>
-        <span>{net.online ? "online" : "offline"}</span>
-      </MonoChip>
-    </div>
-  );
-}
-
 function NicheCarousel() {
   const defaultIndex = LINKS.findIndex((l) => l.id === "linkedin");
   const [index, setIndex] = React.useState(defaultIndex >= 0 ? defaultIndex : 0);
@@ -224,10 +140,13 @@ function NicheCarousel() {
     return "hidden";
   };
 
+  React.useEffect(() => {
+    console.debug && console.debug('NicheCarousel mount — items:', LINKS.length);
+  }, []);
+
   return (
     <div data-testid="niche-carousel" className="relative flex h-[400px] w-full items-center justify-center py-10" style={{ perspective: "1000px" }}>
       <div className="relative h-full w-full max-w-[320px] overflow-visible">
-        {console.debug && console.debug('NicheCarousel mount — items:', LINKS.length)}
         <AnimatePresence mode="popLayout">
           {LINKS.map((item, i) => {
             const pos = getCardPosition(i);
@@ -369,27 +288,19 @@ export default function Tree() {
               </p>
             </div>
 
-            <HeaderStatus />
+            {/* time-only status chip (uptime & online removed) */}
+            <div className="mt-3">
+              <TimeChip />
+            </div>
           </div>
         </motion.header>
 
         <main className="mt-4 w-full">
           <NicheCarousel />
         </main>
-
-        <motion.footer
-          initial={reduced ? undefined : { opacity: 0 }}
-          animate={reduced ? undefined : { opacity: 1 }}
-          transition={{ duration: 0.35, delay: 0.18 }}
-          className="mt-12 w-full border-t border-border/60 pt-8"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between text-center sm:text-left">
-            <div className="text-xs text-muted-foreground">
-              <span className="font-mono">© {new Date().getFullYear()} Matthew Tujague</span>
-            </div>
-          </div>
-        </motion.footer>
       </div>
+
+      <Footer />
     </div>
   );
 }

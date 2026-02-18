@@ -1,4 +1,5 @@
 import { Navbar } from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 export default function Activity() {
   return (
@@ -18,6 +19,7 @@ export default function Activity() {
           <div className="p-4 bg-card border border-white/5 rounded-md">• New skill added: Rust — 5d ago</div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

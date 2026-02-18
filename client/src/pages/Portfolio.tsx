@@ -1,4 +1,5 @@
 import { Navbar } from "@/components/Navbar";
+import Footer from "@/components/Footer";
 import { useQuery } from "@tanstack/react-query";
 import { BlueprintCard } from "@/components/BlueprintCard";
 
@@ -23,6 +24,7 @@ export default function Portfolio() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
