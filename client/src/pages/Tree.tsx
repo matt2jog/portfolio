@@ -209,7 +209,8 @@ function HeaderStatus() {
 }
 
 function NicheCarousel() {
-  const [index, setIndex] = React.useState(0);
+  const defaultIndex = LINKS.findIndex((l) => l.id === "linkedin");
+  const [index, setIndex] = React.useState(defaultIndex >= 0 ? defaultIndex : 0);
   const reduced = useReducedMotion();
 
   const next = () => setIndex((i) => (i + 1) % LINKS.length);
@@ -283,7 +284,6 @@ function NicheCarousel() {
                     </div>
                     <div className="space-y-1">
                       <h3 className="text-xl font-bold tracking-tight text-foreground">{item.label}</h3>
-                      {item.chip && <MonoChip tone="primary">{item.chip}</MonoChip>}
                     </div>
                   </div>
 
