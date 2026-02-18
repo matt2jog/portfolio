@@ -356,10 +356,10 @@ export default function Tree() {
             <div className="flex flex-col items-center gap-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-[hsl(var(--card)/.55)] px-3 py-1.5 text-xs text-muted-foreground">
                 <span className="font-mono uppercase tracking-widest">
-                  SYSTEM CORE // ENGINEER
+                  // FULL STACK ARCHETECT
                 </span>
                 <span aria-hidden="true" className="h-1 w-1 rounded-full bg-[hsl(var(--primary))]" />
-                <span className="font-mono">NJ-NY-CT</span>
+                <span className="font-mono">NJ-NY-PA</span>
               </div>
               <h1 className="text-balance text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
                 Matthew Tujague
