@@ -400,3 +400,27 @@
   animation: scroll-boomerang 8s ease-in-out;
   animation-play-state: running;
 }
+
+/* ── System Core utilities (Tree page) ── */
+.system-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / .12) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / .12) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, #000 40%, transparent 100%);
+}
+
+.system-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  opacity: 0.25;
+}
+
+.text-glow {
+  text-shadow: 0 0 24px hsl(var(--primary) / .55);
+}
+
+.ring-glow {
+  box-shadow: 0 0 16px 2px hsl(var(--primary) / .35);
+}
