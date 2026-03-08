@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ProjectFormState {
   id?: string;
@@ -40,6 +41,8 @@ export default function AdminProjectsPanel() {
   const archivedProjectsQuery = useQuery({ queryKey: ["/api/admin/archived/projects"] });
 
   const [projectForm, setProjectForm] = useState<ProjectFormState>(blankProjectForm);
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [selectedArchivedProject, setSelectedArchivedProject] = useState<any | null>(null);
 
   const saveProject = useMutation({
     mutationFn: async () => {
@@ -212,65 +215,13 @@ export default function AdminProjectsPanel() {
 
       <div className="space-y-2">
         {projects.map((project: any, index: number) => (
-          <div key={project.id} className="border border-white/10 p-3 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold">{project.title}</div>
-                <div className="text-sm text-white/60">{project.category}</div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setProjectForm({
-                      id: project.id,
-                      title: project.title,
-                      category: project.category,
-                      description: project.description,
-                      longDescription: project.longDescription || "",
-                      xyzBullets: Array.isArray(project.xyzBullets) ? project.xyzBullets.join("\n") : "",
-                      tech: (project.tech || []).join(", "),
-                      image: project.image || "",
-                      hoverImage: project.hoverImage || "",
-                      deployedUrl: project.deployedUrl || "",
-                      githubUrl: project.githubUrl || "",
-                    });
-                  }}
-                  className="px-3 py-1 border border-white/20"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteProject.mutate(project.id)}
-                  className="px-3 py-1 border border-white/20"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={index === 0}
-                onClick={() => {
-                  const order = [...projectOrderIds];
-                  [order[index - 1], order[index]] = [order[index], order[index - 1]];
-                  reorderProjects.mutate(order);
-                }}
-                className="px-2 py-1 border border-white/20 disabled:opacity-40"
-              >
-                Up
-              </button>
-              <button
-                disabled={index === projects.length - 1}
-                onClick={() => {
-                  const order = [...projectOrderIds];
-                  [order[index + 1], order[index]] = [order[index], order[index + 1]];
-                  reorderProjects.mutate(order);
-                }}
-                className="px-2 py-1 border border-white/20 disabled:opacity-40"
-              >
-                Down
-              </button>
-            </div>
+          <div
+            key={project.id}
+            className="border border-white/10 p-3 cursor-pointer hover:border-white/40"
+            onClick={() => setSelectedProject({ ...project, index })}
+          >
+            <div className="font-semibold">{project.title}</div>
+            <div className="text-sm text-white/60">{project.category}</div>
           </div>
         ))}
       </div>
@@ -279,20 +230,14 @@ export default function AdminProjectsPanel() {
         <h3 className="text-lg font-semibold">Projects History (Archived)</h3>
         <div className="space-y-2">
           {archivedProjects.map((project: any) => (
-            <div key={project.id} className="border border-white/10 p-3 opacity-60">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{project.title}</div>
-                  <div className="text-xs text-white/50">
-                    Archived {new Date(project.deletedAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => restoreProject.mutate(project.id)}
-                  className="px-3 py-1 border border-white/20 hover:bg-white/5"
-                >
-                  Restore
-                </button>
+            <div
+              key={project.id}
+              className="border border-white/10 p-3 opacity-60 cursor-pointer hover:border-white/40"
+              onClick={() => setSelectedArchivedProject(project)}
+            >
+              <div className="font-semibold">{project.title}</div>
+              <div className="text-xs text-white/50">
+                Archived {new Date(project.deletedAt).toLocaleDateString()}
               </div>
             </div>
           ))}
@@ -301,6 +246,107 @@ export default function AdminProjectsPanel() {
           )}
         </div>
       </div>
+
+      <Dialog open={!!selectedProject} onOpenChange={(open) => !open && setSelectedProject(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedProject && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedProject.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2 text-sm text-white/80">
+                <div><span className="text-white/50">Category:</span> {selectedProject.category}</div>
+                <div><span className="text-white/50">Description:</span> {selectedProject.description}</div>
+                <div><span className="text-white/50">Tech:</span> {(selectedProject.tech || []).join(", ")}</div>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setProjectForm({
+                      id: selectedProject.id,
+                      title: selectedProject.title,
+                      category: selectedProject.category,
+                      description: selectedProject.description,
+                      longDescription: selectedProject.longDescription || "",
+                      xyzBullets: Array.isArray(selectedProject.xyzBullets) ? selectedProject.xyzBullets.join("\n") : "",
+                      tech: (selectedProject.tech || []).join(", "),
+                      image: selectedProject.image || "",
+                      hoverImage: selectedProject.hoverImage || "",
+                      deployedUrl: selectedProject.deployedUrl || "",
+                      githubUrl: selectedProject.githubUrl || "",
+                    });
+                    setSelectedProject(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Edit in Form
+                </button>
+                <button
+                  onClick={() => {
+                    deleteProject.mutate(selectedProject.id);
+                    setSelectedProject(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Archive
+                </button>
+                <button
+                  disabled={selectedProject.index === 0}
+                  onClick={() => {
+                    const order = [...projectOrderIds];
+                    const index = selectedProject.index;
+                    [order[index - 1], order[index]] = [order[index], order[index - 1]];
+                    reorderProjects.mutate(order);
+                    setSelectedProject(null);
+                  }}
+                  className="px-3 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Move Up
+                </button>
+                <button
+                  disabled={selectedProject.index === projects.length - 1}
+                  onClick={() => {
+                    const order = [...projectOrderIds];
+                    const index = selectedProject.index;
+                    [order[index + 1], order[index]] = [order[index], order[index + 1]];
+                    reorderProjects.mutate(order);
+                    setSelectedProject(null);
+                  }}
+                  className="px-3 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Move Down
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedArchivedProject} onOpenChange={(open) => !open && setSelectedArchivedProject(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedArchivedProject && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedArchivedProject.title}</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-white/80">
+                Archived {new Date(selectedArchivedProject.deletedAt).toLocaleString()}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    restoreProject.mutate(selectedArchivedProject.id);
+                    setSelectedArchivedProject(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Restore
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -17,6 +18,9 @@ export default function AdminSkillsPanel() {
   const [allSkillNameInput, setAllSkillNameInput] = useState("");
   const [allSkillGroupingIdInput, setAllSkillGroupingIdInput] = useState("");
   const [selectedAllSkillId, setSelectedAllSkillId] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
+  const [selectedAllSkill, setSelectedAllSkill] = useState<any | null>(null);
+  const [selectedPortfolioSkill, setSelectedPortfolioSkill] = useState<any | null>(null);
 
   const addSkillGroup = useMutation({
     mutationFn: async () => {
@@ -181,26 +185,12 @@ export default function AdminSkillsPanel() {
         </div>
         <div className="space-y-2">
           {skillGroups.map((group: any) => (
-            <div key={group.id} className="flex items-center justify-between border border-white/10 p-2">
-              <div>{group.name}</div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const nextName = window.prompt("Update group name", group.name) || "";
-                    if (!nextName.trim() || nextName.trim() === group.name) return;
-                    updateSkillGroup.mutate({ id: group.id, name: nextName.trim() });
-                  }}
-                  className="px-2 py-1 border border-white/20"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteSkillGroup.mutate(group.id)}
-                  className="px-2 py-1 border border-white/20"
-                >
-                  Delete
-                </button>
-              </div>
+            <div
+              key={group.id}
+              className="border border-white/10 p-2 cursor-pointer hover:border-white/40"
+              onClick={() => setSelectedGroup(group)}
+            >
+              {group.name}
             </div>
           ))}
           {skillGroups.length === 0 && <div className="text-sm text-white/40 italic">No skill groups</div>}
@@ -237,33 +227,14 @@ export default function AdminSkillsPanel() {
 
         <div className="space-y-2">
           {allSkills.map((allSkill: any) => (
-            <div key={allSkill.id} className="flex items-center justify-between border border-white/10 p-2">
+            <div
+              key={allSkill.id}
+              className="border border-white/10 p-2 cursor-pointer hover:border-white/40"
+              onClick={() => setSelectedAllSkill(allSkill)}
+            >
               <div>
                 <div>{allSkill.name}</div>
                 <div className="text-xs text-white/50">Group: {allSkill.groupingName || "None"}</div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const nextName = window.prompt("Update all_skill name", allSkill.name) || "";
-                    if (!nextName.trim()) return;
-                    const nextGroupId = window.prompt("Update grouping_id (blank for none)", allSkill.groupingId || "") ?? allSkill.groupingId ?? "";
-                    updateAllSkill.mutate({
-                      id: allSkill.id,
-                      name: nextName.trim(),
-                      groupingId: nextGroupId.trim() || null,
-                    });
-                  }}
-                  className="px-2 py-1 border border-white/20"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteAllSkill.mutate(allSkill.id)}
-                  className="px-2 py-1 border border-white/20"
-                >
-                  Delete
-                </button>
               </div>
             </div>
           ))}
@@ -295,46 +266,143 @@ export default function AdminSkillsPanel() {
 
         <div className="space-y-2">
           {skills.map((skill: any, index: number) => (
-            <div key={skill.id} className="flex items-center justify-between border border-white/10 p-2">
+            <div
+              key={skill.id}
+              className="border border-white/10 p-2 cursor-pointer hover:border-white/40"
+              onClick={() => setSelectedPortfolioSkill({ ...skill, index })}
+            >
               <div>
                 <div>{skill.label}</div>
                 <div className="text-xs text-white/50">Group: {skill.groupingName || "None"}</div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  disabled={index === 0}
-                  onClick={() => {
-                    const order = [...skillOrderIds];
-                    [order[index - 1], order[index]] = [order[index], order[index - 1]];
-                    reorderPortfolioSkills.mutate(order);
-                  }}
-                  className="px-2 py-1 border border-white/20 disabled:opacity-40"
-                >
-                  Up
-                </button>
-                <button
-                  disabled={index === skills.length - 1}
-                  onClick={() => {
-                    const order = [...skillOrderIds];
-                    [order[index + 1], order[index]] = [order[index], order[index + 1]];
-                    reorderPortfolioSkills.mutate(order);
-                  }}
-                  className="px-2 py-1 border border-white/20 disabled:opacity-40"
-                >
-                  Down
-                </button>
-                <button
-                  onClick={() => deletePortfolioSkill.mutate(skill.id)}
-                  className="px-2 py-1 border border-white/20"
-                >
-                  Remove
-                </button>
               </div>
             </div>
           ))}
           {skills.length === 0 && <div className="text-sm text-white/40 italic">No portfolio_skills assignments</div>}
         </div>
       </div>
+
+      <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedGroup && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedGroup.name}</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-white/70">skills_group detail</div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const nextName = window.prompt("Update group name", selectedGroup.name) || "";
+                    if (!nextName.trim() || nextName.trim() === selectedGroup.name) return;
+                    updateSkillGroup.mutate({ id: selectedGroup.id, name: nextName.trim() });
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    deleteSkillGroup.mutate(selectedGroup.id);
+                    setSelectedGroup(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedAllSkill} onOpenChange={(open) => !open && setSelectedAllSkill(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedAllSkill && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedAllSkill.name}</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-white/80">Group: {selectedAllSkill.groupingName || "None"}</div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const nextName = window.prompt("Update all_skill name", selectedAllSkill.name) || "";
+                    if (!nextName.trim()) return;
+                    const nextGroupId = window.prompt("Update grouping_id (blank for none)", selectedAllSkill.groupingId || "") ?? selectedAllSkill.groupingId ?? "";
+                    updateAllSkill.mutate({
+                      id: selectedAllSkill.id,
+                      name: nextName.trim(),
+                      groupingId: nextGroupId.trim() || null,
+                    });
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    deleteAllSkill.mutate(selectedAllSkill.id);
+                    setSelectedAllSkill(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedPortfolioSkill} onOpenChange={(open) => !open && setSelectedPortfolioSkill(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedPortfolioSkill && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedPortfolioSkill.label}</DialogTitle>
+              </DialogHeader>
+              <div className="text-sm text-white/80">Group: {selectedPortfolioSkill.groupingName || "None"}</div>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  disabled={selectedPortfolioSkill.index === 0}
+                  onClick={() => {
+                    const order = [...skillOrderIds];
+                    const index = selectedPortfolioSkill.index;
+                    [order[index - 1], order[index]] = [order[index], order[index - 1]];
+                    reorderPortfolioSkills.mutate(order);
+                    setSelectedPortfolioSkill(null);
+                  }}
+                  className="px-3 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Move Up
+                </button>
+                <button
+                  disabled={selectedPortfolioSkill.index === skills.length - 1}
+                  onClick={() => {
+                    const order = [...skillOrderIds];
+                    const index = selectedPortfolioSkill.index;
+                    [order[index + 1], order[index]] = [order[index], order[index + 1]];
+                    reorderPortfolioSkills.mutate(order);
+                    setSelectedPortfolioSkill(null);
+                  }}
+                  className="px-3 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Move Down
+                </button>
+                <button
+                  onClick={() => {
+                    deletePortfolioSkill.mutate(selectedPortfolioSkill.id);
+                    setSelectedPortfolioSkill(null);
+                  }}
+                  className="px-3 py-1 border border-white/20"
+                >
+                  Remove
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
