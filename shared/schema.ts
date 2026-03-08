@@ -51,9 +51,20 @@ export const bio = pgTable("bio", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const skills = pgTable("skills", {
+export const skillsGroup = pgTable("skills_group", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  label: text("label").notNull(),
+  name: text("name").notNull(),
+});
+
+export const allSkills = pgTable("all_skills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  groupingId: varchar("grouping_id"),
+});
+
+export const portfolioSkills = pgTable("portfolio_skills", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  allSkillId: varchar("all_skill_id").notNull(),
   position: integer("position").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
@@ -93,15 +104,30 @@ export const insertBioSchema = createInsertSchema(bio).pick({
   paragraph: true,
 });
 
-export const insertSkillSchema = createInsertSchema(skills).pick({
-  label: true,
+export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
+  name: true,
 });
 
-export const updateSkillSchema = insertSkillSchema.partial();
+export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
+
+export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
+  name: true,
+  groupingId: true,
+});
+
+export const updateAllSkillSchema = insertAllSkillSchema.partial();
+
+export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pick({
+  allSkillId: true,
+});
+
+export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type XyzBullet = typeof xyzBullets.$inferSelect;
 export type Bio = typeof bio.$inferSelect;
-export type Skill = typeof skills.$inferSelect;
+export type SkillsGroup = typeof skillsGroup.$inferSelect;
+export type AllSkill = typeof allSkills.$inferSelect;
+export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
