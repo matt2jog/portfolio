@@ -146,6 +146,16 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.put("/api/admin/bio", requireAdmin, async (req, res) => {
+    const parsed = insertBioSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    const [result] = await db.insert(bio).values(parsed.data).returning();
+
+    await logAudit(req, "bio.update", parsed.data);
+    res.json(result);
+  });
+
   app.get("/api/admin/bio/versions", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(bio)
       .orderBy(desc(bio.createdAt));

@@ -140,7 +140,10 @@ export default function Admin() {
     mutationFn: async () => {
       await apiRequest("PUT", "/api/admin/bio", bioForm);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio/versions"] });
+    },
   });
 
   const addSkill = useMutation({
