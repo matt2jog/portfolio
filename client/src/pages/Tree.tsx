@@ -68,7 +68,7 @@ const LINKS: LinkItem[] = [
   {
     id: "phone",
     label: "Phone",
-    href: "tel:+10000000000",
+    href: "tel:+17326393889",
     description: "Middletown, NJ resident. Direct contact for urgent matters.",
     icon: <AtSign className="h-6 w-6" aria-hidden="true" />,
     chip: "mobile",
@@ -214,7 +214,7 @@ function NicheCarousel() {
                     <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
                       {new URL(item.href, window.location.href).host.replace(/^www\./, "") || "local"}
                     </span>
-                    <ArrowUpRight className="h-4 w-4 text-primary" />
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </a>
               </motion.div>

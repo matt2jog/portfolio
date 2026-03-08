@@ -8,7 +8,12 @@ import { metaImagesPlugin } from "./vite-plugin-meta-images";
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
+    // runtimeErrorOverlay injects a tiny script to help display runtime errors in a
+    // development overlay. it contains TypeScript-style `as` casts which aren't
+    // transpiled, so including it in a production build results in a syntax error
+    // (`Unexpected identifier 'as'`) that breaks the entire bundle. limit its use to
+    // non-production builds.
+    ...(process.env.NODE_ENV !== "production" ? [runtimeErrorOverlay()] : []),
     tailwindcss(),
     metaImagesPlugin(),
     ...(process.env.NODE_ENV !== "production" &&
