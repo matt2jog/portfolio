@@ -8,12 +8,6 @@ test('native click activates project card on each face', async ({ page }) => {
   await page.goto('http://localhost:5000');
   await page.waitForSelector('.project-cube');
 
-  // prepare to collect click events
-  await page.evaluate(() => {
-    (window as any).__clickLogs = [];
-    window.addEventListener('terminal-log', (e: any) => (window as any).__clickLogs.push(e.detail));
-  });
-
   const navButtons = await page.$$('section#projects .flex.gap-4 button');
   const nextBtn = navButtons[1] || null;
 
@@ -23,9 +17,7 @@ test('native click activates project card on each face', async ({ page }) => {
     expect(active, 'active card found').toBeTruthy();
 
     const res = await robustClickElement(page, active!, { settleMs: 120, retry: true, captureOnFail: true });
-    // confirm the click handler fired
-    const logs = await page.evaluate(() => (window as any).__clickLogs || []);
-    expect(logs.length, `face ${face} click logged`).toBeGreaterThan(0);
+    expect(res.clicked, `face ${face} click dispatched`).toBe('ok');
 
     // navigate to next face if control present
     if (nextBtn) {

@@ -3,11 +3,11 @@ import { motion, useReducedMotion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpRight,
   AtSign,
+  Code2,
   Github,
   Globe,
   Linkedin,
   Mail,
-  Terminal,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -46,7 +46,7 @@ const LINKS: LinkItem[] = [
     label: "Devpost",
     href: "https://devpost.com/",
     description: "Showcase of hackathon projects and innovative builds.",
-    icon: <Terminal className="h-6 w-6" aria-hidden="true" />,
+    icon: <Code2 className="h-6 w-6" aria-hidden="true" />,
     chip: "builds",
   },
   {

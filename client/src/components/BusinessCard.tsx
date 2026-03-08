@@ -107,7 +107,7 @@ export function BusinessCard({ headline, description, paragraph }: BusinessCardP
                 className="font-display font-bold text-white tracking-tight leading-none"
                 style={{ fontSize: "clamp(1.25rem, 3vw, 2rem)" }}
               >
-                {headline || "MATTHEW TUJAGUE"}
+                {headline || "LOREM IPSUM"}
               </h2>
               <div className="mt-2 h-px w-16 bg-primary/40" />
             </div>
