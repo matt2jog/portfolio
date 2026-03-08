@@ -28,7 +28,7 @@
         try {
           if (typeof window.sendError !== 'function') {
             window.sendError = function(){
-              try { (window as any).__pageErrors = (window as any).__pageErrors || []; (window as any).__pageErrors.push({ at: Date.now(), kind: 'sendError-preinit', args: Array.from(arguments).map(a => (typeof a === 'string' ? a : (a && a.stack) || String(a))) }); } catch (e) {}
+              try { window.__pageErrors = window.__pageErrors || []; window.__pageErrors.push({ at: Date.now(), kind: 'sendError-preinit', args: Array.from(arguments).map(a => (typeof a === 'string' ? a : (a && a.stack) || String(a))) }); } catch (e) {}
             };
           }
         } catch (e) {}
