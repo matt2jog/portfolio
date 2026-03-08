@@ -162,6 +162,25 @@ export async function registerRoutes(
     res.json(rows);
   });
 
+  app.post("/api/admin/bio/:id/restore", requireAdmin, async (req, res) => {
+    const [version] = await db.select().from(bio)
+      .where(eq(bio.id, req.params.id))
+      .limit(1);
+
+    if (!version) {
+      return res.status(404).json({ message: "Bio version not found" });
+    }
+
+    const [restored] = await db.insert(bio).values({
+      headline: version.headline,
+      description: version.description,
+      paragraph: version.paragraph,
+    }).returning();
+
+    await logAudit(req, "bio.restore", { sourceId: req.params.id, restoredId: restored.id });
+    res.json(restored);
+  });
+
   app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(skills)
       .where(sql`${skills.deletedAt} IS NULL`)

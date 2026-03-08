@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import Footer from "@/components/Footer";
+import { toast } from "@/hooks/use-toast";
 
 interface ProjectFormState {
   id?: string;
@@ -21,6 +22,11 @@ interface BioFormState {
   headline: string;
   description: string;
   paragraph: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
 }
 
 export default function Admin() {
@@ -119,6 +125,10 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
       setProjectForm({ title: "", category: "", description: "", longDescription: "", epilogue: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" });
+      toast({ title: "Success", description: projectForm.id ? "Project updated" : "Project added" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Project save failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -126,14 +136,26 @@ export default function Admin() {
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/projects/${id}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      toast({ title: "Success", description: "Project archived" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Project delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
   });
 
   const reorderProjects = useMutation({
     mutationFn: async (order: string[]) => {
       await apiRequest("POST", "/api/admin/projects/reorder", { order });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      toast({ title: "Success", description: "Project order updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Project reorder failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
   });
 
   const saveBio = useMutation({
@@ -143,6 +165,24 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bio/versions"] });
+      toast({ title: "Success", description: "Bio saved" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Bio save failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const restoreBioVersion = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/bio/${id}/restore`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio/versions"] });
+      toast({ title: "Success", description: "Bio version restored" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Bio restore failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -153,6 +193,10 @@ export default function Admin() {
     onSuccess: () => {
       setSkillInput("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      toast({ title: "Success", description: "Skill added" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill add failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -160,14 +204,26 @@ export default function Admin() {
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/skills/${id}`);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      toast({ title: "Success", description: "Skill archived" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
   });
 
   const reorderSkills = useMutation({
     mutationFn: async (order: string[]) => {
       await apiRequest("POST", "/api/admin/skills/reorder", { order });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      toast({ title: "Success", description: "Skill order updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill reorder failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
   });
 
   const restoreProject = useMutation({
@@ -177,6 +233,10 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/archived/projects"] });
+      toast({ title: "Success", description: "Project restored" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Project restore failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -187,6 +247,10 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/archived/skills"] });
+      toast({ title: "Success", description: "Skill restored" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill restore failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -494,6 +558,13 @@ export default function Admin() {
                         <div className="text-white/70 text-xs mt-1 line-clamp-2">{version.description}</div>
                       </div>
                     </div>
+                    <button
+                      onClick={() => restoreBioVersion.mutate(version.id)}
+                      disabled={index === 0}
+                      className="px-3 py-1 border border-white/20 hover:bg-white/5 disabled:opacity-40"
+                    >
+                      Restore
+                    </button>
                   </div>
                 </div>
               ))}

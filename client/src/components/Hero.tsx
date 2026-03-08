@@ -16,13 +16,12 @@ export function Hero() {
           <h1 className="text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
             FULL STACK <br />
             <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white">
-              ARCHITECT
+              ENGINEER
             </span>
           </h1>
 
           <p className="max-w-xl text-lg md:text-xl text-gray-400 font-light leading-relaxed border-l-2 border-primary/20 pl-6">
-            Designing resilient digital ecosystems. 
-            Bridging the gap between conceptual schematics and deployed reality.
+            Be the change you want to see in the world<br />See a problem, commit a solution
           </p>
         </motion.div>
 
