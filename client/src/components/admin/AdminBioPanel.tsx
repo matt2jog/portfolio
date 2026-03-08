@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface BioFormState {
   headline: string;
@@ -23,6 +24,7 @@ export default function AdminBioPanel() {
     description: "",
     paragraph: "",
   });
+  const [selectedVersion, setSelectedVersion] = useState<any | null>(null);
 
   useEffect(() => {
     const bioData = bioQuery.data as any;
@@ -60,6 +62,20 @@ export default function AdminBioPanel() {
     },
     onError: (error) => {
       toast({ title: "Failed", description: `Bio restore failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const deleteBioVersion = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/bio/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bio/versions"] });
+      toast({ title: "Success", description: "Bio version deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Bio version delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -103,31 +119,71 @@ export default function AdminBioPanel() {
         <h3 className="text-lg font-semibold">Bio History ({versions.length})</h3>
         <div className="space-y-2">
           {versions.map((version: any, index: number) => (
-            <div key={version.id} className="border border-white/10 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="text-sm text-white/60 mb-2">
-                    Version {versions.length - index} • Created: {new Date(version.createdAt).toLocaleString()}
-                    {index === 0 && <span className="ml-2 px-2 py-0.5 bg-primary/20 text-primary text-xs rounded">Current</span>}
-                  </div>
-                  <div className="text-sm">
-                    <div className="font-semibold">{version.headline}</div>
-                    <div className="text-white/70 text-xs mt-1 line-clamp-2">{version.description}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => restoreBioVersion.mutate(version.id)}
-                  disabled={index === 0}
-                  className="px-3 py-1 border border-white/20 hover:bg-white/5 disabled:opacity-40"
-                >
-                  Restore
-                </button>
+            <div
+              key={version.id}
+              className="border border-white/10 p-3 cursor-pointer hover:border-white/40"
+              onClick={() => setSelectedVersion({ ...version, index })}
+            >
+              <div className="text-sm text-white/60 mb-2">
+                Version {versions.length - index} • Created: {new Date(version.createdAt).toLocaleString()}
+                {index === 0 && <span className="ml-2 px-2 py-0.5 bg-primary/20 text-primary text-xs rounded">Current</span>}
+              </div>
+              <div className="text-sm">
+                <div className="font-semibold">{version.headline}</div>
+                <div className="text-white/70 text-xs mt-1">{version.description}</div>
               </div>
             </div>
           ))}
           {versions.length === 0 && <div className="text-sm text-white/40 italic">No bio versions</div>}
         </div>
       </div>
+
+      <Dialog open={!!selectedVersion} onOpenChange={(open) => !open && setSelectedVersion(null)}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto bg-black text-white border-white/20">
+          {selectedVersion && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedVersion.headline || "Bio Version"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2 text-sm text-white/80">
+                <div>
+                  <span className="text-white/50">Created:</span> {new Date(selectedVersion.createdAt).toLocaleString()}
+                </div>
+                <div>
+                  <span className="text-white/50">Description:</span>
+                  <div className="mt-1 whitespace-pre-wrap">{selectedVersion.description || "—"}</div>
+                </div>
+                <div>
+                  <span className="text-white/50">Paragraph:</span>
+                  <div className="mt-1 whitespace-pre-wrap">{selectedVersion.paragraph || "—"}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    restoreBioVersion.mutate(selectedVersion.id);
+                    setSelectedVersion(null);
+                  }}
+                  disabled={selectedVersion.index === 0}
+                  className="px-3 py-1 border border-white/20 hover:bg-white/5 disabled:opacity-40"
+                >
+                  Restore
+                </button>
+                <button
+                  onClick={() => {
+                    deleteBioVersion.mutate(selectedVersion.id);
+                    setSelectedVersion(null);
+                  }}
+                  className="px-3 py-1 border border-white/20 hover:bg-white/5"
+                >
+                  Delete Version
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

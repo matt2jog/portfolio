@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
@@ -16,11 +16,19 @@ export default function AdminSkillsPanel() {
 
   const [skillGroupInput, setSkillGroupInput] = useState("");
   const [allSkillNameInput, setAllSkillNameInput] = useState("");
-  const [allSkillGroupingIdInput, setAllSkillGroupingIdInput] = useState("");
-  const [selectedAllSkillId, setSelectedAllSkillId] = useState("");
+  const [allSkillGroupingNameInput, setAllSkillGroupingNameInput] = useState("");
+  const [selectedAllSkillNameInput, setSelectedAllSkillNameInput] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [selectedAllSkill, setSelectedAllSkill] = useState<any | null>(null);
   const [selectedPortfolioSkill, setSelectedPortfolioSkill] = useState<any | null>(null);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; message: string }>({
+    open: false,
+    title: "Validation Error",
+    message: "",
+  });
+  const [groupEditNameInput, setGroupEditNameInput] = useState("");
+  const [allSkillEditNameInput, setAllSkillEditNameInput] = useState("");
+  const [allSkillEditGroupingNameInput, setAllSkillEditGroupingNameInput] = useState("");
 
   const addSkillGroup = useMutation({
     mutationFn: async () => {
@@ -66,20 +74,24 @@ export default function AdminSkillsPanel() {
   });
 
   const addAllSkill = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ name, groupingId }: { name: string; groupingId: string | null }) => {
       await apiRequest("POST", "/api/admin/all-skills", {
-        name: allSkillNameInput,
-        groupingId: allSkillGroupingIdInput || null,
+        name,
+        groupingId,
       });
     },
     onSuccess: () => {
       setAllSkillNameInput("");
-      setAllSkillGroupingIdInput("");
+      setAllSkillGroupingNameInput("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
       toast({ title: "Success", description: "all_skill added" });
     },
     onError: (error) => {
-      toast({ title: "Failed", description: `all_skill add failed: ${getErrorMessage(error)}`, variant: "destructive" });
+      setErrorDialog({
+        open: true,
+        title: "all_skill Add Failed",
+        message: getErrorMessage(error),
+      });
     },
   });
 
@@ -97,7 +109,11 @@ export default function AdminSkillsPanel() {
       toast({ title: "Success", description: "all_skill updated" });
     },
     onError: (error) => {
-      toast({ title: "Failed", description: `all_skill update failed: ${getErrorMessage(error)}`, variant: "destructive" });
+      setErrorDialog({
+        open: true,
+        title: "all_skill Update Failed",
+        message: getErrorMessage(error),
+      });
     },
   });
 
@@ -115,17 +131,21 @@ export default function AdminSkillsPanel() {
   });
 
   const addPortfolioSkill = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/admin/skills", { allSkillId: selectedAllSkillId });
+    mutationFn: async ({ allSkillId }: { allSkillId: string }) => {
+      await apiRequest("POST", "/api/admin/skills", { allSkillId });
     },
     onSuccess: () => {
-      setSelectedAllSkillId("");
+      setSelectedAllSkillNameInput("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
       queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
       toast({ title: "Success", description: "Skill assigned to portfolio" });
     },
     onError: (error) => {
-      toast({ title: "Failed", description: `Portfolio skill add failed: ${getErrorMessage(error)}`, variant: "destructive" });
+      setErrorDialog({
+        open: true,
+        title: "Portfolio Skill Add Failed",
+        message: getErrorMessage(error),
+      });
     },
   });
 
@@ -161,6 +181,55 @@ export default function AdminSkillsPanel() {
   const skillGroups = Array.isArray(skillGroupsQuery.data) ? skillGroupsQuery.data : [];
   const allSkills = Array.isArray(allSkillsQuery.data) ? allSkillsQuery.data : [];
   const skillOrderIds = useMemo(() => skills.map((skill: any) => skill.id), [skills]);
+
+  useEffect(() => {
+    setGroupEditNameInput(selectedGroup?.name || "");
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    setAllSkillEditNameInput(selectedAllSkill?.name || "");
+    setAllSkillEditGroupingNameInput(selectedAllSkill?.groupingName || "");
+  }, [selectedAllSkill]);
+
+  const resolveGroupIdByName = (groupName: string): string | null => {
+    const trimmed = groupName.trim();
+    if (!trimmed) return null;
+    const match = skillGroups.find((group: any) => group.name.toLowerCase() === trimmed.toLowerCase());
+    return match?.id ?? null;
+  };
+
+  const resolveAllSkillIdByName = (skillName: string): string | null => {
+    const trimmed = skillName.trim();
+    if (!trimmed) return null;
+    const match = allSkills.find((allSkill: any) => allSkill.name.toLowerCase() === trimmed.toLowerCase());
+    return match?.id ?? null;
+  };
+
+  const handleAddAllSkill = () => {
+    const name = allSkillNameInput.trim();
+    if (!name) {
+      setErrorDialog({ open: true, title: "Invalid all_skill", message: "Skill name is required." });
+      return;
+    }
+
+    const groupingId = resolveGroupIdByName(allSkillGroupingNameInput);
+    if (allSkillGroupingNameInput.trim() && !groupingId) {
+      setErrorDialog({ open: true, title: "Invalid Group", message: "Group must match an existing skills_group name." });
+      return;
+    }
+
+    addAllSkill.mutate({ name, groupingId });
+  };
+
+  const handleAddPortfolioSkill = () => {
+    const allSkillId = resolveAllSkillIdByName(selectedAllSkillNameInput);
+    if (!allSkillId) {
+      setErrorDialog({ open: true, title: "Invalid all_skill", message: "Select an existing all_skill name to assign." });
+      return;
+    }
+
+    addPortfolioSkill.mutate({ allSkillId });
+  };
 
   return (
     <section className="space-y-6 border border-white/10 p-4 sm:p-6">
@@ -206,18 +275,20 @@ export default function AdminSkillsPanel() {
             placeholder="Skill name"
             className="bg-black/60 border border-white/20 p-2"
           />
-          <select
-            value={allSkillGroupingIdInput}
-            onChange={(e) => setAllSkillGroupingIdInput(e.target.value)}
+          <input
+            list="skills-group-options"
+            value={allSkillGroupingNameInput}
+            onChange={(e) => setAllSkillGroupingNameInput(e.target.value)}
+            placeholder="Group name (autocomplete)"
             className="bg-black/60 border border-white/20 p-2"
-          >
-            <option value="">No group</option>
+          />
+          <datalist id="skills-group-options">
             {skillGroups.map((group: any) => (
-              <option key={group.id} value={group.id}>{group.name}</option>
+              <option key={group.id} value={group.name} />
             ))}
-          </select>
+          </datalist>
           <button
-            onClick={() => addAllSkill.mutate()}
+            onClick={handleAddAllSkill}
             className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
             disabled={!allSkillNameInput.trim()}
           >
@@ -245,20 +316,22 @@ export default function AdminSkillsPanel() {
       <div className="space-y-3 border border-white/10 p-4">
         <h3 className="text-lg font-semibold">portfolio_skills</h3>
         <div className="grid gap-3 md:grid-cols-2">
-          <select
-            value={selectedAllSkillId}
-            onChange={(e) => setSelectedAllSkillId(e.target.value)}
+          <input
+            list="all-skills-options"
+            value={selectedAllSkillNameInput}
+            onChange={(e) => setSelectedAllSkillNameInput(e.target.value)}
+            placeholder="all_skill name (autocomplete)"
             className="bg-black/60 border border-white/20 p-2"
-          >
-            <option value="">Select all_skill to assign</option>
+          />
+          <datalist id="all-skills-options">
             {allSkills.map((allSkill: any) => (
-              <option key={allSkill.id} value={allSkill.id}>{allSkill.name}</option>
+              <option key={allSkill.id} value={allSkill.name} />
             ))}
-          </select>
+          </datalist>
           <button
-            onClick={() => addPortfolioSkill.mutate()}
+            onClick={handleAddPortfolioSkill}
             className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
-            disabled={!selectedAllSkillId}
+            disabled={!selectedAllSkillNameInput.trim()}
           >
             Assign to portfolio_skills
           </button>
@@ -292,9 +365,9 @@ export default function AdminSkillsPanel() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
-                    const nextName = window.prompt("Update group name", selectedGroup.name) || "";
-                    if (!nextName.trim() || nextName.trim() === selectedGroup.name) return;
-                    updateSkillGroup.mutate({ id: selectedGroup.id, name: nextName.trim() });
+                    const nextName = groupEditNameInput.trim();
+                    if (!nextName || nextName === selectedGroup.name) return;
+                    updateSkillGroup.mutate({ id: selectedGroup.id, name: nextName });
                   }}
                   className="px-3 py-1 border border-white/20"
                 >
@@ -310,6 +383,12 @@ export default function AdminSkillsPanel() {
                   Delete
                 </button>
               </div>
+              <input
+                value={groupEditNameInput}
+                onChange={(e) => setGroupEditNameInput(e.target.value)}
+                placeholder="Edit group name"
+                className="bg-black/60 border border-white/20 p-2"
+              />
             </>
           )}
         </DialogContent>
@@ -323,16 +402,36 @@ export default function AdminSkillsPanel() {
                 <DialogTitle>{selectedAllSkill.name}</DialogTitle>
               </DialogHeader>
               <div className="text-sm text-white/80">Group: {selectedAllSkill.groupingName || "None"}</div>
+              <input
+                value={allSkillEditNameInput}
+                onChange={(e) => setAllSkillEditNameInput(e.target.value)}
+                placeholder="Edit all_skill name"
+                className="bg-black/60 border border-white/20 p-2"
+              />
+              <input
+                list="skills-group-options"
+                value={allSkillEditGroupingNameInput}
+                onChange={(e) => setAllSkillEditGroupingNameInput(e.target.value)}
+                placeholder="Edit group name (autocomplete)"
+                className="bg-black/60 border border-white/20 p-2"
+              />
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
-                    const nextName = window.prompt("Update all_skill name", selectedAllSkill.name) || "";
-                    if (!nextName.trim()) return;
-                    const nextGroupId = window.prompt("Update grouping_id (blank for none)", selectedAllSkill.groupingId || "") ?? selectedAllSkill.groupingId ?? "";
+                    const nextName = allSkillEditNameInput.trim();
+                    if (!nextName) {
+                      setErrorDialog({ open: true, title: "Invalid all_skill", message: "all_skill name is required." });
+                      return;
+                    }
+                    const nextGroupingId = resolveGroupIdByName(allSkillEditGroupingNameInput);
+                    if (allSkillEditGroupingNameInput.trim() && !nextGroupingId) {
+                      setErrorDialog({ open: true, title: "Invalid Group", message: "Group must match an existing skills_group name." });
+                      return;
+                    }
                     updateAllSkill.mutate({
                       id: selectedAllSkill.id,
-                      name: nextName.trim(),
-                      groupingId: nextGroupId.trim() || null,
+                      name: nextName,
+                      groupingId: nextGroupingId,
                     });
                   }}
                   className="px-3 py-1 border border-white/20"
@@ -401,6 +500,15 @@ export default function AdminSkillsPanel() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={errorDialog.open} onOpenChange={(open) => setErrorDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent className="w-[95vw] max-w-lg bg-black text-white border-white/20">
+          <DialogHeader>
+            <DialogTitle>{errorDialog.title}</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-white/80">{errorDialog.message}</div>
         </DialogContent>
       </Dialog>
     </section>

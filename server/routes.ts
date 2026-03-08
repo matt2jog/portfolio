@@ -217,6 +217,22 @@ export async function registerRoutes(
     res.json(restored);
   });
 
+  app.delete("/api/admin/bio/:id", requireAdmin, async (req, res) => {
+    const bioVersionId = routeId(req.params.id);
+
+    const [existing] = await db.select().from(bio)
+      .where(eq(bio.id, bioVersionId))
+      .limit(1);
+
+    if (!existing) {
+      return res.status(404).json({ message: "Bio version not found" });
+    }
+
+    await db.delete(bio).where(eq(bio.id, bioVersionId));
+    await logAudit(req, "bio.delete", { id: bioVersionId });
+    res.json({ ok: true });
+  });
+
   app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(portfolioSkills)
       .where(sql`${portfolioSkills.deletedAt} IS NULL`)
