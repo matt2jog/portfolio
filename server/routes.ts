@@ -361,13 +361,9 @@ export async function registerRoutes(
 
   app.delete("/api/admin/skills/:id", requireAdmin, async (req, res) => {
     const skillId = routeId(req.params.id);
-    await db.update(portfolioSkills)
-      .set({ 
-        deletedAt: new Date(),
-        archivedBy: req.user?.id 
-      })
+    await db.delete(portfolioSkills)
       .where(eq(portfolioSkills.id, skillId));
-    await logAudit(req, "portfolioSkill.archive", { id: skillId });
+    await logAudit(req, "portfolioSkill.delete", { id: skillId });
     res.json({ ok: true });
   });
 
@@ -392,13 +388,6 @@ export async function registerRoutes(
     res.json(rows);
   });
 
-  app.get("/api/admin/archived/skills", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(portfolioSkills)
-      .where(sql`${portfolioSkills.deletedAt} IS NOT NULL`)
-      .orderBy(asc(portfolioSkills.deletedAt));
-    res.json(await hydratePortfolioSkills(rows));
-  });
-
   app.post("/api/admin/projects/:id/restore", requireAdmin, async (req, res) => {
     const projectId = routeId(req.params.id);
     const [restored] = await db.update(projects)
@@ -407,17 +396,6 @@ export async function registerRoutes(
       .returning();
     await logAudit(req, "project.restore", { id: projectId });
     res.json(restored);
-  });
-
-  app.post("/api/admin/skills/:id/restore", requireAdmin, async (req, res) => {
-    const skillId = routeId(req.params.id);
-    const [restored] = await db.update(portfolioSkills)
-      .set({ deletedAt: null, archivedBy: null })
-      .where(eq(portfolioSkills.id, skillId))
-      .returning();
-    await logAudit(req, "portfolioSkill.restore", { id: skillId });
-    const [hydrated] = await hydratePortfolioSkills([restored]);
-    res.json(hydrated);
   });
 
   return httpServer;

@@ -1,0 +1,340 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { toast } from "@/hooks/use-toast";
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
+}
+
+export default function AdminSkillsPanel() {
+  const skillsQuery = useQuery({ queryKey: ["/api/admin/skills"] });
+  const skillGroupsQuery = useQuery({ queryKey: ["/api/admin/skills-groups"] });
+  const allSkillsQuery = useQuery({ queryKey: ["/api/admin/all-skills"] });
+
+  const [skillGroupInput, setSkillGroupInput] = useState("");
+  const [allSkillNameInput, setAllSkillNameInput] = useState("");
+  const [allSkillGroupingIdInput, setAllSkillGroupingIdInput] = useState("");
+  const [selectedAllSkillId, setSelectedAllSkillId] = useState("");
+
+  const addSkillGroup = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/skills-groups", { name: skillGroupInput });
+    },
+    onSuccess: () => {
+      setSkillGroupInput("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      toast({ title: "Success", description: "Skill group added" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill group add failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const updateSkillGroup = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      await apiRequest("PUT", `/api/admin/skills-groups/${id}`, { name });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      toast({ title: "Success", description: "Skill group updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill group update failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const deleteSkillGroup = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/skills-groups/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      toast({ title: "Success", description: "Skill group deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Skill group delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const addAllSkill = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/all-skills", {
+        name: allSkillNameInput,
+        groupingId: allSkillGroupingIdInput || null,
+      });
+    },
+    onSuccess: () => {
+      setAllSkillNameInput("");
+      setAllSkillGroupingIdInput("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      toast({ title: "Success", description: "all_skill added" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `all_skill add failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const updateAllSkill = useMutation({
+    mutationFn: async ({ id, name, groupingId }: { id: string; name: string; groupingId?: string | null }) => {
+      await apiRequest("PUT", `/api/admin/all-skills/${id}`, {
+        name,
+        groupingId: groupingId || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
+      toast({ title: "Success", description: "all_skill updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `all_skill update failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const deleteAllSkill = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/all-skills/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
+      toast({ title: "Success", description: "all_skill deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `all_skill delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const addPortfolioSkill = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/skills", { allSkillId: selectedAllSkillId });
+    },
+    onSuccess: () => {
+      setSelectedAllSkillId("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
+      toast({ title: "Success", description: "Skill assigned to portfolio" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Portfolio skill add failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const deletePortfolioSkill = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/skills/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
+      toast({ title: "Success", description: "Portfolio skill removed" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Portfolio skill remove failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const reorderPortfolioSkills = useMutation({
+    mutationFn: async (order: string[]) => {
+      await apiRequest("POST", "/api/admin/skills/reorder", { order });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
+      toast({ title: "Success", description: "Portfolio skill order updated" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: `Portfolio skill reorder failed: ${getErrorMessage(error)}`, variant: "destructive" });
+    },
+  });
+
+  const skills = Array.isArray(skillsQuery.data) ? skillsQuery.data : [];
+  const skillGroups = Array.isArray(skillGroupsQuery.data) ? skillGroupsQuery.data : [];
+  const allSkills = Array.isArray(allSkillsQuery.data) ? allSkillsQuery.data : [];
+  const skillOrderIds = useMemo(() => skills.map((skill: any) => skill.id), [skills]);
+
+  return (
+    <section className="space-y-6 border border-white/10 p-4 sm:p-6">
+      <h2 className="text-xl font-semibold">Skills CRUD</h2>
+
+      <div className="space-y-3 border border-white/10 p-4">
+        <h3 className="text-lg font-semibold">skills_group</h3>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            value={skillGroupInput}
+            onChange={(e) => setSkillGroupInput(e.target.value)}
+            placeholder="Group name"
+            className="bg-black/60 border border-white/20 p-2 flex-1"
+          />
+          <button
+            onClick={() => addSkillGroup.mutate()}
+            className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
+            disabled={!skillGroupInput.trim()}
+          >
+            Add Group
+          </button>
+        </div>
+        <div className="space-y-2">
+          {skillGroups.map((group: any) => (
+            <div key={group.id} className="flex items-center justify-between border border-white/10 p-2">
+              <div>{group.name}</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const nextName = window.prompt("Update group name", group.name) || "";
+                    if (!nextName.trim() || nextName.trim() === group.name) return;
+                    updateSkillGroup.mutate({ id: group.id, name: nextName.trim() });
+                  }}
+                  className="px-2 py-1 border border-white/20"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteSkillGroup.mutate(group.id)}
+                  className="px-2 py-1 border border-white/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {skillGroups.length === 0 && <div className="text-sm text-white/40 italic">No skill groups</div>}
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-white/10 p-4">
+        <h3 className="text-lg font-semibold">all_skills</h3>
+        <div className="grid gap-3 md:grid-cols-3">
+          <input
+            value={allSkillNameInput}
+            onChange={(e) => setAllSkillNameInput(e.target.value)}
+            placeholder="Skill name"
+            className="bg-black/60 border border-white/20 p-2"
+          />
+          <select
+            value={allSkillGroupingIdInput}
+            onChange={(e) => setAllSkillGroupingIdInput(e.target.value)}
+            className="bg-black/60 border border-white/20 p-2"
+          >
+            <option value="">No group</option>
+            {skillGroups.map((group: any) => (
+              <option key={group.id} value={group.id}>{group.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => addAllSkill.mutate()}
+            className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
+            disabled={!allSkillNameInput.trim()}
+          >
+            Add all_skill
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {allSkills.map((allSkill: any) => (
+            <div key={allSkill.id} className="flex items-center justify-between border border-white/10 p-2">
+              <div>
+                <div>{allSkill.name}</div>
+                <div className="text-xs text-white/50">Group: {allSkill.groupingName || "None"}</div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const nextName = window.prompt("Update all_skill name", allSkill.name) || "";
+                    if (!nextName.trim()) return;
+                    const nextGroupId = window.prompt("Update grouping_id (blank for none)", allSkill.groupingId || "") ?? allSkill.groupingId ?? "";
+                    updateAllSkill.mutate({
+                      id: allSkill.id,
+                      name: nextName.trim(),
+                      groupingId: nextGroupId.trim() || null,
+                    });
+                  }}
+                  className="px-2 py-1 border border-white/20"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteAllSkill.mutate(allSkill.id)}
+                  className="px-2 py-1 border border-white/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {allSkills.length === 0 && <div className="text-sm text-white/40 italic">No all_skills entries</div>}
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-white/10 p-4">
+        <h3 className="text-lg font-semibold">portfolio_skills</h3>
+        <div className="grid gap-3 md:grid-cols-2">
+          <select
+            value={selectedAllSkillId}
+            onChange={(e) => setSelectedAllSkillId(e.target.value)}
+            className="bg-black/60 border border-white/20 p-2"
+          >
+            <option value="">Select all_skill to assign</option>
+            {allSkills.map((allSkill: any) => (
+              <option key={allSkill.id} value={allSkill.id}>{allSkill.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => addPortfolioSkill.mutate()}
+            className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
+            disabled={!selectedAllSkillId}
+          >
+            Assign to portfolio_skills
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {skills.map((skill: any, index: number) => (
+            <div key={skill.id} className="flex items-center justify-between border border-white/10 p-2">
+              <div>
+                <div>{skill.label}</div>
+                <div className="text-xs text-white/50">Group: {skill.groupingName || "None"}</div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={index === 0}
+                  onClick={() => {
+                    const order = [...skillOrderIds];
+                    [order[index - 1], order[index]] = [order[index], order[index - 1]];
+                    reorderPortfolioSkills.mutate(order);
+                  }}
+                  className="px-2 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Up
+                </button>
+                <button
+                  disabled={index === skills.length - 1}
+                  onClick={() => {
+                    const order = [...skillOrderIds];
+                    [order[index + 1], order[index]] = [order[index], order[index + 1]];
+                    reorderPortfolioSkills.mutate(order);
+                  }}
+                  className="px-2 py-1 border border-white/20 disabled:opacity-40"
+                >
+                  Down
+                </button>
+                <button
+                  onClick={() => deletePortfolioSkill.mutate(skill.id)}
+                  className="px-2 py-1 border border-white/20"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+          {skills.length === 0 && <div className="text-sm text-white/40 italic">No portfolio_skills assignments</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
