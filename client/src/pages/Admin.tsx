@@ -10,7 +10,7 @@ interface ProjectFormState {
   category: string;
   description: string;
   longDescription: string;
-  epilogue: string;
+  xyzBullets: string;
   tech: string;
   image: string;
   hoverImage: string;
@@ -72,7 +72,7 @@ export default function Admin() {
     category: "",
     description: "",
     longDescription: "",
-    epilogue: "",
+    xyzBullets: "",
     tech: "",
     image: "",
     hoverImage: "",
@@ -105,7 +105,10 @@ export default function Admin() {
         category: projectForm.category,
         description: projectForm.description,
         longDescription: projectForm.longDescription || null,
-        epilogue: projectForm.epilogue || null,
+        xyzBullets: projectForm.xyzBullets
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean),
         tech: projectForm.tech
           .split(",")
           .map((item) => item.trim())
@@ -124,7 +127,7 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
-      setProjectForm({ title: "", category: "", description: "", longDescription: "", epilogue: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" });
+      setProjectForm({ title: "", category: "", description: "", longDescription: "", xyzBullets: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" });
       toast({ title: "Success", description: projectForm.id ? "Project updated" : "Project added" });
     },
     onError: (error) => {
@@ -373,9 +376,9 @@ export default function Admin() {
             rows={4}
           />
           <textarea
-            value={projectForm.epilogue}
-            onChange={(e) => setProjectForm((prev) => ({ ...prev, epilogue: e.target.value }))}
-            placeholder="Epilogue (optional)"
+            value={projectForm.xyzBullets}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, xyzBullets: e.target.value }))}
+            placeholder="xyz_bullets (one bullet per line)"
             className="bg-black/60 border border-white/20 p-2"
             rows={3}
           />
@@ -407,7 +410,7 @@ export default function Admin() {
           </button>
           {projectForm.id && (
             <button
-              onClick={() => setProjectForm({ title: "", category: "", description: "", longDescription: "", epilogue: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" })}
+              onClick={() => setProjectForm({ title: "", category: "", description: "", longDescription: "", xyzBullets: "", tech: "", image: "", hoverImage: "", deployedUrl: "", githubUrl: "" })}
               className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
             >
               Cancel
@@ -432,7 +435,9 @@ export default function Admin() {
                         category: project.category,
                         description: project.description,
                         longDescription: project.longDescription || "",
-                        epilogue: project.epilogue || "",
+                        xyzBullets: Array.isArray(project.xyzBullets)
+                          ? project.xyzBullets.join("\n")
+                          : "",
                         tech: (project.tech || []).join(", "),
                         image: project.image || "",
                         hoverImage: project.hoverImage || "",

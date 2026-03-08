@@ -12,8 +12,9 @@ import {
   updateProjectSchema,
   updateSkillSchema,
   auditLogs,
+  xyzBullets,
 } from "@shared/schema";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -41,7 +42,7 @@ export async function registerRoutes(
     const rows = await db.select().from(projects)
       .where(sql`${projects.deletedAt} IS NULL`)
       .orderBy(asc(projects.position));
-    res.json(rows);
+    res.json(await hydrateProjectsWithBullets(rows));
   });
 
   app.get("/api/public/bio", async (_req, res) => {
@@ -70,12 +71,13 @@ export async function registerRoutes(
     const rows = await db.select().from(projects)
       .where(sql`${projects.deletedAt} IS NULL`)
       .orderBy(asc(projects.position));
-    res.json(rows);
+    res.json(await hydrateProjectsWithBullets(rows));
   });
 
   app.post("/api/admin/projects", requireAdmin, async (req, res) => {
     const parsed = insertProjectSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
+    const projectBullets = normalizeBullets(req.body?.xyzBullets);
 
     const [maxRow] = await db
       .select({ max: sql<number>`max(${projects.position})` })
@@ -87,32 +89,58 @@ export async function registerRoutes(
       .values({ ...parsed.data, position: nextPos })
       .returning();
 
-    await logAudit(req, "project.create", created);
-    res.json(created);
+    if (projectBullets.length > 0) {
+      await db.insert(xyzBullets).values(
+        projectBullets.map((bulletText) => ({
+          projectId: created.id,
+          bulletText,
+        })),
+      );
+    }
+
+    await logAudit(req, "project.create", { ...created, xyzBullets: projectBullets });
+    res.json({ ...created, xyzBullets: projectBullets });
   });
 
   app.put("/api/admin/projects/:id", requireAdmin, async (req, res) => {
+    const projectId = routeId(req.params.id);
     const parsed = updateProjectSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
+    const projectBullets = normalizeBullets(req.body?.xyzBullets);
 
     const [updated] = await db
       .update(projects)
       .set(parsed.data)
-      .where(eq(projects.id, req.params.id))
+      .where(eq(projects.id, projectId))
       .returning();
 
-    await logAudit(req, "project.update", { id: req.params.id, ...parsed.data });
-    res.json(updated);
+    if (!updated) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    await db.delete(xyzBullets).where(eq(xyzBullets.projectId, projectId));
+    if (projectBullets.length > 0) {
+      await db.insert(xyzBullets).values(
+        projectBullets.map((bulletText) => ({
+          projectId,
+          bulletText,
+        })),
+      );
+    }
+
+    await logAudit(req, "project.update", { id: projectId, ...parsed.data, xyzBullets: projectBullets });
+    res.json({ ...updated, xyzBullets: projectBullets });
   });
 
   app.delete("/api/admin/projects/:id", requireAdmin, async (req, res) => {
+    const projectId = routeId(req.params.id);
     await db.update(projects)
       .set({ 
         deletedAt: new Date(),
         archivedBy: req.user?.id 
       })
-      .where(eq(projects.id, req.params.id));
-    await logAudit(req, "project.archive", { id: req.params.id });
+      .where(eq(projects.id, projectId));
+    await logAudit(req, "project.archive", { id: projectId });
     res.json({ ok: true });
   });
 
@@ -163,8 +191,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/bio/:id/restore", requireAdmin, async (req, res) => {
+    const bioVersionId = routeId(req.params.id);
     const [version] = await db.select().from(bio)
-      .where(eq(bio.id, req.params.id))
+      .where(eq(bio.id, bioVersionId))
       .limit(1);
 
     if (!version) {
@@ -177,7 +206,7 @@ export async function registerRoutes(
       paragraph: version.paragraph,
     }).returning();
 
-    await logAudit(req, "bio.restore", { sourceId: req.params.id, restoredId: restored.id });
+    await logAudit(req, "bio.restore", { sourceId: bioVersionId, restoredId: restored.id });
     res.json(restored);
   });
 
@@ -207,27 +236,29 @@ export async function registerRoutes(
   });
 
   app.put("/api/admin/skills/:id", requireAdmin, async (req, res) => {
+    const skillId = routeId(req.params.id);
     const parsed = updateSkillSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
     const [updated] = await db
       .update(skills)
       .set(parsed.data)
-      .where(eq(skills.id, req.params.id))
+      .where(eq(skills.id, skillId))
       .returning();
 
-    await logAudit(req, "skill.update", { id: req.params.id, ...parsed.data });
+    await logAudit(req, "skill.update", { id: skillId, ...parsed.data });
     res.json(updated);
   });
 
   app.delete("/api/admin/skills/:id", requireAdmin, async (req, res) => {
+    const skillId = routeId(req.params.id);
     await db.update(skills)
       .set({ 
         deletedAt: new Date(),
         archivedBy: req.user?.id 
       })
-      .where(eq(skills.id, req.params.id));
-    await logAudit(req, "skill.archive", { id: req.params.id });
+      .where(eq(skills.id, skillId));
+    await logAudit(req, "skill.archive", { id: skillId });
     res.json({ ok: true });
   });
 
@@ -260,20 +291,22 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/projects/:id/restore", requireAdmin, async (req, res) => {
+    const projectId = routeId(req.params.id);
     const [restored] = await db.update(projects)
       .set({ deletedAt: null, archivedBy: null })
-      .where(eq(projects.id, req.params.id))
+      .where(eq(projects.id, projectId))
       .returning();
-    await logAudit(req, "project.restore", { id: req.params.id });
+    await logAudit(req, "project.restore", { id: projectId });
     res.json(restored);
   });
 
   app.post("/api/admin/skills/:id/restore", requireAdmin, async (req, res) => {
+    const skillId = routeId(req.params.id);
     const [restored] = await db.update(skills)
       .set({ deletedAt: null, archivedBy: null })
-      .where(eq(skills.id, req.params.id))
+      .where(eq(skills.id, skillId))
       .returning();
-    await logAudit(req, "skill.restore", { id: req.params.id });
+    await logAudit(req, "skill.restore", { id: skillId });
     res.json(restored);
   });
 
@@ -287,4 +320,38 @@ async function logAudit(req: Request, action: string, payload: unknown) {
     action,
     payload,
   });
+}
+
+function normalizeBullets(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function routeId(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+async function hydrateProjectsWithBullets(projectRows: any[]) {
+  if (!Array.isArray(projectRows) || projectRows.length === 0) return [];
+
+  const projectIds = projectRows.map((row) => row.id);
+  const bulletRows = await db
+    .select()
+    .from(xyzBullets)
+    .where(inArray(xyzBullets.projectId, projectIds));
+
+  const bulletsByProjectId = new Map<string, string[]>();
+  for (const bulletRow of bulletRows) {
+    const prev = bulletsByProjectId.get(bulletRow.projectId) ?? [];
+    prev.push(bulletRow.bulletText);
+    bulletsByProjectId.set(bulletRow.projectId, prev);
+  }
+
+  return projectRows.map((projectRow) => ({
+    ...projectRow,
+    xyzBullets: bulletsByProjectId.get(projectRow.id) ?? [],
+  }));
 }

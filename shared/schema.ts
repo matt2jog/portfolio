@@ -25,7 +25,6 @@ export const projects = pgTable("projects", {
   category: text("category").notNull(),
   description: text("description").notNull(),
   longDescription: text("long_description"),
-  epilogue: text("epilogue"),
   tech: text("tech").array().notNull().default(sql`'{}'::text[]`),
   image: text("image"),
   hoverImage: text("hover_image"),
@@ -35,6 +34,12 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
+});
+
+export const xyzBullets = pgTable("xyz_bullets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  bulletText: text("bullet_text").notNull(),
 });
 
 export const bio = pgTable("bio", {
@@ -73,7 +78,6 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   category: true,
   description: true,
   longDescription: true,
-  epilogue: true,
   tech: true,
   image: true,
   hoverImage: true,
@@ -98,5 +102,6 @@ export const updateSkillSchema = insertSkillSchema.partial();
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+export type XyzBullet = typeof xyzBullets.$inferSelect;
 export type Bio = typeof bio.$inferSelect;
 export type Skill = typeof skills.$inferSelect;
