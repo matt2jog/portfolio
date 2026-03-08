@@ -9,7 +9,10 @@ type MaybeUser = {
 
 let initialized = false;
 let lastRoute = "";
+let lastSearch = "";
 let lastIdentity = "";
+let currentLogRocketUserId = "";
+let ipAttached = false;
 
 function getAnonymousId() {
   if (typeof window === "undefined") return "";
@@ -49,6 +52,7 @@ export function identifyLogRocketUser(user: MaybeUser) {
 
     LogRocket.identify(user.id, traits);
     lastIdentity = identity;
+    currentLogRocketUserId = user.id;
     return;
   }
 
@@ -60,17 +64,76 @@ export function identifyLogRocketUser(user: MaybeUser) {
     role: "guest",
   });
   lastIdentity = identity;
+  currentLogRocketUserId = identity;
 }
 
-export function trackLogRocketRoute(path: string) {
+function parseQuery(search: string) {
+  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
+  const out: Record<string, string> = {};
+  params.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
+export function trackLogRocketRoute(path: string, search = "") {
   if (typeof window === "undefined") return;
   initLogRocket();
 
-  if (!path || path === lastRoute) return;
+  if (!path) return;
+  const normalizedSearch = search || "";
+
+  if (path === lastRoute && normalizedSearch === lastSearch) return;
   lastRoute = path;
+  lastSearch = normalizedSearch;
+
+  const query = parseQuery(normalizedSearch);
+  const hasQuery = Object.keys(query).length > 0;
+  const queryJson = JSON.stringify(query);
 
   LogRocket.track("route_change", {
     path,
+    query: queryJson,
+    rawQuery: normalizedSearch,
     at: new Date().toISOString(),
   });
+
+  if (hasQuery) {
+    LogRocket.track("query_params", {
+      endpoint: path,
+      query: queryJson,
+      rawQuery: normalizedSearch,
+      at: new Date().toISOString(),
+    });
+  }
+}
+
+export async function attachLogRocketIp() {
+  if (typeof window === "undefined" || ipAttached) return;
+  initLogRocket();
+
+  try {
+    const res = await fetch("/api/public/ip", { credentials: "include" });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const ip = typeof data?.ip === "string" ? data.ip : "";
+    if (!ip) return;
+
+    ipAttached = true;
+    (window as any).__logrocketClientIp = ip;
+
+    if (currentLogRocketUserId) {
+      LogRocket.identify(currentLogRocketUserId, {
+        ip_address: ip,
+      });
+    }
+
+    LogRocket.track("client_ip", {
+      ip,
+      at: new Date().toISOString(),
+    });
+  } catch (_err) {
+    // no-op for local/dev telemetry setup
+  }
 }

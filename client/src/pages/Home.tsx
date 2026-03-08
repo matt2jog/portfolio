@@ -1,7 +1,6 @@
 import { Hero } from "@/components/Hero";
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { TerminalOverlay } from "@/components/TerminalOverlay";
 import { BlueprintCard } from "@/components/BlueprintCard";
 // Cubes and headshot moved to About page
 import { useMemo, useState } from "react";
@@ -9,55 +8,52 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function Home() {
-  // Mobile detection based on screen size (user-agent temporarily disabled for testing)
-  const isMobile = window.innerWidth < 768;
-  
   const fallbackProjects = [
     {
-      title: "Nebula Stream",
-      description: "A distributed event streaming platform handling 1M+ OPS with sub-10ms latency. Built for high-throughput financial data pipelines.",
+      title: "Lorem Ipsum I",
+      description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
       tech: ["Rust", "Kafka", "gRPC", "Kubernetes"],
       githubUrl: "https://github.com/binimal101",
       deployedUrl: null,
     },
     {
-      title: "Synthetix AI",
-      description: "Generative design engine for architectural layouts. Uses GANs to optimize floor plans based on light efficiency and flow constraints.",
+      title: "Lorem Ipsum II",
+      description: "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
       tech: ["Python", "PyTorch", "React", "WebGL"],
       githubUrl: "https://github.com/binimal101",
       deployedUrl: null,
     },
     {
-      title: "Void Cache",
-      description: "Zero-allocation caching layer for high-frequency trading systems. Optimized for L2/L3 cache locality.",
+      title: "Lorem Ipsum III",
+      description: "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
       tech: ["C++", "Assembly", "Redis Module"],
       githubUrl: "https://github.com/binimal101",
       deployedUrl: null,
     },
     {
-      title: "Cipher Mesh",
-      description: "Decentralized identity verification protocol using zero-knowledge proofs. Privacy-first authentication layer.",
+      title: "Lorem Ipsum IV",
+      description: "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
       tech: ["Solidity", "ZK-Snarks", "Node.js"],
       githubUrl: "https://github.com/binimal101",
       deployedUrl: null,
     },
     {
-      title: "Quantum Ledger",
-      description: "Post-quantum cryptographic ledger for securing cross-border settlements against future compute threats.",
+      title: "Lorem Ipsum V",
+      description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.",
       tech: ["Haskell", "Cryptography", "Nix"],
       githubUrl: null,
       deployedUrl: null,
     },
     {
-      title: "Aether OS",
-      description: "Microkernel designed for low-power edge devices with hard real-time constraints and formal verification.",
+      title: "Lorem Ipsum VI",
+      description: "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.",
       tech: ["Zig", "ARM Assembly", "LLVM"],
       githubUrl: null,
       deployedUrl: null,
     },
     {
-      title: "Titan Mesh",
-      description: "Self-healing mesh network protocol for planetary-scale communications in low-connectivity environments.",
+      title: "Lorem Ipsum VII",
+      description: "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
       tech: ["Go", "Protobuf", "WebRTC"],
       githubUrl: "https://github.com/binimal101",
       deployedUrl: "https://example.com",
@@ -124,7 +120,6 @@ export default function Home() {
       <div className="fixed bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-accent/5 blur-[60px] rounded-full pointer-events-none z-0" />
 
       {/* Components */}
-      {!isMobile && <TerminalOverlay />}
       <Navbar />
       
       <main className="relative z-10">

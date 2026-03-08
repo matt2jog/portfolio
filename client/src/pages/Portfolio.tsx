@@ -20,7 +20,7 @@ export default function Portfolio() {
               <BlueprintCard key={p.id ?? p.title} {...p} className="min-h-0" />
             ))
           ) : (
-            <div className="text-gray-500">No projects available.</div>
+            <div className="text-gray-500">Lorem ipsum dolor sit amet.</div>
           )}
         </div>
       </main>

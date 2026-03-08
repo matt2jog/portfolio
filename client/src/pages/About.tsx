@@ -9,25 +9,25 @@ export default function About() {
   const skillsQuery = useQuery({ queryKey: ["/api/public/skills"] });
 
   const bio: { headline: string; description: string; paragraph: string } = (bioQuery.data as any) || {
-    headline: "MATTHEW TUJAGUE",
+    headline: "LOREM IPSUM",
     description:
-      "I don't just write code; I engineer systems. My approach is rooted in first principles thinking—breaking down complex problems into their fundamental components and rebuilding them for efficiency, scalability, and resilience.",
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.",
     paragraph:
-      "Currently exploring distributed systems consensus algorithms and high-performance graphics programming.",
+      "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
   };
 
   const skills =
     Array.isArray(skillsQuery.data) && skillsQuery.data.length > 0
       ? skillsQuery.data
       : [
-          "Rust",
-          "TypeScript",
-          "Go",
-          "Docker",
-          "Kubernetes",
-          "AWS",
-          "Terraform",
-          "PostgreSQL",
+          "Lorem",
+          "Ipsum",
+          "Dolor",
+          "Sit",
+          "Amet",
+          "Consectetur",
+          "Adipiscing",
+          "Elit",
         ].map((label) => ({ label }));
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
@@ -65,7 +65,7 @@ export default function About() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
                   </div>
                   <div className="flex-1 text-left">
-                    <h2 className="text-3xl font-display font-bold text-white mb-2">{bio.headline || "MATTHEW TUJAGUE"}</h2>
+                    <h2 className="text-3xl font-display font-bold text-white mb-2">{bio.headline || "LOREM IPSUM"}</h2>
                     <p className="text-gray-400 font-light whitespace-pre-line text-sm mb-4">{bio.paragraph}</p>
                     <p className="text-gray-300 leading-relaxed text-base whitespace-pre-line">{bio.description}</p>
                   </div>

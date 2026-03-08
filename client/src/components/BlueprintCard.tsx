@@ -134,11 +134,6 @@ export function BlueprintCard({
 
   const handleClick = () => {
     if (!isActive) activate();
-    window.dispatchEvent(
-      new CustomEvent("terminal-log", {
-        detail: { source: "USR", message: `Project clicked: interest logged in [${title}]`, type: "telemetry" },
-      }),
-    );
   };
 
   const hasLinks = !!githubUrl || !!deployedUrl;
