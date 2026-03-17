@@ -2,6 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./db";
+import { loadMarkdownAsHtml } from "./markdown";
 import {
   allSkills,
   bio,
@@ -20,6 +21,7 @@ import {
   auditLogs,
   xyzBullets,
 } from "@shared/schema";
+import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 export async function registerRoutes(
@@ -29,6 +31,7 @@ export async function registerRoutes(
   app.get("/auth/google", authRoutes.start);
   app.get("/auth/google/callback", authRoutes.callback);
 
+  // ========== AUTH ==========
   app.get("/api/auth/me", requireAuth, (req, res) => {
     return res.json({
       id: req.user?.id,
@@ -43,6 +46,109 @@ export async function registerRoutes(
       res.json({ ok: true });
     });
   });
+
+  // ========== LEGAL DOCUMENTS ==========
+  // These endpoints return the rendered HTML for the legal docs.
+  // The SPA routes (/privacy, /terms, /tracking) are served by the client-side app.
+  app.get("/api/legal/privacy", (_req, res) => {
+    const html = loadMarkdownAsHtml("PRIVACY_POLICY.md");
+    if (!html) return res.status(404).send("Privacy Policy not found");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  });
+
+  app.get("/api/legal/terms", (_req, res) => {
+    const html = loadMarkdownAsHtml("TERMS_OF_USE.md");
+    if (!html) return res.status(404).send("Terms of Use not found");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  });
+
+  app.get("/api/legal/tracking", (_req, res) => {
+    const html = loadMarkdownAsHtml("TRACKING_NOTICE_AND_CONSENT.md");
+    if (!html) return res.status(404).send("Tracking Notice not found");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  });
+
+  // ========== GEOLOCATION ==========
+  app.get("/api/public/geoip", async (req, res) => {
+    const forwarded = req.headers["x-forwarded-for"];
+    const ip = Array.isArray(forwarded)
+      ? forwarded[0]
+      : forwarded?.split(",")[0]?.trim() || req.ip;
+
+    const countryCode = detectCountryFromIP(ip || "");
+    res.json({ ip, country_code: countryCode });
+  });
+
+  // ========== POLICY ACCEPTANCE ==========
+  app.get("/api/admin/policy/check-acceptance", requireAuth, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+    const POLICY_VERSION = "1.0";
+    const TERMS_VERSION = "1.0";
+    const PRIVACY_VERSION = "1.0";
+
+    const [acceptance] = await db
+      .select()
+      .from(adminPolicyAcceptance)
+      .where(
+        sql`${adminPolicyAcceptance.adminId} = ${userId}
+        AND ${adminPolicyAcceptance.policyVersion} = ${POLICY_VERSION}
+        AND ${adminPolicyAcceptance.termsVersion} = ${TERMS_VERSION}
+        AND ${adminPolicyAcceptance.privacyVersion} = ${PRIVACY_VERSION}
+        AND ${adminPolicyAcceptance.accepted} = true`
+      )
+      .limit(1);
+
+    if (acceptance) {
+      return res.json({ accepted: true, acceptance });
+    }
+
+    res.status(403).json({ accepted: false });
+  });
+
+  app.post("/api/admin/policy/accept", requireAuth, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+    const POLICY_VERSION = "1.0";
+    const TERMS_VERSION = "1.0";
+    const PRIVACY_VERSION = "1.0";
+
+    const [result] = await db
+      .insert(adminPolicyAcceptance)
+      .values({
+        adminId: userId,
+        policyVersion: POLICY_VERSION,
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        accepted: true,
+      })
+      .onConflictDoUpdate({
+        target: [
+          adminPolicyAcceptance.adminId,
+          adminPolicyAcceptance.policyVersion,
+          adminPolicyAcceptance.termsVersion,
+          adminPolicyAcceptance.privacyVersion,
+        ],
+        set: { accepted: true, timestamp: new Date() },
+      })
+      .returning();
+
+    await logAudit(req, "policy.admin_accepted", {
+      admin_id: userId,
+      policy_version: POLICY_VERSION,
+      terms_version: TERMS_VERSION,
+      privacy_version: PRIVACY_VERSION,
+    });
+
+    res.json({ ok: true, result });
+  });
+
+  // ========== PUBLIC DATA ==========
 
   app.get("/api/public/projects", async (_req, res) => {
     const rows = await db.select().from(projects)
@@ -494,4 +600,14 @@ async function hydratePortfolioSkills(skillRows: any[]) {
       groupingName: group?.name ?? null,
     };
   });
+}
+
+/**
+ * Detect country code from IP address (placeholder for production MaxMind/IP Stack)
+ */
+function detectCountryFromIP(ip: string): string | undefined {
+  // This is a placeholder. In production, integrate with MaxMind GeoIP2 or IP Stack.
+  // For now, return undefined (means consent banner won't show).
+  // To test EU behavior with consent banner, you can mock this or use a VPN with EU IP.
+  return undefined;
 }

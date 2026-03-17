@@ -2,11 +2,14 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ConsentBanner } from "@/components/ConsentBanner";
+import { getStoredConsent, storeConsent, isGlobalOptOutEnabled } from "@/lib/consent";
+import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
@@ -14,60 +17,111 @@ import Tree from "@/pages/Tree";
 import Activity from "@/pages/Activity";
 import Portfolio from "@/pages/Portfolio";
 import About from "@/pages/About";
-import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute } from "./lib/logrocket";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
+import Tracking from "@/pages/Tracking";
+import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
+
+const POLICY_VERSION = "1.0";
 
 function LogRocketBridge() {
   const [location] = useLocation();
+  const [consentGranted, setConsentGranted] = useState(false);
   const { data: me } = useQuery({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  // Listen for consent changes via ConsentManager callback
+  useEffect(() => {
+    const handleConsentChange = () => {
+      setConsentGranted(true);
+    };
+    window.addEventListener("consent-granted", handleConsentChange);
+    return () => window.removeEventListener("consent-granted", handleConsentChange);
+  }, []);
+
   useEffect(() => {
     trackLogRocketRoute(location, window.location.search);
-  }, [location]);
+  }, [location, consentGranted]);
 
   useEffect(() => {
-    const emit = () => {
-      trackLogRocketRoute(window.location.pathname, window.location.search);
-    };
-
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-
-    window.history.pushState = function (...args) {
-      const result = originalPushState.apply(this, args as any);
-      window.dispatchEvent(new Event("app:urlchange"));
-      return result;
-    };
-
-    window.history.replaceState = function (...args) {
-      const result = originalReplaceState.apply(this, args as any);
-      window.dispatchEvent(new Event("app:urlchange"));
-      return result;
-    };
-
+    const emit = () => trackLogRocketRoute(window.location.pathname, window.location.search);
     window.addEventListener("popstate", emit);
-    window.addEventListener("app:urlchange", emit);
-    emit();
-
+    window.addEventListener("hashchange", emit);
     return () => {
-      window.history.pushState = originalPushState;
-      window.history.replaceState = originalReplaceState;
       window.removeEventListener("popstate", emit);
-      window.removeEventListener("app:urlchange", emit);
+      window.removeEventListener("hashchange", emit);
     };
-  }, []);
+  }, [consentGranted, location]);
 
   useEffect(() => {
     identifyLogRocketUser((me as any) ?? null);
-  }, [me]);
+  }, [me, consentGranted]);
 
   useEffect(() => {
     attachLogRocketIp();
-  }, []);
+  }, [consentGranted]);
 
   return null;
+}
+
+function ConsentManager() {
+  const [showBanner, setShowBanner] = useState(false);
+  const [jurisdiction, setJurisdiction] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [location] = useLocation();
+
+  useEffect(() => {
+    (async () => {
+      const jurisdiction = await detectJurisdiction();
+      setJurisdiction(jurisdiction);
+      
+      const STRICT_JURISDICTIONS = ["DE", "FR", "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "GB", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "CH", "NO", "IS", "CA"];
+      const hasConsent = getStoredConsent() !== null;
+      const isStrictJurisdiction = !!(jurisdiction && STRICT_JURISDICTIONS.includes(jurisdiction));
+      const globalOptOut = isGlobalOptOutEnabled();
+      
+      // Don't show banner on legal doc pages
+      const isLegalPage = ["/privacy", "/terms", "/tracking"].includes(location);
+
+      // Respect browser-level privacy controls.
+      if (globalOptOut) {
+        setShowBanner(false);
+        setIsLoaded(true);
+        return;
+      }
+
+      // In non-strict jurisdictions, persist default consent so telemetry can run.
+      if (!hasConsent && !isStrictJurisdiction) {
+        storeConsent({
+          timestamp: new Date().toISOString(),
+          jurisdiction_detected: jurisdiction,
+          policy_version: POLICY_VERSION,
+          categories_accepted: ["essential", "analytics"],
+          user_action: "accept_all",
+        });
+        window.dispatchEvent(new Event("consent-granted"));
+      }
+      
+      const shouldShow = !hasConsent && isStrictJurisdiction && !isLegalPage;
+      
+      setShowBanner(shouldShow);
+      setIsLoaded(true);
+    })();
+  }, [location]);
+
+
+
+  if (!isLoaded) return null;
+
+  return (
+    <ConsentBanner
+      isOpen={showBanner}
+      onClose={() => setShowBanner(false)}
+      jurisdiction={jurisdiction}
+    />
+  );
 }
 
 function Router() {
@@ -78,6 +132,9 @@ function Router() {
       <Route path="/activity" component={Activity} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/about" component={About} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/tracking" component={Tracking} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
@@ -88,6 +145,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <ConsentManager />
         <LogRocketBridge />
         <Toaster />
         <Router />

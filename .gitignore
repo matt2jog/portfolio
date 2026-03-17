@@ -3,3 +3,14 @@
 /dist/
 .env
 /.playwright-mcp/
+.env.*
+!.env.example
+*.log
+coverage/
+playwright-report/
+test-results/
+.DS_Store
+
+LEGAL_COMPLIANCE_EXECUTION_CHECKLIST.md
+legal_plan.md
+legal_todo.md

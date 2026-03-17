@@ -18,6 +18,21 @@ const splitList = (value?: string) =>
 const allowedAdminEmails = splitList(process.env.ALLOWED_ADMIN_EMAIL);
 const allowedAdminSubs = splitList(process.env.ALLOWED_ADMIN_SUB);
 
+const isProd = process.env.NODE_ENV === "production";
+const sessionSecret = process.env.SESSION_SECRET;
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const callbackUrl = process.env.CALLBACK_URL || process.env.CALLBACK_URL_FALLBACK;
+
+if (isProd) {
+  if (!sessionSecret) {
+    throw new Error("SESSION_SECRET is required in production");
+  }
+  if (!googleClientId || !googleClientSecret || !callbackUrl) {
+    throw new Error("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and CALLBACK_URL are required in production");
+  }
+}
+
 const isAllowedAdmin = (email?: string | null, sub?: string | null) => {
   if (sub && allowedAdminSubs.includes(sub)) return true;
   if (email && allowedAdminEmails.includes(email)) return true;
@@ -29,7 +44,7 @@ export function setupAuth(app: Express) {
 
   app.use(
     session({
-      secret: process.env.SESSION_SECRET || "dev-secret",
+      secret: sessionSecret || "dev-secret",
       resave: false,
       saveUninitialized: false,
       store: new PgSession({
@@ -64,10 +79,9 @@ export function setupAuth(app: Express) {
   passport.use(
     new GoogleStrategy(
       {
-        clientID: process.env.GOOGLE_CLIENT_ID || "",
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-        callbackURL:
-          process.env.CALLBACK_URL || process.env.CALLBACK_URL_FALLBACK || "",
+        clientID: googleClientId || "",
+        clientSecret: googleClientSecret || "",
+        callbackURL: callbackUrl || "",
       },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
@@ -85,10 +99,18 @@ export function setupAuth(app: Express) {
             .where(eq(users.googleSub, sub));
 
           if (existing) {
-            if (existing.email !== email || existing.name !== name) {
+            const updates: { email?: string; name?: string | null } = {};
+            if (email && existing.email !== email) {
+              updates.email = email;
+            }
+            if (existing.name !== name) {
+              updates.name = name;
+            }
+
+            if (Object.keys(updates).length > 0) {
               await db
                 .update(users)
-                .set({ email, name })
+                .set(updates)
                 .where(eq(users.id, existing.id));
             }
             return done(null, existing);

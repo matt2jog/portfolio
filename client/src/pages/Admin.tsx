@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
+import { AdminAcceptanceModal } from "@/components/AdminAcceptanceModal";
 import Footer from "@/components/Footer";
 import AdminBioPanel from "@/components/admin/AdminBioPanel";
 import AdminProjectsPanel from "@/components/admin/AdminProjectsPanel";
@@ -20,8 +21,55 @@ export default function Admin() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  const [showAcceptanceModal, setShowAcceptanceModal] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
+
   const isAdmin = (me as any)?.role === "admin";
   const [activeTab, setActiveTab] = useState<AdminTab>("bio");
+
+  // Check if admin needs to accept policies
+  useEffect(() => {
+    if (isAdmin && !policyAccepted) {
+      const checkAcceptance = async () => {
+        try {
+          const res = await fetch("/api/admin/policy/check-acceptance");
+          if (!res.ok) {
+            setShowAcceptanceModal(true);
+          } else {
+            const data = await res.json();
+            if (data.accepted) {
+              setPolicyAccepted(true);
+            } else {
+              setShowAcceptanceModal(true);
+            }
+          }
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.error("Failed to check acceptance:", err);
+          }
+          setShowAcceptanceModal(true);
+        }
+      };
+      checkAcceptance();
+    }
+  }, [isAdmin, policyAccepted]);
+
+  const handleAcceptPolicies = async () => {
+    setIsAccepting(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/policy/accept", {});
+      await res.json();
+      setPolicyAccepted(true);
+      setShowAcceptanceModal(false);
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error("Failed to accept policies:", err);
+      }
+    } finally {
+      setIsAccepting(false);
+    }
+  };
 
   const activePanel = useMemo(() => {
     if (activeTab === "projects") return <AdminProjectsPanel />;
@@ -52,6 +100,18 @@ export default function Admin() {
           <h1 className="text-2xl font-bold">Access denied</h1>
           <p className="text-white/70">You are not authorized to view this dashboard.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isAdmin && !policyAccepted) {
+    return (
+      <div>
+        <AdminAcceptanceModal
+          isOpen={showAcceptanceModal}
+          onAccept={handleAcceptPolicies}
+          isLoading={isAccepting}
+        />
       </div>
     );
   }

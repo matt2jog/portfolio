@@ -141,7 +141,9 @@ function NicheCarousel() {
   };
 
   React.useEffect(() => {
-    console.debug && console.debug('NicheCarousel mount — items:', LINKS.length);
+    if (import.meta.env.DEV && console.debug) {
+      console.debug("NicheCarousel mount - items:", LINKS.length);
+    }
   }, []);
 
   return (

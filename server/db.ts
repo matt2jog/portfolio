@@ -15,7 +15,6 @@ if (!databaseUrl) {
 
 export const pool = new Pool({
   connectionString: databaseUrl,
-  family: databaseUrl.includes("supabase.com") ? 4 : undefined,
   ssl: databaseUrl.includes("supabase.com")
     ? caCert
       ? { rejectUnauthorized: true, ca: caCert }

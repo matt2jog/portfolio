@@ -1,4 +1,5 @@
 import LogRocket from "logrocket";
+import { isTrackingAllowed } from "./consent";
 
 type MaybeUser = {
   id?: string;
@@ -14,6 +15,8 @@ let lastIdentity = "";
 let currentLogRocketUserId = "";
 let ipAttached = false;
 
+const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/google/callback"];
+
 function getAnonymousId() {
   if (typeof window === "undefined") return "";
 
@@ -27,7 +30,14 @@ function getAnonymousId() {
 }
 
 export function initLogRocket() {
-  if (initialized || typeof window === "undefined") return;
+  if (initialized || typeof window === "undefined") {
+    return;
+  }
+
+  // Check consent before initializing LogRocket
+  if (!isTrackingAllowed()) {
+    return;
+  }
 
   LogRocket.init("ltznbv/portfolio");
   LogRocket.getSessionURL((url) => {
@@ -39,6 +49,12 @@ export function initLogRocket() {
 
 export function identifyLogRocketUser(user: MaybeUser) {
   if (typeof window === "undefined") return;
+  
+  // Skip if tracking not allowed
+  if (!isTrackingAllowed()) {
+    return;
+  }
+  
   initLogRocket();
 
   if (user?.id) {
@@ -78,9 +94,19 @@ function parseQuery(search: string) {
 
 export function trackLogRocketRoute(path: string, search = "") {
   if (typeof window === "undefined") return;
+
+  // Skip if tracking not allowed
+  if (!isTrackingAllowed()) {
+    return;
+  }
+
   initLogRocket();
 
   if (!path) return;
+  if (SENSITIVE_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return;
+  }
+
   const normalizedSearch = search || "";
 
   if (path === lastRoute && normalizedSearch === lastSearch) return;
@@ -110,6 +136,12 @@ export function trackLogRocketRoute(path: string, search = "") {
 
 export async function attachLogRocketIp() {
   if (typeof window === "undefined" || ipAttached) return;
+
+  // Skip if tracking not allowed
+  if (!isTrackingAllowed()) {
+    return;
+  }
+
   initLogRocket();
 
   try {
