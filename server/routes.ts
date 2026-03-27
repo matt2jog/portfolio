@@ -2,6 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./db";
+import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadMarkdownAsHtml } from "./markdown";
 import {
   allSkills,
@@ -73,11 +74,7 @@ export async function registerRoutes(
 
   // ========== GEOLOCATION ==========
   app.get("/api/public/geoip", async (req, res) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const ip = Array.isArray(forwarded)
-      ? forwarded[0]
-      : forwarded?.split(",")[0]?.trim() || req.ip;
-
+    const ip = extractClientIp(req);
     const countryCode = detectCountryFromIP(ip || "");
     res.json({ ip, country_code: countryCode });
   });
@@ -602,12 +599,3 @@ async function hydratePortfolioSkills(skillRows: any[]) {
   });
 }
 
-/**
- * Detect country code from IP address (placeholder for production MaxMind/IP Stack)
- */
-function detectCountryFromIP(ip: string): string | undefined {
-  // This is a placeholder. In production, integrate with MaxMind GeoIP2 or IP Stack.
-  // For now, return undefined (means consent banner won't show).
-  // To test EU behavior with consent banner, you can mock this or use a VPN with EU IP.
-  return undefined;
-}

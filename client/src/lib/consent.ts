@@ -16,11 +16,6 @@ export interface ConsentRecord {
 const CONSENT_STORAGE_KEY = "__consent_record";
 const CONSENT_EXPIRY_MS = 12 * 30 * 24 * 60 * 60 * 1000; // 12 months
 
-/**
- * Strict-consent jurisdictions that require opt-in before tracking
- */
-const STRICT_JURISDICTIONS = ["DE", "FR", "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "GB", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "CH", "NO", "IS", "CA"];
-
 export function isGlobalOptOutEnabled(): boolean {
   if (typeof window === "undefined") return false;
 
@@ -93,27 +88,20 @@ export function isTrackingAllowed(): boolean {
   if (!consent) {
     return false;
   }
-  
-  // If in strict jurisdiction and not explicitly accepted, no tracking
-  if (consent.jurisdiction_detected && STRICT_JURISDICTIONS.includes(consent.jurisdiction_detected)) {
-    if (consent.user_action === "reject_all") {
-      return false;
-    }
-    if (consent.user_action === "accept_all") {
-      return true;
-    }
-    if (consent.user_action === "custom") {
-      const allowed = consent.categories_accepted.includes("analytics");
-      return allowed;
-    }
-    return false;
-  }
-  
-  // In non-strict regions, default to true unless explicitly rejected
+
   if (consent.user_action === "reject_all") {
     return false;
   }
-  return true;
+
+  if (consent.user_action === "accept_all") {
+    return true;
+  }
+
+  if (consent.user_action === "custom") {
+    return consent.categories_accepted.includes("analytics");
+  }
+
+  return false;
 }
 
 /**

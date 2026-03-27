@@ -1,13 +1,15 @@
 # Privacy Policy
 
-**Last Updated:** March 13, 2026  
-**Effective Date:** March 13, 2026
+**Last Updated:** March 27, 2026  
+**Effective Date:** March 27, 2026
 
 ## 1. Introduction
 
 This Privacy Policy explains how Matthew Tujague ("we," "us," "our," or "Operator") collects, uses, and protects information when you visit and use our portfolio website located at 2jog.dev and related services (the "Site").
 
 The Site is operated by a sole proprietor as a personal portfolio and professional showcase. This Privacy Policy is intended to provide transparent disclosure of applicable data practices.
+
+The Site is operated primarily for users located in the United States and may restrict access from non-US regions.
 
 ## 2. Data Controller
 
@@ -50,7 +52,7 @@ We use the following cookie categories:
 
 - **Essential/Strictly Necessary Cookies:** Session cookies for authentication and CSRF protection. Duration: Session or until logged out.
 - **Preference Cookies:** `sidebar_state` cookie to remember your UI preferences (sidebar open/closed). Duration: 7 days.
-- **Analytics Cookies:** Set by LogRocket for session replay tracking and analytics. Duration: Managed by LogRocket (typically 30 days).
+- **Analytics Cookies:** Set by LogRocket for session replay tracking and analytics. Duration: Managed by LogRocket according to their default retention policies.
 
 ### 3.5 Data Not Collected
 
@@ -74,7 +76,7 @@ We collect data for the following legitimate purposes:
 
 ## 6. Legal Basis for Collection
 
-- **Visitors:** We rely on **legitimate interest** (debugging/analytics) and **consent** where your jurisdiction requires prior opt-in for session replay.
+- **Visitors:** We rely on **consent** for non-essential session replay and analytics, with tracking disabled until explicit opt-in is provided.
 - **Admin Users:** We rely on **contract** (use of the admin service requires authentication and logging).
 
 ## 7. Data Retention
@@ -114,10 +116,10 @@ Depending on your jurisdiction, you may have the right to:
 - **Clear Cookies & Storage:** You can delete the `sidebar_state` cookie and `__lr_anon_id` localStorage key using your browser's settings.
 - **Disable JavaScript:** Disabling JavaScript will prevent LogRocket from loading and tracking.
 
-### Regional Opt-In for Session Replay
+### Session Replay Opt-In
 
-- **EU/UK/CA Residents:** In regions with strict privacy laws, session replay does not load until you grant explicit consent. A consent banner will prompt you upon first visit.
-- **Other Regions:** Session replay loads by default; you may opt out by managing preferences or contacting us.
+- **All Visitors:** Session replay does not load until explicit consent is granted through the consent interface.
+- **Withdrawal:** Consent can be withdrawn at any time by adjusting preferences or contacting the operator.
 
 ## 11. Data Security
 

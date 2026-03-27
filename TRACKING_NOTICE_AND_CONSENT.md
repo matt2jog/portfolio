@@ -1,7 +1,7 @@
 # Tracking Notice & Consent Policy
 
-**Last Updated:** March 13, 2026  
-**Effective Date:** March 13, 2026
+**Last Updated:** March 27, 2026  
+**Effective Date:** March 27, 2026
 
 ## 1. What We Track
 
@@ -52,7 +52,7 @@ We categorize tracking as follows:
 - Page view and navigation tracking.
 - Performance metrics and aggregated analytics.
 
-**Consent Required?** Yes, in regions with strict privacy laws (EU, UK, CA); No, in other regions.
+**Consent Required?** Yes. Non-essential tracking is disabled until explicit opt-in is provided.
 
 ### Category 3: Marketing & Profiling
 - Tracking for targeted advertising or retargeting.
@@ -60,26 +60,14 @@ We categorize tracking as follows:
 
 **Consent Required?** Yes (and we do not currently implement this).
 
-## 3. Consent & Regional Behavior
+## 3. Consent Behavior
 
-### 3.1 Regional Requirements
+### 3.1 Global Requirements
 
-**European Union / UK / Switzerland (GDPR/UK GDPR/FDPA)**
-- Session replay cookies/scripts require **prior explicit opt-in consent**.
-- A consent banner will appear asking you to accept or reject tracking.
-- Consent is valid for 12 months; you may withdraw consent anytime.
-
-**California (CCPA)**
-- Non-essential tracking requires acknowledgment of the privacy policy.
-- You have the right to opt-out of "sales" of personal information (we do not sell data).
-- You may request deletion of personal data.
-
-**Other US States & Regions**
-- Session replay loads by default for performance/debugging purposes.
-- You may opt-out by contacting us or adjusting browser settings (see "Opt-Out Options" below).
-
-**Canada (PIPEDA)**
-- Explicit consent requirements are applied where applicable.
+- Session replay and analytics are disabled by default.
+- A consent interface is presented to visitors and non-essential tracking is enabled only after explicit opt-in.
+- Consent remains valid for 12 months unless withdrawn.
+- The Site is intended primarily for US traffic and may restrict access from non-US regions.
 
 ### 3.2 Consent Storage
 
@@ -94,7 +82,7 @@ This consent record is retained for 12 months.
 
 ### 4.1 Consent Banner
 
-On first visit, if you are in a strict-consent jurisdiction (EU/UK/CA), a consent banner will appear asking you to accept or reject tracking. You can:
+On first visit, a consent banner appears asking you to accept or reject tracking. You can:
 
 - **Accept All:** Accept all non-essential tracking.
 - **Reject All:** Reject all non-essential tracking (only necessary cookies remain active).
@@ -131,7 +119,7 @@ Response time target: Within 7 days.
 LogRocket is a third-party processor that handles session replay data for Site operations.
 
 - **Data Protection Agreement:** A Data Processing Agreement (DPA) with LogRocket is maintained for GDPR/privacy compliance.
-- **Data Retention:** LogRocket retains replay data for 30 days by default; older data is deleted.
+- **Data Retention:** LogRocket retains replay data according to their default retention limits; older data is automatically deleted.
 - **Data Transfers:** LogRocket processes data in the United States under Standard Contractual Clauses (SCCs) and is certified under appropriate transfer mechanisms.
 - **LogRocket's Privacy Policy:** https://logrocket.com/privacy
 

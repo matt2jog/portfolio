@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
-import { Loader } from "lucide-react";
+import { Loader, ArrowLeft } from "lucide-react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
 
 interface TOCItem {
   id: string;
@@ -25,6 +27,7 @@ function withHeadingIds(rawHtml: string): string {
 }
 
 export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps) {
+  const [, setLocation] = useLocation();
   const [html, setHtml] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<string>("");
@@ -109,6 +112,24 @@ export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps
     <section className="w-full bg-slate-100/70 py-8 sm:py-12">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-start lg:gap-10 lg:px-8">
         <main className="min-w-0 flex-1">
+          <div className="mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (window.history.length > 2) {
+                  window.history.back();
+                } else {
+                  setLocation("/");
+                }
+              }}
+              className="text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+          </div>
+
           <header className="mb-4 rounded-lg border border-slate-200 bg-white px-6 py-5 shadow-sm">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
             <p className="mt-2 text-sm text-slate-600">This document is provided for legal notice and policy transparency.</p>

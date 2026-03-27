@@ -1,7 +1,7 @@
 # Terms of Use
 
-**Last Updated:** March 13, 2026  
-**Effective Date:** March 13, 2026
+**Last Updated:** March 27, 2026  
+**Effective Date:** March 27, 2026
 
 ## 1. Acceptance of Terms
 
@@ -18,6 +18,8 @@ The Site is a personal portfolio and professional showcase operated by Matthew T
 - Links to external profiles and contact methods (email, LinkedIn, GitHub).
 
 The Site is provided as-is for informational and professional purposes. We do not offer any commercial services, transactions, or customer data processing.
+
+The Site is intended primarily for users located in the United States and access from non-US regions may be limited or denied.
 
 ## 3. User Responsibilities
 

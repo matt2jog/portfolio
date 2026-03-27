@@ -40,6 +40,9 @@ export function initLogRocket() {
   }
 
   LogRocket.init("ltznbv/portfolio");
+  
+  console.log("interest logging started");
+  
   LogRocket.getSessionURL((url) => {
     (window as any).__logrocketSessionURL = url;
   });

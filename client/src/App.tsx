@@ -8,7 +8,7 @@ import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConsentBanner } from "@/components/ConsentBanner";
-import { getStoredConsent, storeConsent, isGlobalOptOutEnabled } from "@/lib/consent";
+import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
 import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
@@ -21,8 +21,6 @@ import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import Tracking from "@/pages/Tracking";
 import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
-
-const POLICY_VERSION = "1.0";
 
 function LogRocketBridge() {
   const [location] = useLocation();
@@ -76,12 +74,10 @@ function ConsentManager() {
     (async () => {
       const jurisdiction = await detectJurisdiction();
       setJurisdiction(jurisdiction);
-      
-      const STRICT_JURISDICTIONS = ["DE", "FR", "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "GB", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "CH", "NO", "IS", "CA"];
+
       const hasConsent = getStoredConsent() !== null;
-      const isStrictJurisdiction = !!(jurisdiction && STRICT_JURISDICTIONS.includes(jurisdiction));
       const globalOptOut = isGlobalOptOutEnabled();
-      
+
       // Don't show banner on legal doc pages
       const isLegalPage = ["/privacy", "/terms", "/tracking"].includes(location);
 
@@ -92,19 +88,7 @@ function ConsentManager() {
         return;
       }
 
-      // In non-strict jurisdictions, persist default consent so telemetry can run.
-      if (!hasConsent && !isStrictJurisdiction) {
-        storeConsent({
-          timestamp: new Date().toISOString(),
-          jurisdiction_detected: jurisdiction,
-          policy_version: POLICY_VERSION,
-          categories_accepted: ["essential", "analytics"],
-          user_action: "accept_all",
-        });
-        window.dispatchEvent(new Event("consent-granted"));
-      }
-      
-      const shouldShow = !hasConsent && isStrictJurisdiction && !isLegalPage;
+      const shouldShow = !hasConsent && !isLegalPage;
       
       setShowBanner(shouldShow);
       setIsLoaded(true);

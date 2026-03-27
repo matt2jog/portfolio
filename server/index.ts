@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
+import { detectCountryFromIP, extractClientIp, isLocalIp } from "./geoip";
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,6 +25,35 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
+
+const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
+
+if (enforceUsOnly) {
+  app.use((req, res, next) => {
+    // Exempt static files from geoblocking so asset bots (like LogRocket) can fetch styles
+    if (
+      req.path.startsWith("/assets/") || 
+      req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)
+    ) {
+      return next();
+    }
+
+    const ip = extractClientIp(req);
+    if (isLocalIp(ip)) {
+      return next();
+    }
+
+    const countryCode = detectCountryFromIP(ip || "");
+    if (countryCode === "US") {
+      return next();
+    }
+
+    return res.status(451).json({
+      message: "This service is currently available only to users in the United States.",
+      country_code: countryCode || null,
+    });
+  });
+}
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -100,6 +130,7 @@ app.use((req, res, next) => {
   if (process.platform === "win32") {
     httpServer.listen(port, () => {
       log(`serving on port ${port}`);
+      log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
     });
   } else {
     httpServer.listen(
@@ -110,6 +141,7 @@ app.use((req, res, next) => {
       },
       () => {
         log(`serving on port ${port}`);
+        log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
       },
     );
   }
