@@ -4,6 +4,7 @@ import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadMarkdownAsHtml } from "./markdown";
+import { getGithubActivity, getGithubTimeline } from "./github";
 import {
   allSkills,
   bio,
@@ -21,6 +22,12 @@ import {
   updateSkillsGroupSchema,
   auditLogs,
   xyzBullets,
+  personalInformation,
+  insertPersonalInformationSchema,
+  updatePersonalInformationSchema,
+  experiences,
+  insertExperienceSchema,
+  updateExperienceSchema,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -147,6 +154,25 @@ export async function registerRoutes(
 
   // ========== PUBLIC DATA ==========
 
+  app.get("/api/public/github/activity", async (_req, res) => {
+    try {
+      const data = await getGithubActivity();
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch GitHub activity", details: err.message });
+    }
+  });
+
+  app.get("/api/public/github/timeline", async (req, res) => {
+    try {
+      const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
+      const data = await getGithubTimeline(page);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch GitHub timeline", details: err.message });
+    }
+  });
+
   app.get("/api/public/projects", async (_req, res) => {
     const rows = await db.select().from(projects)
       .where(sql`${projects.deletedAt} IS NULL`)
@@ -167,6 +193,32 @@ export async function registerRoutes(
       .orderBy(asc(portfolioSkills.position));
     const hydrated = await hydratePortfolioSkills(rows);
     res.json(hydrated.map((row) => ({ id: row.id, label: row.label })));
+  });
+
+  app.get("/api/public/experiences", async (_req, res) => {
+    const rows = await db.select().from(experiences).orderBy(asc(experiences.position));
+    res.json(rows);
+  });
+
+  app.get("/api/public/personal-information", async (_req, res) => {
+    const [row] = await db.select().from(personalInformation)
+      .orderBy(desc(personalInformation.updatedAt))
+      .limit(1);
+    
+    // Fallbacks if no data exists yet (before seed)
+    res.json(row || {
+      name: "Matthew Tujague",
+      title: "Software Engineer",
+      location: "NJ-NY-PA",
+      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
+      email: "matthew@2jog.dev",
+      phone: "+17326393889",
+      phoneFormatted: "(732) 639-3889",
+      linkedinUrl: "https://linkedin.com/in/matthewtujague",
+      githubUrl: "https://github.com/binimal101",
+      devpostUrl: "https://devpost.com/",
+      portfolioUrl: "https://2jog.dev/",
+    });
   });
 
   app.get("/api/public/ip", (req, res) => {
@@ -272,6 +324,45 @@ export async function registerRoutes(
       .orderBy(desc(bio.createdAt))
       .limit(1);
     res.json(row || { headline: "", description: "", paragraph: "" });
+  });
+
+  app.get("/api/admin/personal-information", requireAdmin, async (_req, res) => {
+    const [row] = await db.select().from(personalInformation)
+      .orderBy(desc(personalInformation.updatedAt))
+      .limit(1);
+    res.json(row || { 
+      name: "Matthew Tujague",
+      title: "Software Engineer",
+      location: "NJ-NY-PA",
+      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
+      email: "matthew@2jog.dev",
+      phone: "+17326393889",
+      phoneFormatted: "(732) 639-3889",
+      linkedinUrl: "https://linkedin.com/in/matthewtujague",
+      githubUrl: "https://github.com/binimal101",
+      devpostUrl: "https://devpost.com/",
+      portfolioUrl: "https://2jog.dev/",
+    });
+  });
+
+  app.put("/api/admin/personal-information", requireAdmin, async (req, res) => {
+    const parsed = insertPersonalInformationSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    const [existing] = await db.select().from(personalInformation).limit(1);
+    
+    let result;
+    if (existing) {
+      [result] = await db.update(personalInformation)
+        .set({ ...parsed.data, updatedAt: new Date() })
+        .where(eq(personalInformation.id, existing.id))
+        .returning();
+    } else {
+      [result] = await db.insert(personalInformation).values(parsed.data).returning();
+    }
+
+    await logAudit(req, "personalInformation.update", parsed.data);
+    res.json(result);
   });
 
   app.post("/api/admin/bio", requireAdmin, async (req, res) => {
@@ -496,6 +587,67 @@ export async function registerRoutes(
       );
     });
     await logAudit(req, "portfolioSkill.reorder", { order });
+    res.json({ ok: true });
+  });
+
+  // Experience endpoints
+  app.get("/api/admin/experiences", requireAdmin, async (_req, res) => {
+    const rows = await db.select().from(experiences).orderBy(asc(experiences.position));
+    res.json(rows);
+  });
+
+  app.post("/api/admin/experiences", requireAdmin, async (req, res) => {
+    const parsed = insertExperienceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    const [maxRow] = await db
+      .select({ max: sql<number>`max(${experiences.position})` })
+      .from(experiences);
+    const nextPos = (maxRow?.max ?? 0) + 1;
+
+    const [created] = await db
+      .insert(experiences)
+      .values({ ...parsed.data, position: nextPos })
+      .returning();
+
+    await logAudit(req, "experience.create", created);
+    res.json(created);
+  });
+
+  app.put("/api/admin/experiences/:id", requireAdmin, async (req, res) => {
+    const expId = routeId(req.params.id);
+    const parsed = updateExperienceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    const [updated] = await db
+      .update(experiences)
+      .set(parsed.data)
+      .where(eq(experiences.id, expId))
+      .returning();
+
+    if (!updated) return res.status(404).json({ message: "Experience not found" });
+
+    await logAudit(req, "experience.update", { id: expId, ...parsed.data });
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/experiences/:id", requireAdmin, async (req, res) => {
+    const expId = routeId(req.params.id);
+    await db.delete(experiences).where(eq(experiences.id, expId));
+    await logAudit(req, "experience.delete", { id: expId });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/experiences/reorder", requireAdmin, async (req, res) => {
+    const order = Array.isArray(req.body?.order) ? req.body.order : [];
+    await db.transaction(async (tx) => {
+      await Promise.all(
+        order.map((id: string, index: number) =>
+          tx.update(experiences).set({ position: index }).where(eq(experiences.id, id))
+        )
+      );
+    });
+    await logAudit(req, "experience.reorder", { order });
     res.json({ ok: true });
   });
 

@@ -173,7 +173,7 @@
     height: 100%;
     position: relative;
     transform-style: preserve-3d;
-    transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+    /* transition is set dynamically via inline style based on queue depth */
   }
 
   .project-cube-face {
@@ -223,6 +223,17 @@
   .project-card--inactive .project-card-corner {
     opacity: 0;
     pointer-events: none;
+  }
+
+  .project-card-overlay,
+  .project-card-content,
+  .project-card-corner {
+    transition: opacity 1200ms ease-in-out;
+    will-change: opacity;
+  }
+
+  .project-card-corner {
+    transition: opacity 1200ms ease-in-out, border-color 300ms ease-in-out;
   }
 
   .project-card--inactive {

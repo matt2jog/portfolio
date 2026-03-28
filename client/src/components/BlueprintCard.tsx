@@ -240,16 +240,14 @@ export function BlueprintCard({
       </div>
 
       {/* Corner decorations */}
-      <div className={`project-card-corner absolute top-0 left-0 w-3 h-3 sm:w-4 sm:h-4 border-l-2 border-t-2 transition-colors duration-300 ${isActive ? "border-primary" : "border-primary/50"}`} />
-      <div className={`project-card-corner absolute bottom-0 right-0 w-3 h-3 sm:w-4 sm:h-4 border-r-2 border-b-2 transition-colors duration-300 ${isActive ? "border-primary" : "border-primary/50"}`} />
+      <div className={`project-card-corner absolute top-0 left-0 w-3 h-3 sm:w-4 sm:h-4 border-l-2 border-t-2 ${isActive ? "border-primary" : "border-primary/50"}`} />
+      <div className={`project-card-corner absolute bottom-0 right-0 w-3 h-3 sm:w-4 sm:h-4 border-r-2 border-b-2 ${isActive ? "border-primary" : "border-primary/50"}`} />
 
       {/* Active glow */}
-      {isActive && (
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-0 w-24 h-24 bg-primary/20 blur-2xl rounded-full -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-24 h-24 bg-primary/20 blur-2xl rounded-full translate-x-1/2 translate-y-1/2" />
-        </div>
-      )}
+      <div className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${isActive ? "opacity-100" : "opacity-0"}`}>
+        <div className="absolute top-0 left-0 w-24 h-24 bg-primary/20 blur-2xl rounded-full -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-24 h-24 bg-primary/20 blur-2xl rounded-full translate-x-1/2 translate-y-1/2" />
+      </div>
     </div>
   );
 }
