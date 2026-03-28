@@ -1,91 +1,146 @@
+import { useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import Cubes from "@/components/Cubes";
-import headshotImage from "@/assets/images/headshot.jpg";
-import { useQuery } from "@tanstack/react-query";
+import BusinessCard from "@/components/BusinessCard";
+import ExperienceTimeline from "@/components/ExperienceTimeline";
+import { ChevronRight, ChevronLeft } from "lucide-react";
 
 export default function About() {
-  const bioQuery = useQuery({ queryKey: ["/api/public/bio"] });
-  const skillsQuery = useQuery({ queryKey: ["/api/public/skills"] });
+  const [isOpen, setIsOpen] = useState(false);
 
-  const bio: { headline: string; description: string; paragraph: string } = (bioQuery.data as any) || {
-    headline: "LOREM IPSUM",
-    description:
-      "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.",
-    paragraph:
-      "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
-  };
-
-  const skills =
-    Array.isArray(skillsQuery.data) && skillsQuery.data.length > 0
-      ? skillsQuery.data
-      : [
-          "Lorem",
-          "Ipsum",
-          "Dolor",
-          "Sit",
-          "Amet",
-          "Consectetur",
-          "Adipiscing",
-          "Elit",
-        ].map((label) => ({ label }));
-
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const experiences = [
+    {
+      id: "1",
+      role: "Lead Software Engineer",
+      company: "Tech Corp",
+      duration: "2022 - Present",
+      description: "Led development of scalable microservices and implemented CI/CD pipelines.",
+      technologies: ["React", "Node.js", "Docker", "AWS"]
+    },
+    {
+      id: "2",
+      role: "Full Stack Developer",
+      company: "Innovation Labs",
+      duration: "2019 - 2022",
+      description: "Developed and maintained multiple enterprise-level web applications.",
+      technologies: ["TypeScript", "Next.js", "PostgreSQL", "Redis"]
+    },
+    {
+      id: "3",
+      role: "Frontend Engineer",
+      company: "Digital Solutions Inc",
+      duration: "2017 - 2019",
+      description: "Created responsive and highly interactive user interfaces.",
+      technologies: ["JavaScript", "React", "CSS3", "Redux"]
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/30">
-      <Navbar />
-      <main className="relative z-10">
-        <section id="about" className="py-32 relative overflow-hidden flex items-center bg-black/20 border-t border-white/5">
-          <div className="relative z-10 px-6 md:px-20 w-full max-w-7xl mx-auto">
-            <div className="flex flex-col items-center">
-              <div className="relative bg-black/40 p-12 md:p-16 border border-white/10 rounded-lg overflow-hidden w-full max-w-5xl text-center min-h-[520px] flex flex-col">
-                <div className="absolute -inset-12 opacity-80 pointer-events-auto overflow-hidden">
-                  <Cubes
-                    gridSize={isMobile ? 5 : 9}
-                    maxAngle={30}
-                    radius={2}
-                    cellGap={2}
-                    borderStyle="1.5px solid rgba(255,255,255,0.18)"
-                    faceColor="#0a0a12"
-                    hoverBorderColor="rgba(255,255,255,0.75)"
-                    rippleColor="#c17bbf"
-                    rippleSpeed={1.5}
-                    autoAnimate={!isMobile}
-                    autoAnimateSpeed={0.05}
-                    autoAnimatePause={1400}
-                    rippleOnClick={false}
-                  />
-                </div>
-                <div className="absolute -inset-8 bg-black/20 pointer-events-none" />
-                <div className="relative z-10 flex flex-col md:flex-row-reverse md:items-start md:justify-between gap-6 pointer-events-none">
-                  <div className="relative w-40 h-40 md:w-56 md:h-56 rounded-2xl overflow-hidden border border-primary/20 bg-black/60 shadow-[0_0_30px_rgba(0,255,255,0.12)] mx-auto md:mx-0 md:ml-10 md:shrink-0 opacity-90">
-                    <img src={headshotImage} alt="Engineer Headshot" className="w-full h-full object-cover contrast-110 brightness-105 scale-105" />
-                    <div className="absolute inset-0 bg-primary/5 pointer-events-none" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
-                  </div>
-                  <div className="flex-1 text-left">
-                    <h2 className="text-3xl font-display font-bold text-white mb-2">{bio.headline || "LOREM IPSUM"}</h2>
-                    <p className="text-gray-400 font-light whitespace-pre-line text-sm mb-4">{bio.paragraph}</p>
-                    <p className="text-gray-300 leading-relaxed text-base whitespace-pre-line">{bio.description}</p>
-                  </div>
-                </div>
+    <div className="min-h-screen bg-[#0A0A0C] text-gray-100 font-sans selection:bg-[#00FFFF]/30 relative">
+      
+      {/* Background Grid Pattern */}
+      <div 
+        className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: `linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)`,
+          backgroundSize: '40px 40px'
+        }}
+      />
 
-                <div className="relative z-10 mt-auto pt-8 flex flex-col items-center pointer-events-none">
-                  <h3 className="font-mono text-primary text-xs tracking-widest mb-4 pointer-events-none">CORE_DEPENDENCIES</h3>
-                  <div className="flex flex-wrap gap-2 pointer-events-none">
-                    {skills.map((skill: any) => (
-                      <span key={skill.id ?? skill.label} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-mono text-gray-300 pointer-events-none">
-                        {skill.label}
-                      </span>
-                    ))}
+      <Navbar />
+
+      <main className="relative z-10 pt-32 pb-24 w-full max-w-7xl mx-auto px-6 md:px-12 lg:px-20 flex flex-col gap-16">
+        
+        {/* Header Section */}
+        <div className="w-full">
+          <h1 className="font-display text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.05)]">
+            About
+          </h1>
+          <div className="h-[1px] w-full bg-gradient-to-r from-[#00FFFF]/50 to-transparent opacity-40" />
+        </div>
+
+        {/* Hero: Card + Unfolding Summary */}
+        <div className="flex justify-center w-full">
+          <div className="relative flex items-stretch">
+            
+            {/* The Business Card (always visible, clickable) */}
+            <div 
+              className="relative z-20 flex-shrink-0 cursor-pointer select-none"
+              onClick={() => setIsOpen(prev => !prev)}
+            >
+              <BusinessCard />
+
+              {/* Hint icon on right edge */}
+              <div 
+                className={`
+                  absolute top-1/2 -translate-y-1/2 -right-3 z-30
+                  w-6 h-6 rounded-full 
+                  bg-[#0B0C10] border border-white/20
+                  flex items-center justify-center
+                  transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
+                  hover:border-[#00FFFF]/60 hover:shadow-[0_0_12px_rgba(0,255,255,0.3)]
+                  ${isOpen ? 'opacity-70' : 'opacity-100 animate-pulse'}
+                `}
+              >
+                {isOpen 
+                  ? <ChevronLeft size={12} className="text-[#00FFFF]" />
+                  : <ChevronRight size={12} className="text-[#00FFFF]" />
+                }
+              </div>
+            </div>
+
+            {/* Unfolding Summary Panel */}
+            <div
+              className={`
+                relative z-10 overflow-hidden
+                transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]
+                ${isOpen ? 'w-[420px] opacity-100 ml-0' : 'w-0 opacity-0 ml-0'}
+              `}
+            >
+              {/* Inner content with fixed width so text doesn't reflow during animation */}
+              <div className="w-[420px] h-full">
+                <div 
+                  className={`
+                    h-full bg-[#0F0F12] border border-white/10 border-l-0
+                    rounded-r-lg p-8 md:p-10
+                    relative overflow-hidden
+                    flex flex-col justify-center
+                    transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]
+                    ${isOpen ? 'translate-x-0' : '-translate-x-8'}
+                  `}
+                >
+                  {/* Accent bar */}
+                  <div className="absolute top-0 left-0 w-[2px] h-full bg-gradient-to-b from-[#00FFFF]/40 via-[#00FFFF]/20 to-transparent" />
+                  
+                  <h2 className="font-sans text-xs uppercase tracking-[0.2em] text-[#00FFFF] mb-6 opacity-90">
+                    Professional Summary
+                  </h2>
+                  
+                  <div className="font-sans text-sm leading-8 text-gray-300 space-y-5">
+                    <p>
+                      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                    </p>
+                    <p>
+                      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
+
           </div>
-        </section>
+        </div>
+
+        {/* Experience Timeline */}
+        <div className="w-full">
+          <h3 className="font-display text-2xl font-semibold mb-10 text-white flex items-center tracking-tight">
+            Experience
+          </h3>
+          <ExperienceTimeline experiences={experiences} />
+        </div>
+
       </main>
+
       <Footer />
     </div>
   );

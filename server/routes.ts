@@ -4,6 +4,7 @@ import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadMarkdownAsHtml } from "./markdown";
+import { getGithubActivity } from "./github";
 import {
   allSkills,
   bio,
@@ -146,6 +147,15 @@ export async function registerRoutes(
   });
 
   // ========== PUBLIC DATA ==========
+
+  app.get("/api/public/github/activity", async (_req, res) => {
+    try {
+      const data = await getGithubActivity();
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch GitHub activity", details: err.message });
+    }
+  });
 
   app.get("/api/public/projects", async (_req, res) => {
     const rows = await db.select().from(projects)

@@ -74,10 +74,11 @@ export default function Home() {
   const totalGroups = Math.max(1, Math.ceil(projects.length / projectsPerFace));
 
   const [rotationStep, setRotationStep] = useState(0);
-  const [groupIndex, setGroupIndex] = useState(0);
+  const [faceKs, setFaceKs] = useState([0, 1, 2, -1]);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
+  const groupIndex = ((rotationStep % totalGroups) + totalGroups) % totalGroups;
 
   const groups = useMemo(() => {
     const chunks = [] as typeof projects[];
@@ -88,26 +89,38 @@ export default function Home() {
   }, [projects, projectsPerFace]);
 
   const cubeGroups = useMemo(() => {
-    return Array.from({ length: facesCount }, (_, faceIndex) => {
-      const offset = (faceIndex - rotationIndex + facesCount) % facesCount;
-      const index = (groupIndex + offset) % totalGroups;
-      const group = groups[index] ?? [];
-      return group;
+    return faceKs.map((k) => {
+      const index = ((k % totalGroups) + totalGroups) % totalGroups;
+      return groups[index] ?? [];
     });
-  }, [facesCount, rotationIndex, groupIndex, totalGroups, groups]);
+  }, [faceKs, totalGroups, groups]);
 
   const currentProjectPage = Math.min(totalGroups, groupIndex + 1);
 
   const totalFaces = cubeGroups.length;
 
   const nextFace = () => {
-    setRotationStep((prev) => prev + 1);
-    setGroupIndex((prev) => (prev + 1) % totalGroups);
+    setRotationStep((prev) => {
+      setFaceKs((faces) => {
+        const newFaces = [...faces];
+        const oldBackFace = ((prev + 2) % facesCount + facesCount) % facesCount;
+        newFaces[oldBackFace] = prev + 2;
+        return newFaces;
+      });
+      return prev + 1;
+    });
   };
 
   const prevFace = () => {
-    setRotationStep((prev) => prev - 1);
-    setGroupIndex((prev) => (prev - 1 + totalGroups) % totalGroups);
+    setRotationStep((prev) => {
+      setFaceKs((faces) => {
+        const newFaces = [...faces];
+        const oldBackFace = ((prev + 2) % facesCount + facesCount) % facesCount;
+        newFaces[oldBackFace] = prev - 2;
+        return newFaces;
+      });
+      return prev - 1;
+    });
   };
 
   return (
