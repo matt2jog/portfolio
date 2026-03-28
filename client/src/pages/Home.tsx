@@ -3,7 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BlueprintCard } from "@/components/BlueprintCard";
 // Cubes and headshot moved to About page
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -76,6 +76,8 @@ export default function Home() {
   const [rotationStep, setRotationStep] = useState(0);
   const [faceKs, setFaceKs] = useState([0, 1, 2, -1]);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  // Dynamic animation duration: speeds up linearly with queue depth.
+  const [animDuration, setAnimDuration] = useState(1200);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
   const groupIndex = ((rotationStep % totalGroups) + totalGroups) % totalGroups;
@@ -99,29 +101,80 @@ export default function Home() {
 
   const totalFaces = cubeGroups.length;
 
-  const nextFace = () => {
-    setRotationStep((prev) => {
-      setFaceKs((faces) => {
-        const newFaces = [...faces];
-        const oldBackFace = ((prev + 2) % facesCount + facesCount) % facesCount;
-        newFaces[oldBackFace] = prev + 2;
-        return newFaces;
-      });
-      return prev + 1;
-    });
+  // ── Queue state (refs so mutations never re-render) ──────────────────
+  // pendingQueue: array of +1 / -1 steps waiting to be executed.
+  // After consolidation, adjacent L+R pairs cancel out so only the net
+  // remaining steps survive (e.g. [+1,+1,-1] → [+1]).
+  const pendingQueue = useRef<number[]>([]);
+  const isAnimating = useRef(false);
+  // We need to read the latest rotationStep synchronously inside callbacks
+  // without depending on the React state render cycle.
+  const rotationStepRef = useRef(rotationStep);
+  rotationStepRef.current = rotationStep;
+
+  /** Reduce the queue by cancelling opposite adjacent pairs. */
+  const consolidate = (q: number[]): number[] => {
+    const stack: number[] = [];
+    for (const step of q) {
+      if (stack.length > 0 && stack[stack.length - 1] === -step) {
+        stack.pop(); // cancel the last with the current
+      } else {
+        stack.push(step);
+      }
+    }
+    return stack;
   };
 
-  const prevFace = () => {
+  /** Compute animation duration from current queue depth (linear speedup). */
+  const calcDuration = (queueLen: number): number =>
+    Math.max(250, 1200 - queueLen * 400);
+
+  /** Apply one step immediately (mutates React state). */
+  const applyStep = useCallback((step: number) => {
+    isAnimating.current = true;
+    // Set duration BEFORE the transform changes so the browser picks it up.
+    setAnimDuration(calcDuration(pendingQueue.current.length));
     setRotationStep((prev) => {
       setFaceKs((faces) => {
         const newFaces = [...faces];
-        const oldBackFace = ((prev + 2) % facesCount + facesCount) % facesCount;
-        newFaces[oldBackFace] = prev - 2;
+        const slot = ((prev + 2) % facesCount + facesCount) % facesCount;
+        newFaces[slot] = step > 0 ? prev + 2 : prev - 2;
         return newFaces;
       });
-      return prev - 1;
+      return prev + step;
     });
-  };
+  }, [facesCount]);
+
+  /** Push a new step onto the queue, consolidate it, then fire if idle. */
+  const enqueue = useCallback((step: number) => {
+    pendingQueue.current.push(step);
+    pendingQueue.current = consolidate(pendingQueue.current);
+
+    if (!isAnimating.current) {
+      const next = pendingQueue.current.shift();
+      if (next !== undefined) applyStep(next);
+    } else {
+      // Already animating — re-compute the duration so the browser picks it up
+      // mid-transition. The browser will resume from its current interpolated
+      // position to the same endpoint, just faster.
+      setAnimDuration(calcDuration(pendingQueue.current.length));
+    }
+  }, [applyStep]);
+
+  /** Called when the CSS transition ends – drain next item from the queue. */
+  const handleTransitionEnd = useCallback((e: React.TransitionEvent<HTMLDivElement>) => {
+    // Only trigger on the transform transition of the cube itself
+    if (e.propertyName !== "transform" || e.target !== e.currentTarget) return;
+    const next = pendingQueue.current.shift();
+    if (next !== undefined) {
+      applyStep(next);
+    } else {
+      isAnimating.current = false;
+    }
+  }, [applyStep]);
+
+  const nextFace = () => enqueue(+1);
+  const prevFace = () => enqueue(-1);
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden selection:bg-primary/30">
@@ -167,7 +220,11 @@ export default function Home() {
              <div className="project-cube-scene mx-auto mb-20">
                <div
                  className="project-cube"
-                 style={{ transform: `rotateX(5deg) rotateY(${12 + rotationStep * -90}deg)` }}
+                 style={{
+                   transform: `rotateX(5deg) rotateY(${12 + rotationStep * -90}deg)`,
+                   transition: `transform ${animDuration}ms ease-in-out`,
+                 }}
+                 onTransitionEnd={handleTransitionEnd}
                >
                  {cubeGroups.map((faceProjects, faceIndex) => (
                    <div

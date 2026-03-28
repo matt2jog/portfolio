@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, ReactNode, CSSProperties } from '
 interface ThreeDCardProps {
   children: ReactNode;
   className?: string;
+  roundedClass?: string;
   maxRotation?: number;
   glowOpacity?: number;
   shadowBlur?: number;
@@ -18,6 +19,7 @@ interface ThreeDCardProps {
 function ThreeDCard({
   children,
   className = '',
+  roundedClass = 'rounded-2xl',
   maxRotation = 10,
   glowOpacity = 0.2,
   shadowBlur = 30,
@@ -127,7 +129,7 @@ function ThreeDCard({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={cardStyle}
-        className="relative bg-gray-800 rounded-2xl overflow-hidden"
+        className={`relative bg-gray-800 ${roundedClass} overflow-hidden transition-[border-radius] duration-500 w-full h-full`}
         role="img"
         tabIndex={0}
         onFocus={handleMouseEnter}
@@ -135,20 +137,20 @@ function ThreeDCard({
       >
         {backgroundImage && (
           <div
-            className="absolute inset-0 rounded-2xl"
+            className={`absolute inset-0 ${roundedClass}`}
             style={backgroundStyle}
             aria-hidden="true"
           />
         )}
 
         <div
-          className="absolute inset-0 border-2 border-white/10 rounded-2xl pointer-events-none"
+          className={`absolute inset-0 border-2 border-white/10 ${roundedClass} pointer-events-none transition-[border-radius] duration-500`}
           aria-hidden="true"
         />
 
         {enableGlow && (
           <div
-            className="absolute inset-0 z-0 rounded-2xl pointer-events-none"
+            className={`absolute inset-0 z-0 ${roundedClass} pointer-events-none`}
             style={glowStyle}
             aria-hidden="true"
           />

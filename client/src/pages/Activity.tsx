@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ActivityToggle } from "@/components/ActivityToggle";
@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Github, GitPullRequest, GitCommit, GitBranch, Star,
   Activity as ActivityIcon, Users, ExternalLink, Calendar,
-  Linkedin, Clock, ArrowUpRight, TrendingUp
+  Linkedin, Clock, ArrowUpRight, TrendingUp, Loader2,
+  MessageSquare, Plus, GitMerge
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -186,10 +187,9 @@ function GithubDashboard({ data, isLoading, error }: any) {
       {/* Contribution Graph */}
       <ContributionGraph weeks={data.contributionsCollection?.contributionCalendar?.weeks || []} />
 
-      {/* Recent Repos + PRs */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <RepoList repos={data.repositories?.nodes || []} />
-        <PullRequestList prs={data.pullRequests?.nodes || []} />
+      {/* Infinite Scroll Timeline */}
+      <div className="mt-12">
+        <ActivityTimeline />
       </div>
     </div>
   );
@@ -322,140 +322,244 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
-/* ─────────────── Repo List ─────────────── */
 
-function RepoList({ repos }: { repos: any[] }) {
+
+/* ─────────────── Activity Timeline (Infinite Scroll) ─────────────── */
+
+interface TimelineEvent {
+  id: string;
+  type: "commit" | "pr" | "repo";
+  title: string;
+  description: string | null;
+  url: string | null;
+  repo: string;
+  timestamp: string;
+  meta: Record<string, any>;
+}
+
+function ActivityTimeline() {
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const fetchPage = useCallback(async (pageNum: number) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/public/github/timeline?page=${pageNum}`);
+      if (!res.ok) throw new Error("Failed to fetch timeline");
+      const data = await res.json();
+      setEvents((prev) => {
+        // Deduplicate by id
+        const existingIds = new Set(prev.map((e) => e.id));
+        const newEvents = data.events.filter((e: TimelineEvent) => !existingIds.has(e.id));
+        return [...prev, ...newEvents];
+      });
+      setHasMore(data.hasMore);
+      setInitialLoaded(true);
+    } catch (err) {
+      console.error("Timeline fetch error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading]);
+
+  // Load first page on mount
+  useEffect(() => {
+    if (!initialLoaded) fetchPage(1);
+  }, []);
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading && hasMore && initialLoaded) {
+          const nextPage = page + 1;
+          setPage(nextPage);
+          fetchPage(nextPage);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoading, page, initialLoaded]);
+
+  // Group events by date
+  const groupedEvents = useMemo(() => {
+    const groups: { date: string; events: TimelineEvent[] }[] = [];
+    const groupMap = new Map<string, TimelineEvent[]>();
+
+    for (const ev of events) {
+      const dateKey = new Date(ev.timestamp).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      if (!groupMap.has(dateKey)) {
+        groupMap.set(dateKey, []);
+        groups.push({ date: dateKey, events: groupMap.get(dateKey)! });
+      }
+      groupMap.get(dateKey)!.push(ev);
+    }
+
+    return groups;
+  }, [events]);
+
+  if (!initialLoaded) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (events.length === 0) return null;
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-display font-bold flex items-center gap-2">
-        <Github className="w-6 h-6" /> Recent Repositories
+        <Clock className="w-6 h-6" /> Event Timeline
       </h2>
-      <div className="grid gap-4">
-        {repos.slice(0, 4).map((repo: any, i: number) => (
-          <a
-            href={repo.url}
-            target="_blank"
-            rel="noreferrer"
-            key={i}
-            className="group p-5 rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm
-              hover:bg-card/80 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)]
-              transition-all duration-300 relative overflow-hidden flex flex-col items-start gap-2"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-            <div className="flex w-full justify-between items-start z-10">
-              <h3 className="font-bold text-lg group-hover:text-primary transition-colors">{repo.name}</h3>
-              <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            {repo.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2 z-10">{repo.description}</p>
-            )}
+      <div className="relative">
+        {/* Vertical timeline line */}
+        <div className="absolute left-6 top-0 bottom-0 w-px bg-gradient-to-b from-primary/40 via-border/50 to-transparent" />
 
-            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground font-medium z-10 flex-wrap">
-              {repo.primaryLanguage && (
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: repo.primaryLanguage.color }}
-                  />
-                  {repo.primaryLanguage.name}
-                </span>
-              )}
-              {repo.stargazerCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5" />
-                  {repo.stargazerCount}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                {formatRelativeTime(repo.pushedAt || repo.updatedAt)}
+        {groupedEvents.map((group, gi) => (
+          <div key={gi} className="mb-8">
+            {/* Date header */}
+            <div className="flex items-center gap-3 mb-4 relative">
+              <div className="w-12 h-6 flex items-center justify-center">
+                <div className="w-3 h-3 rounded-full bg-primary/60 border-2 border-background shadow-[0_0_8px_rgba(var(--primary),0.4)]" />
+              </div>
+              <span className="text-sm font-semibold text-muted-foreground tracking-wide uppercase">
+                {group.date}
               </span>
-              {repo.createdAt && (
-                <span className="flex items-center gap-1 text-foreground/50">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Created {new Date(repo.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </span>
-              )}
             </div>
-          </a>
+
+            {/* Events for this date */}
+            <div className="space-y-2 ml-12">
+              {group.events.map((ev) => (
+                <TimelineEventCard key={ev.id} event={ev} />
+              ))}
+            </div>
+          </div>
         ))}
+
+        {/* Sentinel for infinite scroll */}
+        <div ref={sentinelRef} className="h-4" />
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+            <span className="text-sm text-muted-foreground ml-3">Loading more events...</span>
+          </div>
+        )}
+
+        {!hasMore && events.length > 0 && (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            You've reached the end of the timeline
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ─────────────── PR List ─────────────── */
+function TimelineEventCard({ event }: { event: TimelineEvent }) {
+  const repoShort = event.repo.split("/").pop() || event.repo;
+  const time = new Date(event.timestamp).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 
-function PullRequestList({ prs }: { prs: any[] }) {
+  const typeConfig = {
+    commit: {
+      icon: <GitCommit className="w-4 h-4" />,
+      color: "text-sky-400",
+      bg: "bg-sky-500/10 border-sky-500/20",
+      label: "Commit",
+    },
+    pr: {
+      icon: event.meta.merged ? <GitMerge className="w-4 h-4" /> : <GitPullRequest className="w-4 h-4" />,
+      color: event.meta.merged ? "text-purple-400" : event.meta.action === "opened" ? "text-green-400" : "text-red-400",
+      bg: event.meta.merged
+        ? "bg-purple-500/10 border-purple-500/20"
+        : event.meta.action === "opened"
+          ? "bg-green-500/10 border-green-500/20"
+          : "bg-red-500/10 border-red-500/20",
+      label: event.meta.merged ? "PR Merged" : event.meta.action === "opened" ? "PR Opened" : `PR ${event.meta.action}`,
+    },
+    repo: {
+      icon: <Plus className="w-4 h-4" />,
+      color: "text-amber-400",
+      bg: "bg-amber-500/10 border-amber-500/20",
+      label: "New Repo",
+    },
+  };
+
+  const cfg = typeConfig[event.type];
+
+  const Wrapper: any = event.url ? "a" : "div";
+  const wrapperProps = event.url
+    ? { href: event.url, target: "_blank", rel: "noreferrer" }
+    : {};
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-display font-bold flex items-center gap-2">
-        <GitPullRequest className="w-6 h-6" /> Recent Pull Requests
-      </h2>
-      <div className="grid gap-4">
-        {prs.slice(0, 4).map((pr: any, i: number) => (
-          <a
-            href={pr.url}
-            target="_blank"
-            rel="noreferrer"
-            key={i}
-            className="group p-5 rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm
-              hover:bg-card/80 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)]
-              transition-all duration-300 block relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-bl from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="z-10 relative flex flex-col h-full justify-between gap-3">
-              <div className="flex items-start justify-between">
-                <h3 className="font-medium text-foreground line-clamp-2 pr-4 leading-tight group-hover:text-primary transition-colors">
-                  {pr.title}
-                </h3>
-                <ExternalLink className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-              </div>
-
-              <div className="flex items-center gap-3 text-xs flex-wrap">
-                <span
-                  className={`px-2.5 py-1 rounded-full font-semibold border
-                    ${pr.state === "MERGED"
-                      ? "text-purple-500 bg-purple-500/10 border-purple-500/20"
-                      : pr.state === "OPEN"
-                        ? "text-green-500 bg-green-500/10 border-green-500/20"
-                        : "text-destructive bg-destructive/10 border-destructive/20"}`}
-                >
-                  {pr.state}
-                </span>
-                <span className="text-muted-foreground flex items-center gap-1 truncate">
-                  on{" "}
-                  <span className="font-mono text-foreground/80 truncate border border-border/50 px-1.5 py-0.5 rounded bg-muted/30">
-                    {pr.repository.nameWithOwner}
-                  </span>
-                </span>
-              </div>
-
-              {/* Timestamps */}
-              <div className="flex items-center gap-4 text-xs text-muted-foreground/70 mt-1 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  Opened {formatRelativeTime(pr.createdAt)}
-                </span>
-                {pr.mergedAt && (
-                  <span className="flex items-center gap-1 text-purple-400/80">
-                    <GitPullRequest className="w-3 h-3" />
-                    Merged {formatRelativeTime(pr.mergedAt)}
-                  </span>
-                )}
-                {pr.closedAt && !pr.mergedAt && (
-                  <span className="flex items-center gap-1 text-destructive/60">
-                    <Clock className="w-3 h-3" />
-                    Closed {formatRelativeTime(pr.closedAt)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </a>
-        ))}
+    <Wrapper
+      {...wrapperProps}
+      className="group flex items-start gap-3 p-3.5 rounded-xl border border-border/30 bg-card/30
+        hover:bg-card/60 hover:border-border/60 transition-all duration-200 relative overflow-hidden"
+    >
+      {/* Type icon */}
+      <div className={`mt-0.5 w-8 h-8 rounded-lg ${cfg.bg} border flex items-center justify-center shrink-0 ${cfg.color}`}>
+        {cfg.icon}
       </div>
-    </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+            {event.title}
+          </p>
+          {event.url && (
+            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+          )}
+        </div>
+
+        {event.description && (
+          <p className="text-xs text-muted-foreground/60 mt-1 line-clamp-1 font-mono">
+            {event.description}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/70 flex-wrap">
+          <span className={`px-2 py-0.5 rounded-full font-semibold border text-[10px] uppercase tracking-wider ${cfg.bg} ${cfg.color}`}>
+            {cfg.label}
+          </span>
+          <span className="font-mono text-foreground/50 border border-border/40 px-1.5 py-0.5 rounded bg-muted/20 truncate max-w-[160px]">
+            {repoShort}
+          </span>
+          {event.type === "commit" && event.meta.sha && (
+            <span className="font-mono text-foreground/40">{event.meta.sha}</span>
+          )}
+          <span className="flex items-center gap-1 ml-auto">
+            <Clock className="w-3 h-3" />
+            {time}
+          </span>
+        </div>
+      </div>
+    </Wrapper>
   );
 }
 

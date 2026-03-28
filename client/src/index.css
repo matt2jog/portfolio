@@ -173,7 +173,7 @@
     height: 100%;
     position: relative;
     transform-style: preserve-3d;
-    transition: transform 1200ms ease-in-out;
+    /* transition is set dynamically via inline style based on queue depth */
   }
 
   .project-cube-face {

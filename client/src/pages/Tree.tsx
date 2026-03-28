@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { usePersonalInformation, type PersonalInformation } from "@/hooks/use-personal-information";
 
 type LinkItem = {
   id: string;
@@ -24,56 +25,59 @@ type LinkItem = {
   chip?: string;
 };
 
-const LINKS: LinkItem[] = [
-  {
-    id: "portfolio",
-    label: "Portfolio",
-    href: "https://2jog.dev/",
-    description: "The canonical landing and showcase of my engineering work.",
-    icon: <Globe className="h-6 w-6" aria-hidden="true" />,
-    chip: "static",
-  },
-  {
-    id: "github",
-    label: "GitHub",
-    href: "https://github.com/binimal101",
-    description: "Technical repositories, open-source contributions, and security notes.",
-    icon: <Github className="h-6 w-6" aria-hidden="true" />,
-    chip: "public",
-  },
-  {
-    id: "devpost",
-    label: "Devpost",
-    href: "https://devpost.com/",
-    description: "Showcase of hackathon projects and innovative builds.",
-    icon: <Code2 className="h-6 w-6" aria-hidden="true" />,
-    chip: "builds",
-  },
-  {
-    id: "linkedin",
-    label: "LinkedIn",
-    href: "https://linkedin.com/in/matthewtujague",
-    description: "Professional networking and industry connections.",
-    icon: <Linkedin className="h-6 w-6" aria-hidden="true" />,
-    chip: "network",
-  },
-  {
-    id: "email",
-    label: "Email",
-    href: "mailto:matthew@2jog.dev",
-    description: "Direct line for engineering inquiries and collaborations.",
-    icon: <Mail className="h-6 w-6" aria-hidden="true" />,
-    chip: "direct",
-  },
-  {
-    id: "phone",
-    label: "Phone",
-    href: "tel:+17326393889",
-    description: "Middletown, NJ resident. Direct contact for urgent matters.",
-    icon: <AtSign className="h-6 w-6" aria-hidden="true" />,
-    chip: "mobile",
-  },
-];
+function getLinks(info: PersonalInformation | undefined): LinkItem[] {
+  if (!info) return [];
+  return [
+    {
+      id: "devpost",
+      label: "Devpost",
+      href: info.devpostUrl,
+      description: "Showcase of hackathon projects and innovative builds.",
+      icon: <Code2 className="h-6 w-6" aria-hidden="true" />,
+      chip: "builds",
+    },
+    {
+      id: "portfolio",
+      label: "Portfolio",
+      href: info.portfolioUrl,
+      description: "The canonical landing and showcase of my engineering work.",
+      icon: <Globe className="h-6 w-6" aria-hidden="true" />,
+      chip: "static",
+    },
+    {
+      id: "linkedin",
+      label: "LinkedIn",
+      href: info.linkedinUrl,
+      description: "Professional networking and industry connections.",
+      icon: <Linkedin className="h-6 w-6" aria-hidden="true" />,
+      chip: "network",
+    },
+    {
+      id: "github",
+      label: "GitHub",
+      href: info.githubUrl,
+      description: "Technical repositories, open-source contributions, and security notes.",
+      icon: <Github className="h-6 w-6" aria-hidden="true" />,
+      chip: "public",
+    },
+    {
+      id: "phone",
+      label: "Phone",
+      href: `tel:${info.phone}`,
+      description: "Middletown, NJ resident. Direct contact for urgent matters.",
+      icon: <AtSign className="h-6 w-6" aria-hidden="true" />,
+      chip: "mobile",
+    },
+    {
+      id: "email",
+      label: "Email",
+      href: `mailto:${info.email}`,
+      description: "Direct line for engineering inquiries and collaborations.",
+      icon: <Mail className="h-6 w-6" aria-hidden="true" />,
+      chip: "direct",
+    },
+  ];
+}
 
 /* HeaderStatus and related helpers removed: useNowTick, pad2, formatUptime, useNetworkSnapshot, MonoChip. */
 
@@ -124,33 +128,35 @@ function hslFromHue(h: number) {
   return `hsl(${h} 85% 56% / 1)`;
 }
 
-function NicheCarousel() {
-  const defaultIndex = LINKS.findIndex((l) => l.id === "linkedin");
+function NicheCarousel({ links }: { links: LinkItem[] }) {
+  const defaultIndex = links.findIndex((l) => l.id === "linkedin");
   const [index, setIndex] = React.useState(defaultIndex >= 0 ? defaultIndex : 0);
   const reduced = useReducedMotion();
 
-  const next = () => setIndex((i) => (i + 1) % LINKS.length);
-  const prev = () => setIndex((i) => (i - 1 + LINKS.length) % LINKS.length);
+  const next = () => setIndex((i) => (i + 1) % links.length);
+  const prev = () => setIndex((i) => (i - 1 + links.length) % links.length);
 
   const getCardPosition = (i: number) => {
-    const diff = (i - index + LINKS.length) % LINKS.length;
+    const diff = (i - index + links.length) % links.length;
     if (diff === 0) return "center";
-    if (diff === 1 || diff === -(LINKS.length - 1)) return "right";
-    if (diff === LINKS.length - 1 || diff === -1) return "left";
+    if (diff === 1 || diff === -(links.length - 1)) return "right";
+    if (diff === links.length - 1 || diff === -1) return "left";
     return "hidden";
   };
 
   React.useEffect(() => {
     if (import.meta.env.DEV && console.debug) {
-      console.debug("NicheCarousel mount - items:", LINKS.length);
+      console.debug("NicheCarousel mount - items:", links.length);
     }
-  }, []);
+  }, [links.length]);
+
+  if (links.length === 0) return null;
 
   return (
     <div data-testid="niche-carousel" className="relative flex h-[400px] w-full items-center justify-center py-10" style={{ perspective: "1000px" }}>
       <div className="relative h-full w-full max-w-[320px] overflow-visible">
         <AnimatePresence mode="popLayout">
-          {LINKS.map((item, i) => {
+          {links.map((item, i) => {
             const pos = getCardPosition(i);
             const hue = hueForIndex(i); // deterministic gradient jump per card
 
@@ -249,6 +255,12 @@ function NicheCarousel() {
 
 export default function Tree() {
   const reduced = useReducedMotion();
+  const { data: info } = usePersonalInformation();
+  const links = getLinks(info);
+
+  if (!info) {
+    return null; // or a skeleton loader
+  }
 
   return (
     <div className="min-h-dvh bg-background text-foreground overflow-x-hidden">
@@ -280,13 +292,13 @@ export default function Tree() {
                   // FULL STACK ARCHETECT
                 </span>
                 <span aria-hidden="true" className="h-1 w-1 rounded-full bg-[hsl(var(--primary))]" />
-                <span className="font-mono">NJ-NY-PA</span>
+                <span className="font-mono">{info.location}</span>
               </div>
               <h1 className="text-balance text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
-                Matthew Tujague
+                {info.name}
               </h1>
               <p className="max-w-[500px] text-pretty text-base text-muted-foreground leading-relaxed">
-                Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.
+                {info.shortBio}
               </p>
             </div>
 
@@ -298,7 +310,7 @@ export default function Tree() {
         </motion.header>
 
         <main className="mt-4 w-full">
-          <NicheCarousel />
+          <NicheCarousel links={links} />
         </main>
       </div>
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -123,6 +123,40 @@ export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pi
 
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
 
+export const githubTimelineEvents = pgTable("github_timeline_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  extId: varchar("ext_id").notNull().unique(), // GitHub event ID
+  type: text("type").notNull(), // commit, pr, repo
+  title: text("title").notNull(),
+  description: text("description"),
+  url: text("url"),
+  repo: text("repo").notNull(),
+  timestamp: timestamp("timestamp").notNull(),
+  meta: jsonb("meta").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertGithubTimelineEventSchema = createInsertSchema(githubTimelineEvents).omit({ id: true, createdAt: true });
+
+export const personalInformation = pgTable("personal_information", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().default("Matthew Tujague"),
+  title: text("title").notNull().default("Software Engineer"),
+  location: text("location").notNull().default("NJ-NY-PA"),
+  shortBio: text("short_bio").notNull().default("Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value."),
+  email: text("email").notNull().default("matthew@2jog.dev"),
+  phone: text("phone").notNull().default("+17326393889"),
+  phoneFormatted: text("phone_formatted").notNull().default("(732) 639-3889"),
+  linkedinUrl: text("linkedin_url").notNull().default("https://linkedin.com/in/matthewtujague"),
+  githubUrl: text("github_url").notNull().default("https://github.com/binimal101"),
+  devpostUrl: text("devpost_url").notNull().default("https://devpost.com/"),
+  portfolioUrl: text("portfolio_url").notNull().default("https://2jog.dev/"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPersonalInformationSchema = createInsertSchema(personalInformation).omit({ id: true, updatedAt: true });
+export const updatePersonalInformationSchema = insertPersonalInformationSchema.partial();
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
@@ -131,3 +165,30 @@ export type Bio = typeof bio.$inferSelect;
 export type SkillsGroup = typeof skillsGroup.$inferSelect;
 export type AllSkill = typeof allSkills.$inferSelect;
 export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
+export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
+
+export const experiences = pgTable("experiences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  role: text("role").notNull(),
+  company: text("company").notNull(),
+  location: text("location").notNull().default("Remote"),
+  duration: text("duration").notNull(),
+  description: text("description").notNull(),
+  technologies: text("technologies").array().notNull().default(sql`'{}'::text[]`),
+  isActive: boolean("is_active").notNull().default(false),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertExperienceSchema = createInsertSchema(experiences).pick({
+  role: true,
+  company: true,
+  location: true,
+  duration: true,
+  description: true,
+  technologies: true,
+  isActive: true,
+});
+
+export const updateExperienceSchema = insertExperienceSchema.partial();
+export type DbExperience = typeof experiences.$inferSelect;
