@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/matth/OneDrive/Desktop/programs/personal_brand/portfolio -type f -name *experience*)",
+      "Bash(find /c/Users/matth/OneDrive/Desktop/programs/personal_brand/portfolio -maxdepth 3 -type f \\\\\\(-name tailwind.config.* -o -name postcss.config.* \\\\\\))",
+      "Bash(find /c/Users/matth/OneDrive/Desktop/programs/personal_brand/portfolio -name *.config.* -type f)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

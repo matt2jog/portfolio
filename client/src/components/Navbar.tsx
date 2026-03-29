@@ -15,16 +15,17 @@ export function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 sm:px-6 md:px-12 py-3 bg-black/70 border-b border-white/5">
-      <a href="#" className="font-display font-bold text-lg sm:text-xl md:text-2xl tracking-tighter text-white flex-shrink-0">
+      <Link href="/" className="font-display font-bold text-lg sm:text-xl md:text-2xl tracking-tighter text-white flex-shrink-0">
         2jog<span className="text-primary">.dev</span>
-      </a>
+      </Link>
 
       {/* Desktop links */}
       <div className="hidden md:flex items-center gap-2 sm:gap-4 font-mono text-[10px] md:text-sm tracking-widest text-gray-400">
-        <Link href="/" className="hover:text-primary transition-colors px-2">2jog.portfolio</Link>
-        <Link href="/activity" className="hover:text-primary transition-colors px-2">2jog.activity</Link>
+        <Link href="/" className="hover:text-primary transition-colors px-2">2jog.home</Link>
+        <Link href="/tree" className="hover:text-primary transition-colors px-2">2jog.linktree</Link>
+        <Link href="/portfolio" className="hover:text-primary transition-colors px-2">2jog.portfolio</Link>
         <Link href="/about" className="hover:text-primary transition-colors px-2">2jog.about</Link>
-        <Link href="/tree" className="hover:text-primary transition-colors px-2">2jog.tree</Link>
+        <Link href="/activity" className="hover:text-primary transition-colors px-2">2jog.activity</Link>
       </div>
 
       {/* Mobile hamburger */}
@@ -45,10 +46,11 @@ export function Navbar() {
         style={{ transition: "opacity .18s ease, transform .18s ease" }}
       >
         <nav className="flex flex-col gap-2">
-          <Link href="/" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.portfolio</Link>
-          <Link href="/activity" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.activity</Link>
+          <Link href="/" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.home</Link>
+          <Link href="/tree" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.linktree</Link>
+          <Link href="/portfolio" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.portfolio</Link>
           <Link href="/about" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.about</Link>
-          <Link href="/tree" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.tree</Link>
+          <Link href="/activity" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.activity</Link>
         </nav>
       </div>
     </nav>
