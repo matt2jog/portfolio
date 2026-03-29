@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { ArrowDown } from "lucide-react";
 import { useLocation } from "wouter";
 
 export function Hero() {
@@ -61,14 +60,6 @@ export function Hero() {
         </motion.div>
       </div>
 
-      <motion.div
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/30 animate-bounce"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 2 }}
-      >
-        <ArrowDown size={24} />
-      </motion.div>
     </section>
   );
 }
