@@ -1,10 +1,13 @@
 import { motion } from "framer-motion";
 import { ArrowDown } from "lucide-react";
+import { useLocation } from "wouter";
 
 export function Hero() {
+  const [, setLocation] = useLocation();
+
   return (
     <section className="relative min-h-screen flex flex-col justify-center px-6 md:px-20 pt-20 overflow-hidden">
-      
+
       <div className="relative z-10 max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -25,29 +28,40 @@ export function Hero() {
           </p>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 1 }}
           className="mt-12 flex flex-col sm:flex-row gap-4 sm:gap-6"
         >
-          <button 
-            onClick={() => document.getElementById('projects')?.scrollIntoView({ behavior: 'smooth' })}
-            className="group relative px-4 py-2 sm:px-6 sm:py-3 bg-white text-black font-bold tracking-wide text-sm sm:text-base overflow-hidden"
+          <button
+            onClick={() => setLocation("/portfolio")}
+            className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-bold tracking-wide text-sm sm:text-base"
           >
-             <span className="relative z-10">EXPLORE WORK</span>
-             <div className="absolute inset-0 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
+            Explore work
           </button>
-          <button 
-            onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
-            className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-mono text-sm"
+          <button
+            onClick={() => setLocation("/tree")}
+            className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-bold tracking-wide text-sm sm:text-base"
           >
-             REACH_OUT()
+            Reach out
+          </button>
+          <button
+            onClick={() => setLocation("/activity")}
+            className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-bold tracking-wide text-sm sm:text-base"
+          >
+            What I'm doing
+          </button>
+          <button
+            onClick={() => setLocation("/about")}
+            className="px-4 py-2 sm:px-6 sm:py-3 border border-white/20 text-white hover:bg-white/5 transition-colors font-bold tracking-wide text-sm sm:text-base"
+          >
+            About me
           </button>
         </motion.div>
       </div>
 
-      <motion.div 
+      <motion.div
         className="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/30 animate-bounce"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

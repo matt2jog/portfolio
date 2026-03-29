@@ -407,12 +407,66 @@
   }
 }
 
-.animate-scroll-boomerang-hover {
-  animation: scroll-boomerang 8s ease-in-out;
-  animation-play-state: running;
+/* ── Persistent Arrow Accent (Interactive) ── */
+@keyframes bcard-accent-push {
+  0%   { transform: translateX(-6px); opacity: 0.4; }
+  50%  { transform: translateX(0px);  opacity: 0.8; }
+  100% { transform: translateX(-6px); opacity: 0.4; }
+}
+
+.bcard-persistent-accent {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  margin-right: 1rem; /* Closer to edge as requested */
+  opacity: 1;
+}
+
+.bcard-accent__svg {
+  width: 44px;
+  height: 24px;
+  display: block;
+  animation: bcard-accent-push 2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes business-card-vim-cursor-blink {
+  0%, 49% {
+    opacity: 0.95;
+  }
+  50%, 100% {
+    opacity: 0.2;
+  }
+}
+
+.business-card-vim-cursor {
+  display: inline-block;
+  width: 0.62em;
+  height: 1.05em;
+  margin-left: 0.18em;
+  vertical-align: -0.14em;
+  background: rgba(0, 255, 255, 0.82);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.28);
+  border-radius: 1px;
+  animation: business-card-vim-cursor-blink 1s steps(1, end) infinite;
 }
 
 /* ── System Core utilities (Tree page) ── */
+@keyframes business-card-summary-easter-egg-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.business-card-summary-easter-egg {
+  animation: business-card-summary-easter-egg-enter 240ms ease-out;
+}
+
 .system-grid {
   background-image:
     linear-gradient(to right, hsl(var(--border) / .12) 1px, transparent 1px),

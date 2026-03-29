@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useCallback, ReactNode, CSSProperties } from 'react';
+import React, { useState, useRef, useCallback, ReactNode, CSSProperties, useLayoutEffect } from 'react';
 
 interface ThreeDCardProps {
   children: ReactNode;
@@ -14,7 +14,20 @@ interface ThreeDCardProps {
   enableGlow?: boolean;
   enableShadow?: boolean;
   enableParallax?: boolean;
+  isFlipped?: boolean;
 }
+
+const FLIP_DURATION_MS = 1200;
+
+const DEFAULT_TRANSFORM = {
+  rotateX: 0,
+  rotateY: 0,
+  glowX: 50,
+  glowY: 50,
+  shadowX: 0,
+  shadowY: 20,
+  isHovered: false,
+};
 
 function ThreeDCard({
   children,
@@ -29,22 +42,27 @@ function ThreeDCard({
   enableGlow = true,
   enableShadow = true,
   enableParallax = true,
+  isFlipped = false,
 }: ThreeDCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  
+  const [isFlipping, setIsFlipping] = useState(false);
+  const prevIsFlipped = useRef(isFlipped);
+  const [transform, setTransform] = useState(DEFAULT_TRANSFORM);
 
-  const [transform, setTransform] = useState({
-    rotateX: 0,
-    rotateY: 0,
-    glowX: 50,
-    glowY: 50,
-    shadowX: 0,
-    shadowY: 20,
-    isHovered: false,
-  });
+  useLayoutEffect(() => {
+    if (prevIsFlipped.current !== isFlipped) {
+      setTransform(DEFAULT_TRANSFORM);
+      setIsFlipping(true);
+      const timer = setTimeout(() => setIsFlipping(false), FLIP_DURATION_MS);
+      prevIsFlipped.current = isFlipped;
+      return () => clearTimeout(timer);
+    }
+  }, [isFlipped]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!cardRef.current) return;
+      if (!cardRef.current || isFlipping) return;
 
       const rect = cardRef.current.getBoundingClientRect();
       const { width, height, left, top } = rect;
@@ -66,33 +84,34 @@ function ThreeDCard({
         glowY: (mouseY / height) * 100,
         shadowX: enableShadow ? newRotateY * 0.8 : 0,
         shadowY: enableShadow ? 20 - newRotateX * 0.6 : 20,
+        isHovered: true,
       }));
     },
-    [maxRotation, enableShadow]
+    [maxRotation, enableShadow, isFlipping]
   );
 
   const handleMouseEnter = useCallback(() => {
+    if (isFlipping) return;
     setTransform(prev => ({ ...prev, isHovered: true }));
-  }, []);
+  }, [isFlipping]);
 
   const handleMouseLeave = useCallback(() => {
-    setTransform({
-      rotateX: 0,
-      rotateY: 0,
-      glowX: 50,
-      glowY: 50,
-      shadowX: 0,
-      shadowY: 20,
-      isHovered: false,
-    });
+    setTransform(DEFAULT_TRANSFORM);
   }, []);
 
+  const finalRotateY = transform.rotateY + (isFlipped ? 180 : 0);
+  const shouldUseFlipTransition = isFlipping || prevIsFlipped.current !== isFlipped;
+  
+  const currentTransition = shouldUseFlipTransition
+    ? `transform ${FLIP_DURATION_MS}ms ease-in-out, box-shadow ${FLIP_DURATION_MS}ms ease-in-out`
+    : `transform ${transitionDuration} cubic-bezier(0.23, 1, 0.32, 1), box-shadow ${transitionDuration} cubic-bezier(0.23, 1, 0.32, 1)`;
+
   const cardStyle: CSSProperties = {
-    transform: `perspective(1000px) rotateX(${transform.rotateX}deg) rotateY(${transform.rotateY}deg) scale3d(1, 1, 1)`,
+    transform: `perspective(1000px) rotateX(${transform.rotateX}deg) rotateY(${finalRotateY}deg) scale3d(1, 1, 1)`,
     boxShadow: enableShadow
       ? `${transform.shadowX}px ${transform.shadowY}px ${shadowBlur}px rgba(0, 0, 0, 0.4)`
       : 'none',
-    transition: `transform ${transitionDuration} cubic-bezier(0.23, 1, 0.32, 1), box-shadow ${transitionDuration} cubic-bezier(0.23, 1, 0.32, 1)`,
+    transition: currentTransition,
     transformStyle: 'preserve-3d',
   };
 
@@ -129,7 +148,7 @@ function ThreeDCard({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={cardStyle}
-        className={`relative bg-gray-800 ${roundedClass} overflow-hidden transition-[border-radius] duration-500 w-full h-full`}
+        className={`relative bg-gray-800 ${roundedClass} overflow-visible transition-[border-radius] duration-500 w-full h-full`}
         role="img"
         tabIndex={0}
         onFocus={handleMouseEnter}
