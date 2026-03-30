@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="640" viewBox="0 0 340 640">
+  <defs>
+    <!-- Card clip (rounded rect) -->
+    <clipPath id="card-clip">
+      <rect width="340" height="640" rx="16" ry="16" />
+    </clipPath>
+
+    <!-- Top shimmer gradient -->
+    <linearGradient id="shimmer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="white" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Divider gradient -->
+    <linearGradient id="divider" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="white" stop-opacity="0"/>
+      <stop offset="50%" stop-color="white" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Dog-ear crease gradient (135deg diagonal) -->
+    <linearGradient id="crease" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="40%" stop-color="#00FFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#00FFFF" stop-opacity="0.25"/>
+      <stop offset="55%" stop-color="#00FFFF" stop-opacity="0.08"/>
+      <stop offset="65%" stop-color="#00FFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Headshot clip -->
+    <clipPath id="headshot-clip">
+      <circle cx="170" cy="156" r="88" />
+    </clipPath>
+
+    <!-- Dog-ear drop shadow filter -->
+    <filter id="fold-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#00FFFF" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Card background -->
+  <rect width="340" height="640" rx="16" ry="16" fill="#0B0C10" />
+
+  <!-- Card border -->
+  <rect width="340" height="640" rx="16" ry="16" fill="none" stroke="white" stroke-opacity="0.06" stroke-width="1"/>
+
+  <g clip-path="url(#card-clip)">
+
+    <!-- Top shimmer overlay -->
+    <rect width="340" height="160" fill="url(#shimmer)" />
+
+    <!-- Headshot circle bg -->
+    <circle cx="170" cy="156" r="88" fill="none"
+      stroke="#00FFFF" stroke-opacity="0.3" stroke-width="2"
+    />
+    <!-- Headshot placeholder -->
+    <circle cx="170" cy="156" r="87" fill="#16181f" />
+    <!-- Headshot inner glow -->
+    <circle cx="170" cy="156" r="88"
+      fill="none"
+      stroke="#00FFFF"
+      stroke-opacity="0.15"
+      stroke-width="16"
+    />
+
+    <!-- Silhouette placeholder -->
+    <circle cx="170" cy="140" r="32" fill="#2a2d38" />
+    <ellipse cx="170" cy="196" rx="52" ry="34" fill="#2a2d38" />
+
+    <!-- Name -->
+    <text
+      x="170" y="298"
+      text-anchor="middle"
+      font-family="'Arial', sans-serif"
+      font-weight="600"
+      font-size="20"
+      letter-spacing="2"
+      fill="white"
+      text-decoration="none"
+    >MATTHEW TUJAGUE</text>
+
+    <!-- Title -->
+    <text
+      x="170" y="320"
+      text-anchor="middle"
+      font-family="'Arial', sans-serif"
+      font-weight="300"
+      font-size="9"
+      letter-spacing="3"
+      fill="#e2e2e2"
+    >SOFTWARE ENGINEER</text>
+
+    <!-- Location -->
+    <text
+      x="170" y="336"
+      text-anchor="middle"
+      font-family="'Arial', sans-serif"
+      font-weight="300"
+      font-size="8"
+      letter-spacing="2"
+      fill="#00FFFF"
+      fill-opacity="0.8"
+    >NJ · NY · PA</text>
+
+    <!-- Divider full -->
+    <rect x="34" y="350" width="272" height="1" fill="url(#divider)" />
+    <!-- Divider cyan accent -->
+    <rect x="127.5" y="350" width="85" height="1" fill="#00FFFF" opacity="0.9"/>
+    <!-- Divider glow -->
+    <rect x="127.5" y="349" width="85" height="3" fill="#00FFFF" opacity="0.15"/>
+
+    <!-- Contact rows -->
+    <!-- Phone icon placeholder -->
+    <circle cx="96" cy="396" r="6" fill="#00FFFF" fill-opacity="0.18" />
+    <text x="96" y="400" text-anchor="middle" font-family="Arial" font-size="8" fill="#00FFFF" fill-opacity="0.7">☎</text>
+    <text x="116" y="400" font-family="'Arial'" font-size="10" letter-spacing="2" fill="#ccc">(732) 639-3889</text>
+
+    <!-- Mail -->
+    <text x="96" y="422" text-anchor="middle" font-family="Arial" font-size="8" fill="#00FFFF" fill-opacity="0.7">✉</text>
+    <text x="116" y="422" font-family="'Arial'" font-size="10" letter-spacing="2" fill="#ccc">matthew@2jog.dev</text>
+
+    <!-- Globe -->
+    <text x="96" y="444" text-anchor="middle" font-family="Arial" font-size="8" fill="#00FFFF" fill-opacity="0.7">⊕</text>
+    <text x="116" y="444" font-family="'Arial'" font-size="10" letter-spacing="2" fill="#ccc">2jog.dev</text>
+
+    <!-- ── Dog-ear fold (bottom-right) ── -->
+    <!-- Flap triangle: points from (W-FOLD, H) to (W, H) to (W, H-FOLD) -->
+    <polygon
+      points="304,640 340,640 340,604"
+      fill="#1e2028"
+      filter="url(#fold-shadow)"
+    />
+    <!-- Crease overlay -->
+    <rect
+      x="304" y="604"
+      width="36" height="36"
+      fill="url(#crease)"
+    />
+    <!-- Crease line (diagonal) -->
+    <line
+      x1="304" y1="640"
+      x2="340" y2="604"
+      stroke="#00FFFF" stroke-opacity="0.3" stroke-width="0.75"
+    />
+
+  </g>
+</svg>
