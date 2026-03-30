@@ -85,10 +85,11 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
         >
           {/* Inner explicitly sized content to prevent layout squish */}
           <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
-            {/* Dog-ear fold — bottom-right corner */}
+            {/* Dog-ear peel — bottom-right corner */}
             <div className="bcard-dogear" aria-hidden="true">
-              <div className="bcard-dogear__flap" />
               <div className="bcard-dogear__shadow" />
+              <div className="bcard-dogear__flap" />
+              <div className="bcard-dogear__crease" />
             </div>
             {/* Center Headshot */}
             <div className="flex flex-col items-center w-full z-10 relative mt-8">

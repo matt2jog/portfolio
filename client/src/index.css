@@ -407,48 +407,79 @@
   }
 }
 
-/* ── Dog-ear corner fold (bottom-right of bcard front) ── */
+/* ── Dog-ear peel corner (bottom-right of bcard front) ── */
 .bcard-dogear {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 36px;
-  height: 36px;
+  width: 72px;
+  height: 72px;
   pointer-events: none;
   user-select: none;
   z-index: 40;
 }
 
-/* The folded flap — a triangle via border trick */
-.bcard-dogear__flap {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  /* bottom-right triangle: transparent top-left sides, visible bottom-right */
-  border-width: 36px 36px 0 0;
-  border-color: transparent #1e2028 transparent transparent;
-  border-radius: 0 0 14px 0;
-  filter: drop-shadow(-2px -2px 3px rgba(0, 255, 255, 0.18));
-}
-
-/* Crease line along the fold diagonal */
+/* Shadow cast on the card surface by the lifting flap */
 .bcard-dogear__shadow {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 36px;
-  height: 36px;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 100% 100%,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.45) 35%,
+    rgba(0, 0, 0, 0.1) 60%,
+    transparent 75%
+  );
+  animation: bcard-peel-shadow 3.2s ease-in-out infinite;
+}
+
+/* The peeling flap — gradient simulates curl (lighter near free tip = back of card) */
+.bcard-dogear__flap {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
+  background: linear-gradient(
+    315deg,
+    #4a4e63 0%,
+    #363949 22%,
+    #252830 45%,
+    #151719 100%
+  );
+  transform-origin: 0% 100%;
+  animation: bcard-peel-lift 3.2s ease-in-out infinite;
+  will-change: transform, filter;
+}
+
+/* Cyan crease glow along the fold line */
+.bcard-dogear__crease {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
   background: linear-gradient(
     135deg,
-    transparent 40%,
-    rgba(0, 255, 255, 0.25) 50%,
-    rgba(0, 255, 255, 0.08) 55%,
-    transparent 65%
+    transparent 42%,
+    rgba(0, 255, 255, 0.5) 49%,
+    rgba(0, 255, 255, 0.15) 54%,
+    transparent 60%
   );
-  border-radius: 0 0 14px 0;
+  transform-origin: 0% 100%;
+  animation: bcard-peel-lift 3.2s ease-in-out infinite;
+}
+
+@keyframes bcard-peel-lift {
+  0%, 100% {
+    transform: translate(0px, 0px) scale(1);
+    filter: drop-shadow(-3px -3px 6px rgba(0, 0, 0, 0.6));
+  }
+  50% {
+    transform: translate(-6px, -6px) scale(1.18);
+    filter: drop-shadow(-8px -8px 14px rgba(0, 0, 0, 0.85));
+  }
+}
+
+@keyframes bcard-peel-shadow {
+  0%, 100% { opacity: 0.6;  transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.18); }
 }
 
 @keyframes business-card-vim-cursor-blink {
