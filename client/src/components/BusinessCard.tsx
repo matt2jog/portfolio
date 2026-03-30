@@ -87,6 +87,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
           <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
             {/* Dog-ear peel — bottom-right corner */}
             <div className="bcard-dogear" aria-hidden="true">
+              <div className="bcard-dogear__indent" />
               <div className="bcard-dogear__shadow" />
               <div className="bcard-dogear__flap" />
               <div className="bcard-dogear__crease" />
