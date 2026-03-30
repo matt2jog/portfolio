@@ -407,89 +407,122 @@
   }
 }
 
-/* ── Dog-ear peel corner (bottom-right of bcard front) ── */
+/* ── Dog-ear peel corner — adapted from rhythm191/dyoNoZQ ── */
+/* Technique: overflow:hidden container matches card bg, rotated rects slide in/out */
+
 .bcard-dogear {
+  display: block;
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 72px;
-  height: 72px;
+  height: 80px;
+  width: 80px;
+  background: #0B0C10;
+  z-index: 40;
+  overflow: hidden;
   pointer-events: none;
   user-select: none;
-  z-index: 40;
+  border-radius: 0 0 16px 0;
 }
 
-/* Darkened indent where the flap was — shows the card surface "under" the peel */
-.bcard-dogear__indent {
+/* Front face of the peel — rotated masked rectangle */
+.bcard-dogear__paper {
   position: absolute;
-  inset: 0;
-  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
-  background: linear-gradient(135deg, transparent 20%, rgba(0,0,0,0.35) 100%);
+  height: 160px;
+  width: 160px;
+  top: 0;
+  left: 0;
+  background-color: transparent;
+  transform: translate(0, -32px) rotate(45deg) translate(-24px, -4px);
+  z-index: 3;
+  overflow: hidden;
+  animation: bcard-paper 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
 }
 
-/* Soft shadow cast on the card by the lifted flap */
+.bcard-dogear__paper::before {
+  content: '';
+  position: absolute;
+  height: 160px;
+  width: 160px;
+  bottom: 0;
+  right: 0;
+  transform: translate(144px, 32px) rotate(50deg);
+  background-color: #1e2130;
+}
+
+/* Shadow at the crease */
 .bcard-dogear__shadow {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at 85% 85%,
-    rgba(0,0,0,0.65) 0%,
-    rgba(0,0,0,0.3)  35%,
-    transparent      68%
-  );
-  transform-origin: 100% 100%;
-  animation: bcard-peel-shadow 3.2s ease-in-out infinite;
+  height: 160px;
+  width: 160px;
+  top: 0;
+  left: 0;
+  background-color: transparent;
+  transform: translate(0, -36px) rotate(45deg) translate(-54px, 0);
+  z-index: 2;
+  overflow: hidden;
+  animation: bcard-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
 }
 
-/* The flap — rotates around the crease (diagonal from bottom-left to top-right of box) */
-.bcard-dogear__flap {
+.bcard-dogear__shadow::before {
+  content: '';
   position: absolute;
-  inset: 0;
-  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
-  background: linear-gradient(
-    135deg,
-    #3a3d50 0%,
-    #252830 40%,
-    #141618 100%
-  );
-  /* transform-origin: bottom-left of box = start of the crease hinge */
-  transform-origin: 0% 100%;
-  animation: bcard-peel-fold 3.2s ease-in-out infinite;
-  will-change: transform;
+  width: 7px;
+  height: 112px;
+  bottom: 2px;
+  right: 0;
+  background-color: transparent;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
 }
 
-/* Cyan crease glow — same transform so it rides with the flap */
-.bcard-dogear__crease {
+/* Back face — the underside of the folded corner */
+.bcard-dogear__back {
   position: absolute;
-  inset: 0;
-  clip-path: polygon(100% 0%, 100% 100%, 0% 100%);
-  background: linear-gradient(
-    135deg,
-    transparent 42%,
-    rgba(0,255,255,0.45) 49%,
-    rgba(0,255,255,0.12) 54%,
-    transparent 61%
-  );
-  transform-origin: 0% 100%;
-  animation: bcard-peel-fold 3.2s ease-in-out infinite;
+  width: 80px;
+  height: 160px;
+  bottom: -80px;
+  right: -80px;
+  background-color: #252836;
+  transform: rotate(45deg) translate(5px, 0);
+  overflow: hidden;
+  z-index: 3;
+  animation: bcard-back 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
 }
 
-/* rotate3d(1,-1,0) = diagonal axis from bottom-left to top-right of box (the crease).
-   Negative angle lifts the free corner toward the viewer, then folds it back. */
-@keyframes bcard-peel-fold {
-  0%, 100% {
-    transform: perspective(300px) rotate3d(1, -1, 0, 0deg);
-    filter: brightness(1);
-  }
-  50% {
-    transform: perspective(300px) rotate3d(1, -1, 0, -130deg);
-    filter: brightness(1.55);
-  }
+.bcard-dogear__back::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -7px;
+  width: 7px;
+  height: 96px;
+  background-color: transparent;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  animation: bcard-back-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
 }
 
-@keyframes bcard-peel-shadow {
-  0%, 100% { opacity: 0.25; transform: scale(0.55); }
-  50%       { opacity: 1;    transform: scale(1.1);  }
+@keyframes bcard-paper {
+  0%,  20% { transform: translate(0, -32px) rotate(45deg) translate(-24px,  -4px); }
+  55%, 75% { transform: translate(0, -36px) rotate(45deg) translate(-104px, -4px); }
+  100%     { transform: translate(0, -32px) rotate(45deg) translate(-24px,  -4px); }
+}
+
+@keyframes bcard-shadow {
+  0%,  20% { transform: translate(0, -36px) rotate(45deg) translate(-54px,  0); }
+  55%, 75% { transform: translate(0, -36px) rotate(45deg) translate(-100px, 0); }
+  100%     { transform: translate(0, -36px) rotate(45deg) translate(-54px,  0); }
+}
+
+@keyframes bcard-back {
+  0%,  20% { transform: rotate(45deg) translate(  5px, 0); }
+  55%, 75% { transform: rotate(45deg) translate(-38px, 0); }
+  100%     { transform: rotate(45deg) translate(  5px, 0); }
+}
+
+@keyframes bcard-back-shadow {
+  0%,  20% { box-shadow: 0 0  2px rgba(0, 0, 0, 0.4); }
+  55%, 75% { box-shadow: 0 0 16px rgba(0, 0, 0, 0.8); }
+  100%     { box-shadow: 0 0  2px rgba(0, 0, 0, 0.4); }
 }
 
 @keyframes business-card-vim-cursor-blink {
