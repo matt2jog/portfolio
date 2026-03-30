@@ -65,32 +65,12 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
     >
       <div className="w-full h-full bg-[#0B0C10] text-white overflow-visible rounded-2xl relative">
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/5 to-transparent pointer-events-none z-20" />
-        <div className="absolute top-8 left-8 right-0 flex items-center justify-between z-30 pointer-events-none">
-          <img 
-            src="/logo-flat.png" 
+        <div className="absolute top-8 left-8 right-0 flex items-center z-30 pointer-events-none">
+          <img
+            src="/logo-flat.png"
             alt="Ouroboros Logo"
             className="w-12 h-auto object-contain mix-blend-screen opacity-50"
           />
-          <span
-            className="bcard-persistent-accent"
-            data-testid="bcard-persistent-accent"
-            aria-hidden="true"
-          >
-            <svg
-              className="bcard-accent__svg"
-              viewBox="0 0 40 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path 
-                d="M 4 12 H 36 M 28 6 L 36 12 L 28 18" 
-                stroke="rgba(0, 255, 255, 0.45)" 
-                strokeWidth="1.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
         </div>
 
         <div className="absolute inset-0 bg-[#0B0C10] overflow-hidden rounded-2xl">
@@ -105,6 +85,11 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
         >
           {/* Inner explicitly sized content to prevent layout squish */}
           <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
+            {/* Dog-ear fold — bottom-right corner */}
+            <div className="bcard-dogear" aria-hidden="true">
+              <div className="bcard-dogear__flap" />
+              <div className="bcard-dogear__shadow" />
+            </div>
             {/* Center Headshot */}
             <div className="flex flex-col items-center w-full z-10 relative mt-8">
               <div className="w-44 h-44 rounded-full overflow-hidden border-2 border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,255,255,0.15)] relative">

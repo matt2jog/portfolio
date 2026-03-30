@@ -407,27 +407,48 @@
   }
 }
 
-/* ── Persistent Arrow Accent (Interactive) ── */
-@keyframes bcard-accent-push {
-  0%   { transform: translateX(-6px); opacity: 0.4; }
-  50%  { transform: translateX(0px);  opacity: 0.8; }
-  100% { transform: translateX(-6px); opacity: 0.4; }
-}
-
-.bcard-persistent-accent {
-  display: block;
+/* ── Dog-ear corner fold (bottom-right of bcard front) ── */
+.bcard-dogear {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
   pointer-events: none;
   user-select: none;
-  margin-right: 1rem; /* Closer to edge as requested */
-  opacity: 1;
+  z-index: 40;
 }
 
-.bcard-accent__svg {
-  width: 44px;
-  height: 24px;
-  display: block;
-  animation: bcard-accent-push 2s ease-in-out infinite;
-  will-change: transform, opacity;
+/* The folded flap — a triangle via border trick */
+.bcard-dogear__flap {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  /* bottom-right triangle: transparent top-left sides, visible bottom-right */
+  border-width: 36px 36px 0 0;
+  border-color: transparent #1e2028 transparent transparent;
+  border-radius: 0 0 14px 0;
+  filter: drop-shadow(-2px -2px 3px rgba(0, 255, 255, 0.18));
+}
+
+/* Crease line along the fold diagonal */
+.bcard-dogear__shadow {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(
+    135deg,
+    transparent 40%,
+    rgba(0, 255, 255, 0.25) 50%,
+    rgba(0, 255, 255, 0.08) 55%,
+    transparent 65%
+  );
+  border-radius: 0 0 14px 0;
 }
 
 @keyframes business-card-vim-cursor-blink {
