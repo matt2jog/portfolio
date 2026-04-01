@@ -3,7 +3,6 @@ import ThreeDCard from "./ThreeDCard";
 import { Phone, Mail, Globe } from "lucide-react";
 import { usePersonalInformation } from "@/hooks/use-personal-information";
 import { useBio } from "@/hooks/use-bio";
-import headshotImg from "@/assets/images/headshot.jpg";
 
 interface BusinessCardProps {
   isOpen?: boolean;
@@ -107,7 +106,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/5 to-transparent pointer-events-none z-20" />
         <div className="absolute top-8 left-8 right-0 flex items-center z-30 pointer-events-none">
           <img
-            src="/logo-flat.png"
+            src="/assets/logo-flat.png"
             alt="Ouroboros Logo"
             className="w-12 h-auto object-contain mix-blend-screen opacity-50"
           />
@@ -141,7 +140,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
             <div className="flex flex-col items-center w-full z-10 relative mt-8">
               <div className="w-44 h-44 rounded-full overflow-hidden border-2 border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,255,255,0.15)] relative">
                 <img 
-                  src={headshotImg} 
+                  src="/assets/headshot.jpg" 
                   alt="Matthew Tujague"
                   className="w-full h-full object-cover"
                 />
