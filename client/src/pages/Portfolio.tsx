@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BlueprintCard } from "@/components/BlueprintCard";
+import ProjectChat from "@/components/ProjectChat";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type TransitionEvent, useCallback, useMemo, useRef, useState } from "react";
@@ -80,6 +81,7 @@ export default function Portfolio() {
   const [faceKs, setFaceKs] = useState([0, 1, 2, -1]);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [animDuration, setAnimDuration] = useState(1200);
+  const [chatProject, setChatProject] = useState<{ id: string; title: string; description: string; tech: string[] } | null>(null);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
   const groupIndex = ((rotationStep % totalGroups) + totalGroups) % totalGroups;
@@ -244,6 +246,11 @@ export default function Portfolio() {
                                 : undefined
                             }
                             isActiveFace={faceIndex === rotationIndex}
+                            onChatOpen={
+                              faceIndex === rotationIndex
+                                ? () => setChatProject({ id: project.id, title: project.title, description: project.description, tech: project.tech })
+                                : undefined
+                            }
                           />
                         ) : (
                           <div
@@ -283,6 +290,13 @@ export default function Portfolio() {
 
         <Footer />
       </main>
+
+      {chatProject && (
+        <ProjectChat
+          project={chatProject}
+          onClose={() => setChatProject(null)}
+        />
+      )}
     </div>
   );
 }

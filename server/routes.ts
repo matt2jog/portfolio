@@ -30,9 +30,11 @@ import {
   experiences,
   insertExperienceSchema,
   updateExperienceSchema,
+  aiModels,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { Agent } from "./agent";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 let projectsCache: { data: any[]; timestamp: number } | null = null;
@@ -220,6 +222,82 @@ export async function registerRoutes(
 
     projectsCache = { data, timestamp: Date.now() };
     res.json(data);
+  });
+
+  // ========== AI CHAT ==========
+
+  app.get("/api/public/ai-models", async (_req, res) => {
+    const rows = await db.select({
+      id: aiModels.id,
+      label: aiModels.label,
+      modelId: aiModels.modelId,
+      provider: aiModels.provider,
+    }).from(aiModels)
+      .where(eq(aiModels.enabled, true))
+      .orderBy(asc(aiModels.position));
+    res.json(rows);
+  });
+
+  app.post("/api/public/chat", async (req, res) => {
+    const gradientToken = process.env.GRADIENT_AI_TOKEN;
+    if (!gradientToken) {
+      return res.status(503).json({ error: "AI chat is not configured" });
+    }
+
+    const { projectId, modelId, messages } = req.body;
+    if (!projectId || !modelId || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "projectId, modelId, and messages[] are required" });
+    }
+
+    // Validate model is allowed
+    const [model] = await db.select().from(aiModels)
+      .where(eq(aiModels.modelId, modelId))
+      .limit(1);
+    if (!model || !model.enabled) {
+      return res.status(400).json({ error: "Model not available" });
+    }
+
+    // Get project + system prompt
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const systemPrompt = project.aiSystemPrompt
+      || `You are an AI assistant for the project "${project.title}". Description: ${project.description}. Tech stack: ${(project.tech || []).join(", ")}. Answer questions about this project helpfully and concisely.`;
+
+    const agent = new Agent({
+      modelId,
+      token: gradientToken,
+      systemPrompt,
+      tools: [],
+    });
+
+    const userMessages = messages.slice(-20).map((m: any) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+      content: String(m.content).slice(0, 4000),
+    }));
+
+    try {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      for await (const delta of agent.stream(userMessages)) {
+        const chunk = JSON.stringify({ choices: [{ delta: { content: delta } }] });
+        res.write(`data: ${chunk}\n\n`);
+      }
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(500).json({ error: "AI request failed", details: err.message });
+      } else {
+        res.end();
+      }
+    }
   });
 
   app.get("/api/public/bio", async (_req, res) => {
