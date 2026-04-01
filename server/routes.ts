@@ -5,9 +5,11 @@ import { db } from "./db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadMarkdownAsHtml } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
+import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
 import {
   allSkills,
   bio,
+  bioParagraphs,
   insertBioSchema,
   insertAllSkillSchema,
   insertPortfolioSkillSchema,
@@ -31,6 +33,19 @@ import {
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+
+const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
+let projectsCache: { data: any[]; timestamp: number } | null = null;
+
+function getProjectsCacheTtlMs() {
+  const parsed = Number.parseInt(process.env.PROJECTS_CACHE_TTL_MINUTES || "", 10);
+  const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PROJECTS_CACHE_TTL_MINUTES;
+  return minutes * 60_000;
+}
+
+function invalidateProjectsCache() {
+  projectsCache = null;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -173,18 +188,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/public/linkedin/activity", async (_req, res) => {
+    try {
+      const data = await getLinkedinActivity();
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch LinkedIn activity", details: err.message });
+    }
+  });
+
+  app.get("/api/public/linkedin/timeline", async (req, res) => {
+    try {
+      const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
+      const data = await getLinkedinTimeline(page);
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch LinkedIn timeline", details: err.message });
+    }
+  });
+
   app.get("/api/public/projects", async (_req, res) => {
+    const ttlMs = getProjectsCacheTtlMs();
+    if (projectsCache && Date.now() - projectsCache.timestamp <= ttlMs) {
+      return res.json(projectsCache.data);
+    }
+
     const rows = await db.select().from(projects)
       .where(sql`${projects.deletedAt} IS NULL`)
       .orderBy(asc(projects.position));
-    res.json(await hydrateProjectsWithBullets(rows));
+    const data = await hydrateProjectsWithBullets(rows);
+
+    projectsCache = { data, timestamp: Date.now() };
+    res.json(data);
   });
 
   app.get("/api/public/bio", async (_req, res) => {
     const [row] = await db.select().from(bio)
       .orderBy(desc(bio.createdAt))
       .limit(1);
-    res.json(row || { headline: "", description: "", paragraph: "" });
+    if (!row) return res.json({ headline: "", paragraphs: [] });
+    const paragraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, row.id))
+      .orderBy(asc(bioParagraphs.position));
+    res.json({ ...row, paragraphs });
   });
 
   app.get("/api/public/skills", async (_req, res) => {
@@ -260,6 +306,7 @@ export async function registerRoutes(
       );
     }
 
+    invalidateProjectsCache();
     await logAudit(req, "project.create", { ...created, xyzBullets: projectBullets });
     res.json({ ...created, xyzBullets: projectBullets });
   });
@@ -290,6 +337,7 @@ export async function registerRoutes(
       );
     }
 
+    invalidateProjectsCache();
     await logAudit(req, "project.update", { id: projectId, ...parsed.data, xyzBullets: projectBullets });
     res.json({ ...updated, xyzBullets: projectBullets });
   });
@@ -302,6 +350,7 @@ export async function registerRoutes(
         archivedBy: req.user?.id 
       })
       .where(eq(projects.id, projectId));
+    invalidateProjectsCache();
     await logAudit(req, "project.archive", { id: projectId });
     res.json({ ok: true });
   });
@@ -315,6 +364,7 @@ export async function registerRoutes(
         )
       );
     });
+    invalidateProjectsCache();
     await logAudit(req, "project.reorder", { order });
     res.json({ ok: true });
   });
@@ -323,7 +373,11 @@ export async function registerRoutes(
     const [row] = await db.select().from(bio)
       .orderBy(desc(bio.createdAt))
       .limit(1);
-    res.json(row || { headline: "", description: "", paragraph: "" });
+    if (!row) return res.json({ headline: "", paragraphs: [] });
+    const paragraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, row.id))
+      .orderBy(asc(bioParagraphs.position));
+    res.json({ ...row, paragraphs });
   });
 
   app.get("/api/admin/personal-information", requireAdmin, async (_req, res) => {
@@ -369,26 +423,62 @@ export async function registerRoutes(
     const parsed = insertBioSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
-    const [result] = await db.insert(bio).values(parsed.data).returning();
+    const { paragraphs: paragraphTexts, ...bioData } = parsed.data;
+    const [result] = await db.insert(bio).values(bioData).returning();
+
+    if (paragraphTexts && paragraphTexts.length > 0) {
+      await db.insert(bioParagraphs).values(
+        paragraphTexts.map((content, index) => ({
+          bioId: result.id,
+          content,
+          position: index,
+        }))
+      );
+    }
+
+    const savedParagraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, result.id))
+      .orderBy(asc(bioParagraphs.position));
 
     await logAudit(req, "bio.create", parsed.data);
-    res.json(result);
+    res.json({ ...result, paragraphs: savedParagraphs });
   });
 
   app.put("/api/admin/bio", requireAdmin, async (req, res) => {
     const parsed = insertBioSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
-    const [result] = await db.insert(bio).values(parsed.data).returning();
+    const { paragraphs: paragraphTexts, ...bioData } = parsed.data;
+    const [result] = await db.insert(bio).values(bioData).returning();
+
+    if (paragraphTexts && paragraphTexts.length > 0) {
+      await db.insert(bioParagraphs).values(
+        paragraphTexts.map((content, index) => ({
+          bioId: result.id,
+          content,
+          position: index,
+        }))
+      );
+    }
+
+    const savedParagraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, result.id))
+      .orderBy(asc(bioParagraphs.position));
 
     await logAudit(req, "bio.update", parsed.data);
-    res.json(result);
+    res.json({ ...result, paragraphs: savedParagraphs });
   });
 
   app.get("/api/admin/bio/versions", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(bio)
       .orderBy(desc(bio.createdAt));
-    res.json(rows);
+    const hydrated = await Promise.all(rows.map(async (row) => {
+      const paragraphs = await db.select().from(bioParagraphs)
+        .where(eq(bioParagraphs.bioId, row.id))
+        .orderBy(asc(bioParagraphs.position));
+      return { ...row, paragraphs };
+    }));
+    res.json(hydrated);
   });
 
   app.post("/api/admin/bio/:id/restore", requireAdmin, async (req, res) => {
@@ -403,12 +493,28 @@ export async function registerRoutes(
 
     const [restored] = await db.insert(bio).values({
       headline: version.headline,
-      description: version.description,
-      paragraph: version.paragraph,
     }).returning();
 
+    const oldParagraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, bioVersionId))
+      .orderBy(asc(bioParagraphs.position));
+
+    if (oldParagraphs.length > 0) {
+      await db.insert(bioParagraphs).values(
+        oldParagraphs.map((p) => ({
+          bioId: restored.id,
+          content: p.content,
+          position: p.position,
+        }))
+      );
+    }
+
+    const restoredParagraphs = await db.select().from(bioParagraphs)
+      .where(eq(bioParagraphs.bioId, restored.id))
+      .orderBy(asc(bioParagraphs.position));
+
     await logAudit(req, "bio.restore", { sourceId: bioVersionId, restoredId: restored.id });
-    res.json(restored);
+    res.json({ ...restored, paragraphs: restoredParagraphs });
   });
 
   app.delete("/api/admin/bio/:id", requireAdmin, async (req, res) => {
@@ -422,6 +528,7 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Bio version not found" });
     }
 
+    await db.delete(bioParagraphs).where(eq(bioParagraphs.bioId, bioVersionId));
     await db.delete(bio).where(eq(bio.id, bioVersionId));
     await logAudit(req, "bio.delete", { id: bioVersionId });
     res.json({ ok: true });
@@ -665,6 +772,7 @@ export async function registerRoutes(
       .set({ deletedAt: null, archivedBy: null })
       .where(eq(projects.id, projectId))
       .returning();
+    invalidateProjectsCache();
     await logAudit(req, "project.restore", { id: projectId });
     res.json(restored);
   });

@@ -13,7 +13,7 @@ export function ActivityToggle({ activeTab, onChange }: ActivityToggleProps) {
   ] as const;
 
   return (
-    <div className="flex space-x-1 bg-muted/50 p-1.5 rounded-full mx-auto w-fit mb-12 shadow-inner border border-border/50 backdrop-blur-sm">
+    <div className="flex space-x-1 bg-background/60 p-1.5 rounded-full mx-auto w-fit mb-12 shadow-inner border border-border/50 backdrop-blur-sm">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -29,7 +29,7 @@ export function ActivityToggle({ activeTab, onChange }: ActivityToggleProps) {
             {isActive && (
               <motion.div
                 layoutId="active-tab"
-                className="absolute inset-0 bg-background shadow-md border border-border/50 rounded-full"
+                className="absolute inset-0 bg-muted/80 shadow-md border border-border/50 rounded-full"
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />
             )}

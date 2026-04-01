@@ -36,27 +36,30 @@ export default function TimelineDesktop({ backbone, experiences, sides, depths }
             style={{ height: ROW_HEIGHT, width: 120 }}
           >
             {node.type === "year" && (
-              <div className="pb-2 w-max text-center z-20 bg-[#0A0A0C]">
-                <div className="inline-flex items-center justify-center rounded-full border-2 border-white py-1.5 px-10 font-display font-bold text-2xl tracking-widest text-[#00FFFF] bg-[#0A0A0C]">
+              <div className="pb-2 w-max text-center z-20">
+                <div className="inline-flex items-center justify-center rounded-full border-2 border-white/60 py-1.5 px-10 font-display font-bold text-2xl tracking-widest text-[#00FFFF] backdrop-blur-md bg-white/[0.03]">
                   {node.year}
                 </div>
               </div>
             )}
 
             {node.type === "ellipsis" && (
-              <span className="font-mono text-[13px] font-bold tracking-widest text-[#00FFFF] bg-[#0A0A0C] z-10 px-2 uppercase py-1">
+              <span className="font-mono text-[13px] font-bold tracking-widest text-[#00FFFF]/70 z-10 px-2 uppercase py-1">
                 ...
               </span>
             )}
 
             {node.type === "month" && (
-              <span className="font-mono text-[13px] tracking-wide text-gray-300 bg-[#0A0A0C] z-10 px-2 uppercase py-1">
+              <span className="font-mono text-[11px] tracking-[0.2em] text-gray-400 z-10 px-3 py-0.5 uppercase">
                 {MONTHS[node.month]}
               </span>
             )}
 
+            {i > 0 && (
+              <div className="absolute top-0 h-[calc(50%-14px)] border-l border-[#00FFFF]/30 -z-10" />
+            )}
             {i < backbone.length - 1 && (
-              <div className="absolute top-[50%] h-[100%] border-l border-dashed border-[#00FFFF]/30 -z-10" />
+              <div className="absolute bottom-0 h-[calc(50%-14px)] border-l border-[#00FFFF]/30 -z-10" />
             )}
           </div>
         ))}

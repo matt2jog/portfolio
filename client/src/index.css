@@ -408,7 +408,7 @@
 }
 
 /* ── Dog-ear peel corner — adapted from rhythm191/dyoNoZQ ── */
-/* Technique: overflow:hidden container matches card bg, rotated rects slide in/out */
+/* Animates 0→75% of range; hover pushes to 100% and holds */
 
 .bcard-dogear {
   display: block;
@@ -417,10 +417,10 @@
   right: 0;
   height: 80px;
   width: 80px;
-  background: #0B0C10;
+  background: transparent;
   z-index: 40;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
   user-select: none;
   border-radius: 0 0 16px 0;
 }
@@ -433,10 +433,28 @@
   top: 0;
   left: 0;
   background-color: transparent;
-  transform: translate(0, -32px) rotate(45deg) translate(-24px, -4px);
-  z-index: 3;
+  z-index: 2;
   overflow: hidden;
   animation: bcard-paper 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+.bcard-dogear--hovered .bcard-dogear__paper,
+.bcard-dogear--releasing .bcard-dogear__paper {
+  animation: none;
+  transition: transform 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bcard-dogear--hovered .bcard-dogear__paper {
+  transform: translate(0, -36px) rotate(45deg) translate(-104px, -4px);
+}
+
+.bcard-dogear--releasing .bcard-dogear__paper {
+  transform: translate(0, -35px) rotate(45deg) translate(-84px, -4px);
+}
+
+/* Resume animation starting at 75% keyframe mark (2.7s into 3.6s cycle) */
+.bcard-dogear--resuming .bcard-dogear__paper {
+  animation: bcard-paper 3.6s cubic-bezier(0.77, 0, 0.175, 1) -2.7s infinite;
 }
 
 .bcard-dogear__paper::before {
@@ -447,7 +465,7 @@
   bottom: 0;
   right: 0;
   transform: translate(144px, 32px) rotate(50deg);
-  background-color: #1e2130;
+  background-color: #0B0C10;
 }
 
 /* Shadow at the crease */
@@ -458,10 +476,27 @@
   top: 0;
   left: 0;
   background-color: transparent;
-  transform: translate(0, -36px) rotate(45deg) translate(-54px, 0);
   z-index: 2;
   overflow: hidden;
   animation: bcard-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+.bcard-dogear--hovered .bcard-dogear__shadow,
+.bcard-dogear--releasing .bcard-dogear__shadow {
+  animation: none;
+  transition: transform 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bcard-dogear--hovered .bcard-dogear__shadow {
+  transform: translate(0, -36px) rotate(45deg) translate(-100px, 0);
+}
+
+.bcard-dogear--releasing .bcard-dogear__shadow {
+  transform: translate(0, -36px) rotate(45deg) translate(-88.5px, 0);
+}
+
+.bcard-dogear--resuming .bcard-dogear__shadow {
+  animation: bcard-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) -2.7s infinite;
 }
 
 .bcard-dogear__shadow::before {
@@ -482,11 +517,28 @@
   height: 160px;
   bottom: -80px;
   right: -80px;
-  background-color: #252836;
-  transform: rotate(45deg) translate(5px, 0);
-  overflow: hidden;
-  z-index: 3;
+  background-color: #1a1d2e;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 4;
   animation: bcard-back 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+.bcard-dogear--hovered .bcard-dogear__back,
+.bcard-dogear--releasing .bcard-dogear__back {
+  animation: none;
+  transition: transform 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bcard-dogear--hovered .bcard-dogear__back {
+  transform: rotate(45deg) translate(-38px, 0);
+}
+
+.bcard-dogear--releasing .bcard-dogear__back {
+  transform: rotate(45deg) translate(-27.25px, 0);
+}
+
+.bcard-dogear--resuming .bcard-dogear__back {
+  animation: bcard-back 3.6s cubic-bezier(0.77, 0, 0.175, 1) -2.7s infinite;
 }
 
 .bcard-dogear__back::before {
@@ -497,31 +549,50 @@
   width: 7px;
   height: 96px;
   background-color: transparent;
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
   animation: bcard-back-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) infinite;
 }
 
+.bcard-dogear--hovered .bcard-dogear__back::before,
+.bcard-dogear--releasing .bcard-dogear__back::before {
+  animation: none;
+  transition: box-shadow 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bcard-dogear--hovered .bcard-dogear__back::before {
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.8);
+}
+
+.bcard-dogear--releasing .bcard-dogear__back::before {
+  box-shadow: 0 0 12.5px rgba(0, 0, 0, 0.7);
+}
+
+.bcard-dogear--resuming .bcard-dogear__back::before {
+  animation: bcard-back-shadow 3.6s cubic-bezier(0.77, 0, 0.175, 1) -2.7s infinite;
+}
+
+/* Keyframes: animate between 0% and 75% of the full range */
 @keyframes bcard-paper {
   0%,  20% { transform: translate(0, -32px) rotate(45deg) translate(-24px,  -4px); }
-  55%, 75% { transform: translate(0, -36px) rotate(45deg) translate(-104px, -4px); }
+  55%, 75% { transform: translate(0, -35px) rotate(45deg) translate(-84px,  -4px); }
   100%     { transform: translate(0, -32px) rotate(45deg) translate(-24px,  -4px); }
 }
 
 @keyframes bcard-shadow {
   0%,  20% { transform: translate(0, -36px) rotate(45deg) translate(-54px,  0); }
-  55%, 75% { transform: translate(0, -36px) rotate(45deg) translate(-100px, 0); }
+  55%, 75% { transform: translate(0, -36px) rotate(45deg) translate(-88.5px, 0); }
   100%     { transform: translate(0, -36px) rotate(45deg) translate(-54px,  0); }
 }
 
 @keyframes bcard-back {
   0%,  20% { transform: rotate(45deg) translate(  5px, 0); }
-  55%, 75% { transform: rotate(45deg) translate(-38px, 0); }
+  55%, 75% { transform: rotate(45deg) translate(-27.25px, 0); }
   100%     { transform: rotate(45deg) translate(  5px, 0); }
 }
 
 @keyframes bcard-back-shadow {
   0%,  20% { box-shadow: 0 0  2px rgba(0, 0, 0, 0.4); }
-  55%, 75% { box-shadow: 0 0 16px rgba(0, 0, 0, 0.8); }
+  55%, 75% { box-shadow: 0 0 12.5px rgba(0, 0, 0, 0.7); }
   100%     { box-shadow: 0 0  2px rgba(0, 0, 0, 0.4); }
 }
 

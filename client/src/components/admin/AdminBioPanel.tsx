@@ -4,10 +4,23 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+interface BioParagraph {
+  id: string;
+  bioId: string;
+  content: string;
+  position: number;
+}
+
+interface BioRecord {
+  id: string;
+  headline: string;
+  paragraphs: BioParagraph[];
+  createdAt: string;
+}
+
 interface BioFormState {
   headline: string;
-  description: string;
-  paragraph: string;
+  paragraphs: string[];
 }
 
 function getErrorMessage(error: unknown): string {
@@ -21,25 +34,29 @@ export default function AdminBioPanel() {
 
   const [bioForm, setBioForm] = useState<BioFormState>({
     headline: "",
-    description: "",
-    paragraph: "",
+    paragraphs: [""],
   });
-  const [selectedVersion, setSelectedVersion] = useState<any | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<(BioRecord & { index: number }) | null>(null);
 
   useEffect(() => {
     const bioData = bioQuery.data as any;
     if (bioData) {
+      const paragraphs = Array.isArray(bioData.paragraphs) && bioData.paragraphs.length > 0
+        ? bioData.paragraphs.map((p: any) => p.content)
+        : [""];
       setBioForm({
         headline: bioData.headline || "",
-        description: bioData.description || "",
-        paragraph: bioData.paragraph || "",
+        paragraphs,
       });
     }
   }, [bioQuery.data]);
 
   const saveBio = useMutation({
     mutationFn: async () => {
-      await apiRequest("PUT", "/api/admin/bio", bioForm);
+      await apiRequest("PUT", "/api/admin/bio", {
+        headline: bioForm.headline,
+        paragraphs: bioForm.paragraphs.filter((p) => p.trim() !== ""),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bio"] });
@@ -79,7 +96,36 @@ export default function AdminBioPanel() {
     },
   });
 
-  const versions = Array.isArray(bioVersionsQuery.data) ? bioVersionsQuery.data : [];
+  const updateParagraph = (index: number, value: string) => {
+    setBioForm((prev) => {
+      const updated = [...prev.paragraphs];
+      updated[index] = value;
+      return { ...prev, paragraphs: updated };
+    });
+  };
+
+  const addParagraph = () => {
+    setBioForm((prev) => ({ ...prev, paragraphs: [...prev.paragraphs, ""] }));
+  };
+
+  const removeParagraph = (index: number) => {
+    setBioForm((prev) => ({
+      ...prev,
+      paragraphs: prev.paragraphs.filter((_, i) => i !== index),
+    }));
+  };
+
+  const moveParagraph = (index: number, direction: -1 | 1) => {
+    setBioForm((prev) => {
+      const updated = [...prev.paragraphs];
+      const target = index + direction;
+      if (target < 0 || target >= updated.length) return prev;
+      [updated[index], updated[target]] = [updated[target], updated[index]];
+      return { ...prev, paragraphs: updated };
+    });
+  };
+
+  const versions = Array.isArray(bioVersionsQuery.data) ? (bioVersionsQuery.data as BioRecord[]) : [];
 
   return (
     <section className="space-y-6 border border-white/10 p-4 sm:p-6">
@@ -92,20 +138,63 @@ export default function AdminBioPanel() {
           placeholder="Headline"
           className="bg-black/60 border border-white/20 p-2"
         />
-        <textarea
-          value={bioForm.description}
-          onChange={(e) => setBioForm((prev) => ({ ...prev, description: e.target.value }))}
-          placeholder="Description"
-          className="bg-black/60 border border-white/20 p-2"
-          rows={3}
-        />
-        <textarea
-          value={bioForm.paragraph}
-          onChange={(e) => setBioForm((prev) => ({ ...prev, paragraph: e.target.value }))}
-          placeholder="Paragraph"
-          className="bg-black/60 border border-white/20 p-2"
-          rows={2}
-        />
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-white/60">Paragraphs</label>
+            <button
+              type="button"
+              onClick={addParagraph}
+              className="px-3 py-1 text-xs border border-white/20 hover:border-white/60"
+            >
+              + Add Paragraph
+            </button>
+          </div>
+
+          {bioForm.paragraphs.map((paragraph, index) => (
+            <div key={index} className="flex gap-2 items-start">
+              <div className="flex flex-col gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => moveParagraph(index, -1)}
+                  disabled={index === 0}
+                  className="px-1.5 py-0.5 text-xs border border-white/20 hover:border-white/60 disabled:opacity-30"
+                  title="Move up"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveParagraph(index, 1)}
+                  disabled={index === bioForm.paragraphs.length - 1}
+                  className="px-1.5 py-0.5 text-xs border border-white/20 hover:border-white/60 disabled:opacity-30"
+                  title="Move down"
+                >
+                  ↓
+                </button>
+              </div>
+              <div className="flex-1">
+                <div className="text-[10px] text-white/40 mb-1">Paragraph {index + 1}</div>
+                <textarea
+                  value={paragraph}
+                  onChange={(e) => updateParagraph(index, e.target.value)}
+                  placeholder={`Paragraph ${index + 1}`}
+                  className="w-full bg-black/60 border border-white/20 p-2"
+                  rows={3}
+                />
+              </div>
+              {bioForm.paragraphs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeParagraph(index)}
+                  className="px-2 py-1 text-xs border border-red-500/40 text-red-400 hover:border-red-500/80 shrink-0 mt-5"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       <button
@@ -118,7 +207,7 @@ export default function AdminBioPanel() {
       <div className="space-y-3 border border-white/10 p-4">
         <h3 className="text-lg font-semibold">Bio History ({versions.length})</h3>
         <div className="space-y-2">
-          {versions.map((version: any, index: number) => (
+          {versions.map((version, index) => (
             <div
               key={version.id}
               className="border border-white/10 p-3 cursor-pointer hover:border-white/40"
@@ -130,7 +219,9 @@ export default function AdminBioPanel() {
               </div>
               <div className="text-sm">
                 <div className="font-semibold">{version.headline}</div>
-                <div className="text-white/70 text-xs mt-1">{version.description}</div>
+                <div className="text-white/70 text-xs mt-1">
+                  {(version.paragraphs || []).length} paragraph{(version.paragraphs || []).length !== 1 ? "s" : ""}
+                </div>
               </div>
             </div>
           ))}
@@ -150,12 +241,19 @@ export default function AdminBioPanel() {
                   <span className="text-white/50">Created:</span> {new Date(selectedVersion.createdAt).toLocaleString()}
                 </div>
                 <div>
-                  <span className="text-white/50">Description:</span>
-                  <div className="mt-1 whitespace-pre-wrap">{selectedVersion.description || "—"}</div>
-                </div>
-                <div>
-                  <span className="text-white/50">Paragraph:</span>
-                  <div className="mt-1 whitespace-pre-wrap">{selectedVersion.paragraph || "—"}</div>
+                  <span className="text-white/50">Paragraphs:</span>
+                  <div className="mt-1 space-y-2">
+                    {(selectedVersion.paragraphs || []).length > 0 ? (
+                      selectedVersion.paragraphs.map((p, i) => (
+                        <div key={p.id} className="pl-3 border-l border-white/10">
+                          <span className="text-white/40 text-xs">#{i + 1}</span>
+                          <div className="whitespace-pre-wrap">{p.content}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-white/40 italic">No paragraphs</div>
+                    )}
+                  </div>
                 </div>
               </div>
 

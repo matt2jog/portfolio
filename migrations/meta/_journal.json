@@ -8,6 +8,20 @@
       "when": 1774726449972,
       "tag": "0000_mute_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774966616763,
+      "tag": "0001_odd_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774969601003,
+      "tag": "0002_lumpy_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

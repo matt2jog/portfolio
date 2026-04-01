@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ThreeDCard from "./ThreeDCard";
 import { Phone, Mail, Globe } from "lucide-react";
 import { usePersonalInformation } from "@/hooks/use-personal-information";
+import { useBio } from "@/hooks/use-bio";
 import headshotImg from "@/assets/images/headshot.jpg";
 
 interface BusinessCardProps {
@@ -14,8 +15,23 @@ const PROFESSIONAL_SUMMARY_EASTER_EGG_TYPE_MS = 90;
 
 export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
   const { data: info } = usePersonalInformation();
-  const bioParagraphs = info?.shortBio?.split('\n').filter(Boolean) ?? [];
+  const { data: bioData } = useBio();
+  const bioParagraphs = bioData?.paragraphs?.map((p) => p.content) ?? [];
   const [easterEggText, setEasterEggText] = useState("");
+  const [dogearState, setDogearState] = useState<'idle' | 'hovered' | 'releasing' | 'resuming'>('idle');
+  const dogearRef = useRef<HTMLDivElement>(null);
+
+  const handleDogearMouseEnter = useCallback(() => setDogearState('hovered'), []);
+  const handleDogearMouseLeave = useCallback(() => setDogearState('releasing'), []);
+
+  useEffect(() => {
+    if (dogearState !== 'releasing') return;
+    const el = dogearRef.current?.querySelector('.bcard-dogear__back');
+    if (!el) return;
+    const onEnd = () => setDogearState('resuming');
+    el.addEventListener('transitionend', onEnd, { once: true });
+    return () => el.removeEventListener('transitionend', onEnd);
+  }, [dogearState]);
 
   useEffect(() => {
     let revealTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -86,7 +102,13 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
           {/* Inner explicitly sized content to prevent layout squish */}
           <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
             {/* Dog-ear peel — bottom-right corner */}
-            <div className="bcard-dogear" aria-hidden="true">
+            <div
+              ref={dogearRef}
+              className={`bcard-dogear${dogearState !== 'idle' ? ` bcard-dogear--${dogearState}` : ''}`}
+              aria-hidden="true"
+              onMouseEnter={handleDogearMouseEnter}
+              onMouseLeave={handleDogearMouseLeave}
+            >
               <div className="bcard-dogear__paper" />
               <div className="bcard-dogear__shadow" />
               <div className="bcard-dogear__back" />
@@ -131,13 +153,13 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
             <div className="z-10 w-full max-w-[220px] mx-auto">
               <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 font-sans text-[11px] text-gray-300 items-center">
                 <Phone size={14} className="text-[#00FFFF] opacity-70" />
-                <span className="tracking-widest">{info?.phoneFormatted || "(732) 639-3889"}</span>
-                
+                <a href={`tel:${info?.phone || "7326393889"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.phoneFormatted || "(732) 639-3889"}</a>
+
                 <Mail size={14} className="text-[#00FFFF] opacity-70" />
-                <span className="tracking-widest">{info?.email || "matthew@2jog.dev"}</span>
-                
+                <a href={`mailto:${info?.email || "matthew@2jog.dev"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.email || "matthew@2jog.dev"}</a>
+
                 <Globe size={14} className="text-[#00FFFF] opacity-70" />
-                <span className="tracking-widest">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</span>
+                <a href={info?.portfolioUrl || "https://2jog.dev"} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</a>
               </div>
             </div>
           </div>
@@ -152,8 +174,8 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
           }`}
         >
           {/* Inner explicitly sized content */}
-          <div 
-            className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col justify-center overflow-y-auto px-8 py-10 md:px-12"
+          <div
+            className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col overflow-y-auto px-8 pt-20 pb-10 md:px-12 md:justify-center"
             style={{ transform: "rotateY(180deg)" }}
           >
             {/* Accent bar on left seam (which appears on right side when rotated, but since we are looking at the back, we can just align it conceptually) */}
@@ -164,14 +186,15 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
                 Professional Summary
               </h2>
 
-              <div className="font-sans text-sm md:text-base leading-7 md:leading-8 text-gray-300 space-y-5">
+              <div className="font-sans text-sm md:text-base leading-7 md:leading-8 text-gray-300">
                 {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
-                  <p key={index}>
+                  <span key={index}>
                     {paragraph}
                     {index === bioParagraphs.length - 1 && easterEggText.length === 0 ? (
                       <span className="business-card-vim-cursor" aria-hidden="true" />
                     ) : null}
-                  </p>
+                    {index < bioParagraphs.length - 1 && <><br /><br /></>}
+                  </span>
                 )) : (
                   <p>Loading summary...</p>
                 )}
