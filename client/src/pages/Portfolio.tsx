@@ -183,7 +183,7 @@ export default function Portfolio() {
           <div className="max-w-7xl mx-auto">
             <div className="flex items-end justify-between mb-[calc(var(--spacing)*30)]">
               <div>
-                <h1 className="text-4xl md:text-5xl font-display font-bold text-white mb-4">
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
                   DEPLOYED <br />
                   <span className="text-gray-500">MODULES</span>
                 </h1>

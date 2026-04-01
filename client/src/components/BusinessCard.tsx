@@ -131,7 +131,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
 
             {/* Name / Title */}
             <div className="text-center w-full z-10 flex flex-col items-center">
-              <h1 className="font-display font-semibold text-white text-[24px] leading-none tracking-tight drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] uppercase whitespace-nowrap">
+              <h1 className="font-semibold text-white text-[24px] leading-none drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] uppercase whitespace-nowrap">
                 {info?.name || "Matthew Tujague"}
               </h1>
               <h2 className="text-[#e2e2e2] font-sans tracking-[0.15em] text-[10px] uppercase font-light mt-4 mb-5 text-center leading-[1.6]">
@@ -151,7 +151,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
 
             {/* Contact Info — grid for perfect icon alignment */}
             <div className="z-10 w-full max-w-[220px] mx-auto">
-              <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 font-sans text-[11px] text-gray-300 items-center">
+              <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 text-[11px] text-gray-300 items-center">
                 <Phone size={14} className="text-[#00FFFF] opacity-70" />
                 <a href={`tel:${info?.phone || "7326393889"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.phoneFormatted || "(732) 639-3889"}</a>
 
@@ -186,7 +186,7 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
                 Professional Summary
               </h2>
 
-              <div className="font-sans text-sm md:text-base leading-7 md:leading-8 text-gray-300">
+              <div className="text-sm md:text-base leading-7 md:leading-8 text-gray-300">
                 {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
                   <span key={index}>
                     {paragraph}

@@ -25,7 +25,7 @@ export default function TimelineDesktop({ backbone, experiences, sides, depths }
   const sharedCardPos = BRACKET_BASE_OFFSET + BRACKET_PRONG_LENGTH + maxDepthPx + baseConnectorWidth + connectorGapToCard;
 
   return (
-    <div className="relative w-full max-w-5xl mx-auto py-20 font-sans">
+    <div className="relative w-full max-w-5xl mx-auto py-20">
 
       {/* CENTRAL TIMELINE BACKBONE */}
       <div className="relative flex flex-col items-center z-10 w-full">
@@ -129,7 +129,7 @@ export default function TimelineDesktop({ backbone, experiences, sides, depths }
                 style={isLeft ? { right: sharedCardPos } : { left: sharedCardPos }}
               >
                 <div className="mb-1 flex items-start justify-between gap-4 pr-2">
-                  <h4 className="font-display font-semibold text-lg md:text-xl text-white tracking-tight leading-none">
+                  <h4 className="font-semibold text-lg md:text-xl text-white leading-none">
                     {exp.role.split(" | ")[0]}
                   </h4>
                   <span className="shrink-0 pt-0.5 font-mono text-xs tracking-wider text-[#00FFFF] uppercase opacity-[0.12] group-hover:opacity-25 transition-opacity">
@@ -143,7 +143,7 @@ export default function TimelineDesktop({ backbone, experiences, sides, depths }
                   )}
                 </div>
 
-                <p className="font-sans text-gray-300 text-sm leading-relaxed whitespace-pre-line group-hover:text-white transition-colors duration-300">
+                <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line group-hover:text-white transition-colors duration-300">
                   {exp.description}
                 </p>
 

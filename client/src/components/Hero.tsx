@@ -15,7 +15,7 @@ export function Hero() {
           className="space-y-6"
         >
 
-          <h1 className="text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tighter text-white leading-[0.9]">
+          <h1 className="text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter text-white leading-[0.9]">
             FULL STACK <br />
             <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white">
               ENGINEER

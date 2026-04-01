@@ -55,7 +55,7 @@ export default function About() {
     : mockExperiences;
 
   return (
-    <div className="min-h-screen bg-background text-gray-100 font-sans selection:bg-[#00FFFF]/30 relative">
+    <div className="min-h-screen bg-background text-foreground selection:bg-[#00FFFF]/30 relative">
 
       {/* Dithered background */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">

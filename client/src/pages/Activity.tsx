@@ -134,11 +134,12 @@ export default function Activity() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-8"
           >
-            <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4 text-glow transition-all duration-300">
-              Activity Feed
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              ACTIVITY<span> </span>
+              <span className="text-gray-500">FEED</span>
             </h1>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Real-time feed of my latest contributions, projects, and professional updates.
+            <p className="text-muted-foreground font-mono text-sm max-w-2xl mx-auto">
+              Real-time contributions, projects, and professional updates.
             </p>
           </motion.div>
 
@@ -408,7 +409,7 @@ function ContributionGraph({ weeks }: { weeks: any[] }) {
       className="space-y-6"
     >
       <div className="p-6 rounded-2xl border border-border/50 bg-card/40 backdrop-blur-md">
-        <h2 className="text-xl font-display font-bold flex items-center gap-2 mb-6">
+        <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
           <TrendingUp className="w-5 h-5 text-primary" />
           Contribution Activity
           <span className="text-sm font-normal text-muted-foreground ml-2">(past year)</span>
@@ -450,7 +451,7 @@ function ContributionGraph({ weeks }: { weeks: any[] }) {
       </div>
 
       <div className="p-6 rounded-2xl border border-border/50 bg-card/40 backdrop-blur-md">
-        <h2 className="text-xl font-display font-bold flex items-center gap-2 mb-6">
+        <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
           <Calendar className="w-5 h-5 text-primary" />
           Weekly Breakdown
           <span className="text-sm font-normal text-muted-foreground ml-2">(last 12 weeks)</span>
@@ -588,7 +589,7 @@ function GithubTimeline() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-display font-bold flex items-center gap-2">
+      <h2 className="text-2xl font-bold flex items-center gap-2">
         <Clock className="w-6 h-6" /> Event Timeline
       </h2>
 
@@ -822,7 +823,7 @@ function LinkedinTimeline({ isMobile }: { isMobile: boolean }) {
 
   return (
     <div className="space-y-6">
-      <h2 className={`font-display font-bold flex items-center gap-2 ${isMobile ? "text-xl" : "text-2xl"}`}>
+      <h2 className={`font-bold flex items-center gap-2 ${isMobile ? "text-xl" : "text-2xl"}`}>
         <Clock className={isMobile ? "w-5 h-5" : "w-6 h-6"} /> LinkedIn Timeline
       </h2>
 
@@ -931,9 +932,8 @@ function LinkedinTimelineEventCard({
 
   return (
     <div
-      className={`group rounded-xl border border-border/30 bg-card/30 hover:bg-card/60 hover:border-border/60 transition-all duration-200 relative overflow-hidden ${
-        isMobile ? "p-3.5" : "flex items-start gap-3 p-3.5"
-      }`}
+      className={`group rounded-xl border border-border/30 bg-card/30 hover:bg-card/60 hover:border-border/60 transition-all duration-200 relative overflow-hidden ${isMobile ? "p-3.5" : "flex items-start gap-3 p-3.5"
+        }`}
     >
       {isMobile ? (
         <div className="mb-3 flex items-start gap-3">
@@ -1032,11 +1032,10 @@ function LinkedinTimelineEventCard({
 
         {imageUrls.length > 0 && (
           <div
-            className={`mt-3 ${
-              isMobile
-                ? "flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory"
-                : `grid gap-2 ${imageUrls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`
-            }`}
+            className={`mt-3 ${isMobile
+              ? "flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory"
+              : `grid gap-2 ${imageUrls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`
+              }`}
           >
             {imageUrls.slice(0, 4).map((imageUrl: string, index: number) => (
               <button
@@ -1047,21 +1046,19 @@ function LinkedinTimelineEventCard({
                   e.stopPropagation();
                   onOpenImageViewer(event, imageUrls, index);
                 }}
-                className={`overflow-hidden rounded-xl border border-border/40 bg-muted/20 text-left ${
-                  isMobile
-                    ? "w-[76vw] max-w-[76vw] shrink-0 snap-start"
-                    : !isMobile && imageUrls.length === 3 && index === 0
-                      ? "col-span-2"
-                      : ""
-                }`}
+                className={`overflow-hidden rounded-xl border border-border/40 bg-muted/20 text-left ${isMobile
+                  ? "w-[76vw] max-w-[76vw] shrink-0 snap-start"
+                  : !isMobile && imageUrls.length === 3 && index === 0
+                    ? "col-span-2"
+                    : ""
+                  }`}
               >
                 <img
                   src={imageUrl}
                   alt={`${event.title} image ${index + 1}`}
                   loading="lazy"
-                  className={`w-full transition-transform duration-300 group-hover:scale-[1.015] ${
-                    isMobile ? "h-[24vh] max-h-[24vh] min-h-[18vh] object-cover" : "h-48 object-cover"
-                  }`}
+                  className={`w-full transition-transform duration-300 group-hover:scale-[1.015] ${isMobile ? "h-[24vh] max-h-[24vh] min-h-[18vh] object-cover" : "h-48 object-cover"
+                    }`}
                 />
               </button>
             ))}
@@ -1173,9 +1170,8 @@ function LinkedinImageViewer({
             </div>
 
             <div
-              className={`relative flex items-center justify-center overflow-hidden bg-black/70 ${
-                isMobile ? "flex-1" : "min-h-[65vh] rounded-2xl"
-              }`}
+              className={`relative flex items-center justify-center overflow-hidden bg-black/70 ${isMobile ? "flex-1" : "min-h-[65vh] rounded-2xl"
+                }`}
               onTouchStart={(event) => {
                 touchStartXRef.current = event.changedTouches[0]?.clientX ?? null;
               }}
@@ -1225,9 +1221,8 @@ function LinkedinImageViewer({
                     key={`${viewer.eventId}-thumb-${index}`}
                     type="button"
                     onClick={() => onSelectIndex(index)}
-                    className={`overflow-hidden rounded-lg border ${
-                      index === viewer.activeIndex ? "border-primary" : "border-border/40"
-                    }`}
+                    className={`overflow-hidden rounded-lg border ${index === viewer.activeIndex ? "border-primary" : "border-border/40"
+                      }`}
                     aria-label={`View image ${index + 1}`}
                   >
                     <img
@@ -1288,7 +1283,7 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
       <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform duration-300">
         {icon}
       </div>
-      <h4 className="text-4xl font-bold font-display tracking-tight text-glow-sm">{value}</h4>
+      <h4 className="text-4xl font-bold tracking-tight text-glow-sm">{value}</h4>
       <p className="text-sm text-muted-foreground mt-2 font-medium">{label}</p>
     </div>
   );

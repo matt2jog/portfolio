@@ -17,7 +17,7 @@ interface Props {
 
 export default function TimelineMobile({ experiences }: Props) {
   return (
-    <div className="w-full flex flex-col gap-4 px-2 py-10 font-sans">
+    <div className="w-full flex flex-col gap-4 px-2 py-10">
       {experiences.map((exp, idx) => {
         const accent = getPaletteColor(idx, experiences.length);
         const accentGlow = getPaletteColor(idx, experiences.length, 0.15);
@@ -58,7 +58,7 @@ export default function TimelineMobile({ experiences }: Props) {
                 "--accent-glow": accentGlow,
               } as React.CSSProperties}
             >
-              <h4 className="font-display font-semibold text-lg text-white tracking-tight leading-tight mb-1">
+              <h4 className="font-semibold text-lg text-white leading-tight mb-1">
                 {exp.role.split(" | ")[0]}
               </h4>
 
