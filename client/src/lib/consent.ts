@@ -19,6 +19,24 @@ const CONSENT_EXPIRY_MS = 12 * 30 * 24 * 60 * 60 * 1000; // 12 months
 export function isGlobalOptOutEnabled(): boolean {
   if (typeof window === "undefined") return false;
 
+  const params = new URLSearchParams(window.location.search);
+  const noTrackingParam = params.get("no-tracking");
+  if (noTrackingParam && noTrackingParam.toLowerCase() === "true") {
+    // If they hit us with the query param, auto-store a decline 
+    // overriding any previous consent state.
+    const existingConsent = getStoredConsent();
+    if (!existingConsent || existingConsent.user_action !== "reject_all") {
+      storeConsent({
+        timestamp: new Date().toISOString(),
+        jurisdiction_detected: existingConsent?.jurisdiction_detected || null,
+        policy_version: existingConsent?.policy_version || "1.0",
+        categories_accepted: ["essential"],
+        user_action: "reject_all",
+      });
+    }
+    return true;
+  }
+
   const nav = window.navigator as Navigator & {
     globalPrivacyControl?: boolean;
     msDoNotTrack?: string;
