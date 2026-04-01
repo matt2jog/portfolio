@@ -7,7 +7,9 @@
       "Bash(npx tsc:*)",
       "Bash(npx vite:*)",
       "Bash(npx drizzle-kit:*)",
-      "Bash(npx supabase:*)"
+      "Bash(npx supabase:*)",
+      "Bash(python3 -c \"from PIL import Image; img = Image.open\\(''client/public/logo-flat.png''\\); print\\(img.size\\)\")",
+      "Bash(python3 -c \"import struct,zlib; d=open\\(''client/public/logo-flat.png'',''rb''\\).read\\(\\); print\\(struct.unpack\\(''>II'',d[16:24]\\)\\)\")"
     ]
   }
 }

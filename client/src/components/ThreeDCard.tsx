@@ -99,6 +99,47 @@ function ThreeDCard({
     setTransform(DEFAULT_TRANSFORM);
   }, []);
 
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!cardRef.current || isFlipping) return;
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const rect = cardRef.current.getBoundingClientRect();
+      const { width, height, left, top } = rect;
+
+      const touchX = touch.clientX - left;
+      const touchY = touch.clientY - top;
+
+      const xPct = touchX / width - 0.5;
+      const yPct = touchY / height - 0.5;
+
+      const newRotateX = yPct * -1 * maxRotation;
+      const newRotateY = xPct * maxRotation;
+
+      setTransform(prev => ({
+        ...prev,
+        rotateX: newRotateX,
+        rotateY: newRotateY,
+        glowX: (touchX / width) * 100,
+        glowY: (touchY / height) * 100,
+        shadowX: enableShadow ? newRotateY * 0.8 : 0,
+        shadowY: enableShadow ? 20 - newRotateX * 0.6 : 20,
+        isHovered: true,
+      }));
+    },
+    [maxRotation, enableShadow, isFlipping]
+  );
+
+  const handleTouchStart = useCallback(() => {
+    if (isFlipping) return;
+    setTransform(prev => ({ ...prev, isHovered: true }));
+  }, [isFlipping]);
+
+  const handleTouchEnd = useCallback(() => {
+    setTransform(DEFAULT_TRANSFORM);
+  }, []);
+
   const finalRotateY = transform.rotateY + (isFlipped ? 180 : 0);
   const shouldUseFlipTransition = isFlipping || prevIsFlipped.current !== isFlipped;
   
@@ -147,6 +188,10 @@ function ThreeDCard({
         onMouseMove={handleMouseMove}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onTouchMove={handleTouchMove}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
         style={cardStyle}
         className={`relative bg-gray-800 ${roundedClass} overflow-visible transition-[border-radius] duration-500 w-full h-full`}
         role="img"

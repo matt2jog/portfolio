@@ -113,13 +113,6 @@ function TimeChip() {
 const BASE_HUE = 200; /* starting hue */
 const HUE_JUMP = 46;  /* degrees to advance per card (adjust for more/less contrast) */
 
-function hashStringToHue(input: string) {
-  // keep for backward-compatibility / fallbacks, but we prefer index-based sequencing
-  let h = 0;
-  for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
 function hueForIndex(i: number) {
   return (BASE_HUE + i * HUE_JUMP) % 360;
 }
@@ -165,6 +158,7 @@ function NicheCarousel({ links }: { links: LinkItem[] }) {
             return (
               <motion.div
                 key={item.id}
+                style={{ willChange: "transform, opacity" }}
                 initial={reduced ? { opacity: 0 } : {
                   scale: pos === "center" ? 0.8 : 0.6,
                   x: pos === "right" ? 150 : pos === "left" ? -150 : 0,
@@ -188,9 +182,10 @@ function NicheCarousel({ links }: { links: LinkItem[] }) {
                   href={item.href}
                   target={item.href.startsWith("http") ? "_blank" : undefined}
                   rel={item.href.startsWith("http") ? "noreferrer" : undefined}
+                  onClick={pos !== "center" ? (e) => { e.preventDefault(); pos === "right" ? next() : prev(); } : undefined}
                   className={cn(
                     "flex h-full w-full flex-col items-center justify-between rounded-3xl border bg-card/80 p-6 text-center shadow-2xl transition-colors hover:bg-card/90",
-                    pos !== "center" && "pointer-events-none select-none"
+                    pos !== "center" && "cursor-pointer select-none"
                   )}
                   style={{
                     boxShadow: pos === "center"
@@ -198,12 +193,12 @@ function NicheCarousel({ links }: { links: LinkItem[] }) {
                       : "0 10px 30px -15px rgba(0,0,0,0.5), 0 0 0 1px hsl(var(--border))",
                   }}
                 >
-                  <div className="absolute inset-0 overflow-hidden rounded-3xl opacity-20">
+                  {pos === "center" && (
                     <div
-                      className="absolute -top-1/2 -left-1/2 h-full w-full blur-3xl"
-                      style={{ background: `radial-gradient(circle, ${hslFromHue(hue)} 0%, transparent 70%)` }}
+                      className="absolute inset-0 overflow-hidden rounded-3xl opacity-20 pointer-events-none"
+                      style={{ background: `radial-gradient(circle at 50% 0%, ${hslFromHue(hue)}, transparent 70%)` }}
                     />
-                  </div>
+                  )}
 
                   <div className="relative z-10 flex flex-col items-center gap-4">
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-background/50 border border-border shadow-inner">

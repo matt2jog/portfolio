@@ -21,11 +21,11 @@ export function Navbar() {
 
       {/* Desktop links */}
       <div className="hidden md:flex items-center gap-2 sm:gap-4 font-mono text-[10px] md:text-sm tracking-widest text-gray-400">
-        <Link href="/" className="hover:text-primary transition-colors px-2">2jog.home</Link>
-        <Link href="/portfolio" className="hover:text-primary transition-colors px-2">2jog.portfolio</Link>
-        <Link href="/tree" className="hover:text-primary transition-colors px-2">2jog.linktree</Link>
-        <Link href="/about" className="hover:text-primary transition-colors px-2">2jog.about</Link>
-        <Link href="/activity" className="hover:text-primary transition-colors px-2">2jog.activity</Link>
+        <Link href="/" className="hover:text-primary transition-colors px-3 py-2">2jog.home</Link>
+        <Link href="/portfolio" className="hover:text-primary transition-colors px-3 py-2">2jog.portfolio</Link>
+        <Link href="/tree" className="hover:text-primary transition-colors px-3 py-2">2jog.linktree</Link>
+        <Link href="/about" className="hover:text-primary transition-colors px-3 py-2">2jog.about</Link>
+        <Link href="/activity" className="hover:text-primary transition-colors px-3 py-2">2jog.activity</Link>
       </div>
 
       {/* Mobile hamburger */}

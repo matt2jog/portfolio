@@ -192,7 +192,7 @@ export default function Portfolio() {
                   {currentProjectPage}/{totalGroups}]
                 </p>
               </div>
-              <div className="flex gap-4">
+              <div className="hidden md:flex gap-4">
                 <button
                   onClick={prevFace}
                   className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
@@ -214,7 +214,7 @@ export default function Portfolio() {
               </div>
             </div>
 
-            <div className="project-cube-scene mx-auto mb-20">
+            <div className="project-cube-scene mx-auto">
               <div
                 className="project-cube"
                 style={{
@@ -256,6 +256,27 @@ export default function Portfolio() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="flex md:hidden justify-center gap-4 mt-8 mb-20">
+              <button
+                onClick={prevFace}
+                className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
+              >
+                <ChevronLeft
+                  size={24}
+                  className="group-active:scale-90 transition-transform"
+                />
+              </button>
+              <button
+                onClick={nextFace}
+                className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
+              >
+                <ChevronRight
+                  size={24}
+                  className="group-active:scale-90 transition-transform"
+                />
+              </button>
             </div>
           </div>
         </section>

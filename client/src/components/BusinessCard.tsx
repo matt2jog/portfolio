@@ -20,6 +20,30 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
   const [easterEggText, setEasterEggText] = useState("");
   const [dogearState, setDogearState] = useState<'idle' | 'hovered' | 'releasing' | 'resuming'>('idle');
   const dogearRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showTopBlur, setShowTopBlur] = useState(false);
+  const [showBottomBlur, setShowBottomBlur] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowTopBlur(el.scrollTop > 0);
+    setShowBottomBlur(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowTopBlur(false);
+      setShowBottomBlur(false);
+      return;
+    }
+    const timer = setTimeout(checkScroll, 700);
+    return () => clearTimeout(timer);
+  }, [isOpen, checkScroll]);
+
+  useEffect(() => {
+    if (isOpen) checkScroll();
+  }, [bioParagraphs, isOpen, checkScroll]);
 
   const handleDogearMouseEnter = useCallback(() => setDogearState('hovered'), []);
   const handleDogearMouseLeave = useCallback(() => setDogearState('releasing'), []);
@@ -175,43 +199,71 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
         >
           {/* Inner explicitly sized content */}
           <div
-            className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col overflow-y-auto px-8 pt-20 pb-10 md:px-12 md:justify-center"
+            className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col"
             style={{ transform: "rotateY(180deg)" }}
           >
-            {/* Accent bar on left seam (which appears on right side when rotated, but since we are looking at the back, we can just align it conceptually) */}
+            {/* Accent bar on left seam */}
             <div className="absolute top-0 left-0 w-[1px] h-full bg-gradient-to-b from-[#00FFFF]/20 via-[#00FFFF]/10 to-transparent md:block hidden" />
 
-            <div className="max-w-2xl mx-auto w-full">
-              <h2 className="font-sans text-xs uppercase tracking-[0.2em] text-[#00FFFF] mb-6 opacity-90 text-center md:text-left">
-                Professional Summary
-              </h2>
+            {/* Fixed spacer matching logo height (w-12 square at top-8 → bottom at 80px) */}
+            <div className="h-20 flex-shrink-0" />
 
-              <div className="text-sm md:text-base leading-7 md:leading-8 text-gray-300">
-                {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
-                  <span key={index}>
-                    {paragraph}
-                    {index === bioParagraphs.length - 1 && easterEggText.length === 0 ? (
+            {/* Scrollable content bounded below logo area */}
+            <div className="flex-1 relative min-h-0">
+              <div
+                aria-hidden="true"
+                className="absolute top-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
+                style={{
+                  opacity: showTopBlur ? 1 : 0,
+                  background: 'linear-gradient(to bottom, #0B0C10 10%, transparent)',
+                }}
+              />
+              <div
+                ref={scrollRef}
+                className="h-full overflow-y-auto px-8 pb-10 md:px-12"
+                onScroll={checkScroll}
+              >
+              <div className="max-w-2xl mx-auto w-full md:py-4">
+                <h2 className="font-sans text-xs uppercase tracking-[0.2em] text-[#00FFFF] mb-6 opacity-90 text-center md:text-left">
+                  Professional Summary
+                </h2>
+
+                <div className="text-sm md:text-base leading-7 md:leading-8 text-gray-300">
+                  {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
+                    <span key={index}>
+                      {paragraph}
+                      {index === bioParagraphs.length - 1 && easterEggText.length === 0 ? (
+                        <span className="business-card-vim-cursor" aria-hidden="true" />
+                      ) : null}
+                      {index < bioParagraphs.length - 1 && <><br /><br /></>}
+                    </span>
+                  )) : (
+                    <p>Loading summary...</p>
+                  )}
+                  {easterEggText.length > 0 ? (
+                    <p className="font-mono text-[#00FFFF]/85 business-card-summary-easter-egg">
+                      {easterEggText}
                       <span className="business-card-vim-cursor" aria-hidden="true" />
-                    ) : null}
-                    {index < bioParagraphs.length - 1 && <><br /><br /></>}
-                  </span>
-                )) : (
-                  <p>Loading summary...</p>
-                )}
-                {easterEggText.length > 0 ? (
-                  <p className="font-mono text-[#00FFFF]/85 business-card-summary-easter-egg">
-                    {easterEggText}
-                    <span className="business-card-vim-cursor" aria-hidden="true" />
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
+                    </p>
+                  ) : null}
+                </div>{/* end text-sm */}
+              </div>{/* end max-w-2xl */}
+              </div>{/* end scrollRef */}
+              <div
+                aria-hidden="true"
+                className="absolute bottom-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
+                style={{
+                  opacity: showBottomBlur ? 1 : 0,
+                  background: 'linear-gradient(to top, #0B0C10 10%, transparent)',
+                }}
+              />
+            </div>{/* end flex-1 relative */}
+          </div>{/* end rotateY inner */}
+        </div>{/* end back face wrapper */}
 
-        </div>
+        </div>{/* end absolute inset-0 */}
 
-      </div>
+      </div>{/* end outer card */}
     </ThreeDCard>
   );
 }
