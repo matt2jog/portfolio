@@ -17,13 +17,13 @@ interface Props {
 
 export default function TimelineMobile({ experiences }: Props) {
   return (
-    <div className="w-full flex flex-col gap-4 px-2 py-10 font-sans">
+    <div className="w-full flex flex-col gap-4 px-2 py-10">
       {experiences.map((exp, idx) => {
         const accent = getPaletteColor(idx, experiences.length);
         const accentGlow = getPaletteColor(idx, experiences.length, 0.15);
 
         return (
-          <div key={exp.id} className="w-full flex">
+          <div key={exp.id} className="w-full flex" style={{ minHeight: '30svh' }}>
             {/* Dates split along left side: end date top, duration centered, start date bottom */}
             <div className="relative shrink-0 flex flex-col items-center justify-between py-3" style={{ width: 40 }}>
               <span
@@ -58,20 +58,20 @@ export default function TimelineMobile({ experiences }: Props) {
                 "--accent-glow": accentGlow,
               } as React.CSSProperties}
             >
-              <h4 className="font-display font-semibold text-lg text-white tracking-tight leading-tight mb-1">
+              <h4 className="font-semibold text-lg text-white leading-tight mb-1">
                 {exp.role.split(" | ")[0]}
               </h4>
 
-            <div className="flex flex-col text-xs font-mono text-gray-400 mb-3 gap-0.5">
-              <span className="uppercase tracking-wider text-[#00FFFF]">{exp.company}</span>
-              {exp.role.includes(" | ") && (
-                <span className="opacity-80">{exp.role.split(" | ")[1]}</span>
-              )}
-            </div>
+              <div className="flex flex-col text-xs font-mono text-gray-400 mb-3 gap-0.5">
+                <span className="uppercase tracking-wider text-[#00FFFF]">{exp.company}</span>
+                {exp.role.includes(" | ") && (
+                  <span className="opacity-80">{exp.role.split(" | ")[1]}</span>
+                )}
+              </div>
 
-            <p className="text-gray-300 text-[13px] leading-relaxed whitespace-pre-line">
-              {exp.description}
-            </p>
+              <p className="text-gray-300 text-[13px] leading-relaxed whitespace-pre-line">
+                {exp.description}
+              </p>
 
               {exp.isActive && (
                 <span className="absolute top-3 right-3 flex w-2 h-2">

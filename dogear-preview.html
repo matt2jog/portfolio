@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dog-ear Preview</title>
+  <style>
+    body {
+      background: #0a0a0c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      font-family: sans-serif;
+    }
+
+    .card {
+      width: 340px;
+      height: 640px;
+      background: #0B0C10;
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(0,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: white;
+    }
+
+    /* Subtle top shimmer */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 160px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.04), transparent);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* Logo placeholder */
+    .logo {
+      position: absolute;
+      top: 32px;
+      left: 32px;
+      width: 48px;
+      height: 32px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      opacity: 0.5;
+    }
+
+    /* Headshot placeholder */
+    .headshot {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 176px;
+      height: 176px;
+      border-radius: 50%;
+      background: rgba(0,255,255,0.08);
+      border: 2px solid rgba(0,255,255,0.3);
+      box-shadow: 0 0 20px rgba(0,255,255,0.15);
+    }
+
+    /* Name/title */
+    .name {
+      position: absolute;
+      bottom: 160px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .name h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin: 0;
+    }
+    .name p {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #e2e2e2;
+      margin: 12px 0 0;
+    }
+
+    /* Divider */
+    .divider {
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 68%;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent);
+    }
+    .divider::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 25%;
+      height: 1px;
+      background: #00FFFF;
+      box-shadow: 0 0 8px rgba(0,255,255,0.8);
+    }
+
+    /* ── Dog-ear ── */
+    .bcard-dogear {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 36px;
+      height: 36px;
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    .bcard-dogear__flap {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 36px 36px 0 0;
+      border-color: transparent #1e2028 transparent transparent;
+      border-radius: 0 0 14px 0;
+      filter: drop-shadow(-2px -2px 3px rgba(0, 255, 255, 0.18));
+    }
+
+    .bcard-dogear__shadow {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(
+        135deg,
+        transparent 40%,
+        rgba(0, 255, 255, 0.25) 50%,
+        rgba(0, 255, 255, 0.08) 55%,
+        transparent 65%
+      );
+      border-radius: 0 0 14px 0;
+    }
+
+    /* Annotation */
+    .label {
+      position: absolute;
+      bottom: -50px;
+      right: -10px;
+      color: rgba(0,255,255,0.6);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      white-space: nowrap;
+    }
+    .wrapper {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div class="logo"></div>
+      <div class="headshot"></div>
+      <div class="name">
+        <h1>Matthew Tujague</h1>
+        <p>Software Engineer<br><span style="font-size:8px;color:rgba(0,255,255,0.8)">NJ-NY-PA</span></p>
+      </div>
+      <div class="divider"></div>
+
+      <!-- Dog-ear -->
+      <div class="bcard-dogear" aria-hidden="true">
+        <div class="bcard-dogear__flap"></div>
+        <div class="bcard-dogear__shadow"></div>
+      </div>
+    </div>
+    <div class="label">← dog-ear corner</div>
+  </div>
+</body>
+</html>

@@ -45,10 +45,15 @@ export const xyzBullets = pgTable("xyz_bullets", {
 export const bio = pgTable("bio", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   headline: text("headline"),
-  description: text("description"),
-  paragraph: text("paragraph"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const bioParagraphs = pgTable("bio_paragraphs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bioId: varchar("bio_id").notNull(),
+  content: text("content").notNull(),
+  position: integer("position").notNull().default(0),
 });
 
 export const skillsGroup = pgTable("skills_group", {
@@ -100,8 +105,13 @@ export const updateProjectSchema = insertProjectSchema.partial();
 
 export const insertBioSchema = createInsertSchema(bio).pick({
   headline: true,
-  description: true,
-  paragraph: true,
+}).extend({
+  paragraphs: z.array(z.string()).optional(),
+});
+
+export const insertBioParagraphSchema = createInsertSchema(bioParagraphs).pick({
+  content: true,
+  position: true,
 });
 
 export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
@@ -138,6 +148,21 @@ export const githubTimelineEvents = pgTable("github_timeline_events", {
 
 export const insertGithubTimelineEventSchema = createInsertSchema(githubTimelineEvents).omit({ id: true, createdAt: true });
 
+export const linkedinTimelineEvents = pgTable("linkedin_timeline_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  extId: varchar("ext_id").notNull().unique(),
+  type: text("type").notNull(), // post, repost, article
+  title: text("title").notNull(),
+  description: text("description"),
+  url: text("url"),
+  source: text("source").notNull(),
+  timestamp: timestamp("timestamp").notNull(),
+  meta: jsonb("meta").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertLinkedinTimelineEventSchema = createInsertSchema(linkedinTimelineEvents).omit({ id: true, createdAt: true });
+
 export const personalInformation = pgTable("personal_information", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().default("Matthew Tujague"),
@@ -162,10 +187,12 @@ export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type XyzBullet = typeof xyzBullets.$inferSelect;
 export type Bio = typeof bio.$inferSelect;
+export type BioParagraph = typeof bioParagraphs.$inferSelect;
 export type SkillsGroup = typeof skillsGroup.$inferSelect;
 export type AllSkill = typeof allSkills.$inferSelect;
 export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
 export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
+export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 
 export const experiences = pgTable("experiences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

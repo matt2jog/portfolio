@@ -32,7 +32,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "devpost",
       label: "Devpost",
       href: info.devpostUrl,
-      description: "Showcase of hackathon projects and innovative builds.",
+      description: "Showcase of some of my hackathon wins and some projects.",
       icon: <Code2 className="h-6 w-6" aria-hidden="true" />,
       chip: "builds",
     },
@@ -40,7 +40,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "portfolio",
       label: "Portfolio",
       href: info.portfolioUrl,
-      description: "The canonical landing and showcase of my engineering work.",
+      description: "My most carefully curated projects, on a pretty display.",
       icon: <Globe className="h-6 w-6" aria-hidden="true" />,
       chip: "static",
     },
@@ -48,7 +48,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "linkedin",
       label: "LinkedIn",
       href: info.linkedinUrl,
-      description: "Professional networking and industry connections.",
+      description: "Professional networking and industry connections. Lets Connect!",
       icon: <Linkedin className="h-6 w-6" aria-hidden="true" />,
       chip: "network",
     },
@@ -56,7 +56,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "github",
       label: "GitHub",
       href: info.githubUrl,
-      description: "Technical repositories, open-source contributions, and security notes.",
+      description: "Technical repositories, open-source contributions, and hackathon winning ideas.",
       icon: <Github className="h-6 w-6" aria-hidden="true" />,
       chip: "public",
     },
@@ -64,7 +64,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "phone",
       label: "Phone",
       href: `tel:${info.phone}`,
-      description: "Middletown, NJ resident. Direct contact for urgent matters.",
+      description: "Feel free to reach out!",
       icon: <AtSign className="h-6 w-6" aria-hidden="true" />,
       chip: "mobile",
     },
@@ -72,7 +72,7 @@ function getLinks(info: PersonalInformation | undefined): LinkItem[] {
       id: "email",
       label: "Email",
       href: `mailto:${info.email}`,
-      description: "Direct line for engineering inquiries and collaborations.",
+      description: "Feel free to reach out!",
       icon: <Mail className="h-6 w-6" aria-hidden="true" />,
       chip: "direct",
     },
@@ -287,7 +287,7 @@ export default function Tree() {
         >
           <div className="flex flex-col items-center gap-6">
             <div className="flex flex-col items-center gap-4">
-              <h1 className="text-balance text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
+              <h1 className="text-balance text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-transparent">
                 {info.name}
               </h1>
               <p className="max-w-[500px] text-pretty text-base text-muted-foreground leading-relaxed">

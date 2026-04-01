@@ -46,7 +46,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
                 />
               </div>
               
-              <div className="text-[#00ffff] font-sans text-center text-[9px] tracking-[0.2em] uppercase leading-tight mt-2 opacity-90 drop-shadow-[0_0_8px_rgba(0,255,255,0.5)]">
+              <div className="text-[#00ffff] text-center text-[9px] tracking-[0.2em] uppercase leading-tight mt-2 opacity-90 drop-shadow-[0_0_8px_rgba(0,255,255,0.5)]">
                 Continuous Improvement
                 <br />
                 Continuous Development
@@ -55,7 +55,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
 
             {/* Name / Title */}
             <div className="text-center w-full mt-12">
-              <h1 className="font-display font-semibold text-white text-[25px] leading-[1.05] tracking-tight drop-shadow-[0_2px_12px_rgba(255,255,255,0.2)] uppercase whitespace-nowrap">
+              <h1 className="font-semibold text-white text-[25px] leading-[1.05] drop-shadow-[0_2px_12px_rgba(255,255,255,0.2)] uppercase whitespace-nowrap">
                 {info?.name || "Matthew Tujague"}
               </h1>
               <div className="flex flex-col items-center mt-3 w-full relative">
@@ -70,7 +70,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
             </div>
 
             {/* Contact Info */}
-            <div className="w-full flex-1 flex flex-col justify-end gap-3 font-sans text-xs text-gray-300 mt-auto pb-4 pl-4 pr-1">
+            <div className="w-full flex-1 flex flex-col justify-end gap-3 text-xs text-gray-300 mt-auto pb-4 pl-4 pr-1">
               <div className="flex items-center gap-4">
                 <Phone size={14} className="text-[#00FFFF] stroke-[2px]" />
                 <span className="tracking-wide">{info?.phoneFormatted || "(732) 639-3889"}</span>
@@ -107,7 +107,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
                   className="w-full h-full object-contain mix-blend-screen"
                 />
             </div>
-            <div className="font-sans text-[9px] text-[#00FFFF]/50 tracking-[0.4em] uppercase">{info?.name || "Matthew Tujague"} // {info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</div>
+            <div className="text-[9px] text-[#00FFFF]/50 tracking-[0.4em] uppercase">{info?.name || "Matthew Tujague"} // {info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</div>
           </div>
         </Html>
       </mesh>

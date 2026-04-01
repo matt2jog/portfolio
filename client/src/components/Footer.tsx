@@ -6,7 +6,7 @@ export default function Footer() {
 
   return (
     <footer id="contact" className="py-20 border-t border-white/10 bg-black text-center">
-      <h2 className="text-2xl font-display font-bold text-white mb-8">INITIALIZE HANDSHAKE</h2>
+      <h2 className="text-2xl font-bold text-white mb-8">INITIALIZE HANDSHAKE</h2>
       {info && (
         <div className="flex justify-center gap-8 mb-12">
           <a href={`mailto:${info.email}`} className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">EMAIL</a>

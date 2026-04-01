@@ -22,8 +22,8 @@ export function Navbar() {
       {/* Desktop links */}
       <div className="hidden md:flex items-center gap-2 sm:gap-4 font-mono text-[10px] md:text-sm tracking-widest text-gray-400">
         <Link href="/" className="hover:text-primary transition-colors px-2">2jog.home</Link>
-        <Link href="/tree" className="hover:text-primary transition-colors px-2">2jog.linktree</Link>
         <Link href="/portfolio" className="hover:text-primary transition-colors px-2">2jog.portfolio</Link>
+        <Link href="/tree" className="hover:text-primary transition-colors px-2">2jog.linktree</Link>
         <Link href="/about" className="hover:text-primary transition-colors px-2">2jog.about</Link>
         <Link href="/activity" className="hover:text-primary transition-colors px-2">2jog.activity</Link>
       </div>
@@ -47,8 +47,8 @@ export function Navbar() {
       >
         <nav className="flex flex-col gap-2">
           <Link href="/" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.home</Link>
-          <Link href="/tree" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.linktree</Link>
           <Link href="/portfolio" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.portfolio</Link>
+          <Link href="/tree" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.linktree</Link>
           <Link href="/about" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.about</Link>
           <Link href="/activity" className="px-3 py-2 rounded hover:bg-white/3 transition-colors" onClick={() => setOpen(false)}>2jog.activity</Link>
         </nav>

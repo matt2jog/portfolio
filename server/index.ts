@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { detectCountryFromIP, extractClientIp, isLocalIp } from "./geoip";
+import { warmLinkedinActivityCache } from "./linkedin";
 
 const app = express();
 const httpServer = createServer(app);
@@ -131,6 +132,7 @@ app.use((req, res, next) => {
     httpServer.listen(port, () => {
       log(`serving on port ${port}`);
       log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+      warmLinkedinActivityCache();
     });
   } else {
     httpServer.listen(
@@ -142,6 +144,7 @@ app.use((req, res, next) => {
       () => {
         log(`serving on port ${port}`);
         log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+        warmLinkedinActivityCache();
       },
     );
   }

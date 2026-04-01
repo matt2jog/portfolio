@@ -55,23 +55,27 @@ export default function About() {
     : mockExperiences;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] text-gray-100 font-sans selection:bg-[#00FFFF]/30 relative">
+    <div className="min-h-screen bg-background text-foreground selection:bg-[#00FFFF]/30 relative">
 
-      {/* Background Grid Pattern */}
-      <div
-        className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)`,
-          backgroundSize: '40px 40px'
-        }}
-      />
+      {/* Dithered background */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute inset-0 system-grid opacity-70" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(900px 520px at 15% 15%, hsl(var(--primary)/.12), transparent 55%), radial-gradient(760px 420px at 95% 30%, hsl(var(--accent)/.14), transparent 55%), radial-gradient(900px 700px at 50% 100%, hsl(var(--primary)/.05), transparent 55%)",
+          }}
+        />
+        <div className="absolute inset-0 system-noise" />
+      </div>
 
       <Navbar />
 
       <main className="relative z-10 pt-32 pb-24 w-full max-w-7xl mx-auto px-6 md:px-12 lg:px-20 flex flex-col gap-16">
 
         {/* Hero: Flippable Business Card */}
-        <div className="flex justify-center w-full relative z-20">
+        <div className="flex flex-col items-center w-full relative z-20">
           <div
             className={`
               relative flex-shrink-0 cursor-pointer select-none
@@ -83,6 +87,20 @@ export default function About() {
             onClick={() => setIsOpen(prev => !prev)}
           >
             <BusinessCard isOpen={isOpen} />
+          </div>
+
+          <div
+            aria-hidden="true"
+            className="mt-8 flex flex-col items-center gap-3 text-[10px] font-medium uppercase tracking-[0.38em] text-cyan-100/65"
+          >
+            <span>More Below</span>
+            <div className="relative flex h-14 w-10 items-start justify-center overflow-hidden">
+              <div className="absolute top-0 h-7 w-px bg-gradient-to-b from-cyan-300/0 via-cyan-200/85 to-cyan-200/20 animate-pulse" />
+              <div className="mt-5 flex flex-col items-center animate-bounce">
+                <span className="h-3 w-3 rotate-45 border-b border-r border-cyan-200/90" />
+                <span className="-mt-1 h-3 w-3 rotate-45 border-b border-r border-cyan-200/55" />
+              </div>
+            </div>
           </div>
         </div>
 
