@@ -1085,15 +1085,14 @@ function buildWelcomeMessage(args: {
   ownerPortfolio: string;
 }) {
   const firstName = args.ownerName.trim().split(/\s+/)[0] || "Matt";
-  const linkedinLabel = firstName.toLowerCase() === "matthew" ? "Matt's LinkedIn" : `${firstName}'s LinkedIn`;
 
   return [
     args.aiSummary,
-    "**I can...**",
+    "**I'm here to help, I can...**",
     "- Explain the technical implementation and architectural decisions behind this project.",
     "- Pull from the actual project source code when needed.",
     "- Check the repository context, commits, and related history.",
-    `Reach out via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [${linkedinLabel}](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
+    `Reach out to ${firstName} via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [LinkedIn](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
   ].join("\n\n");
 }
 
