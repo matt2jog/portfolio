@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X, Send, Bot, User, ChevronDown, Loader2, GripVertical, Maximize2, Minimize2 } from "lucide-react";
+import { X, Send, Bot, ChevronDown, Loader2 } from "lucide-react";
 import ChatMarkdown from "./ChatMarkdown";
 
 function TypingIndicator() {
@@ -56,21 +56,19 @@ function ToolCallRow({ call }: { call: ToolCallEntry }) {
 
 function AgentThinking({ calls }: { calls: ToolCallEntry[] }) {
   return (
-    <div className="flex justify-start gap-2.5">
-      <div className="mt-0.5 flex-none">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
-          <Bot className="h-3.5 w-3.5 text-primary" />
-        </div>
+    <section className="py-5">
+      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.24em] text-primary/60">
+        Agent Working
       </div>
-      <div className="max-w-[80%] space-y-1.5 rounded-lg bg-white/5 px-3 py-2.5">
+      <div className="space-y-1.5">
         {calls.map((call, i) => (
           <ToolCallRow key={i} call={call} />
         ))}
-        <div className="pt-0.5">
-          <TypingIndicator />
-        </div>
       </div>
-    </div>
+      <div className="mt-3">
+        <TypingIndicator />
+      </div>
+    </section>
   );
 }
 
@@ -120,17 +118,8 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const promptCarouselRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const welcomeSentRef = useRef(false);
-
-  const MIN_WIDTH = 360;
-  const DEFAULT_WIDTH = typeof window !== "undefined"
-    ? Math.max(MIN_WIDTH, Math.round(window.innerWidth * 0.5))
-    : 528;
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
 
   const consumeChatStream = useCallback(async (
     reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -210,30 +199,8 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
       });
     }
 
-    return { assistantContent, hasAddedAssistantMsg };
+    return { assistantContent };
   }, []);
-
-  const onDragStart = useCallback((e: ReactPointerEvent) => {
-    e.preventDefault();
-    dragRef.current = { startX: e.clientX, startW: panelWidth };
-
-    const onMove = (ev: globalThis.PointerEvent) => {
-      if (!dragRef.current) return;
-      const delta = dragRef.current.startX - ev.clientX;
-      const maxW = window.innerWidth - 32;
-      const next = Math.min(maxW, Math.max(MIN_WIDTH, dragRef.current.startW + delta));
-      setPanelWidth(next);
-    };
-
-    const onUp = () => {
-      dragRef.current = null;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, [panelWidth]);
 
   useEffect(() => {
     if (models.length > 0 && !selectedModelId) {
@@ -282,47 +249,12 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
   });
   const promptSuggestions = promptSuggestionsData?.suggestions ?? [];
   const carouselSuggestions = useMemo(
-    () => promptSuggestions.length > 0 ? [...promptSuggestions, ...promptSuggestions, ...promptSuggestions] : [],
+    () => promptSuggestions.length > 0 ? [...promptSuggestions, ...promptSuggestions] : [],
     [promptSuggestions],
   );
-
-  useEffect(() => {
-    const el = promptCarouselRef.current;
-    if (!el || promptSuggestions.length <= 1) return;
-
-    let frameId = 0;
-    let lastTs = 0;
-    const speedPxPerMs = 0.02975;
-    let singleSetWidth = 0;
-
-    const tick = (ts: number) => {
-      if (singleSetWidth <= 0) {
-        frameId = window.requestAnimationFrame(tick);
-        return;
-      }
-      if (lastTs !== 0) {
-        el.scrollLeft += (ts - lastTs) * speedPxPerMs;
-        if (el.scrollLeft >= singleSetWidth * 2) {
-          el.scrollLeft -= singleSetWidth;
-        } else if (el.scrollLeft <= 0) {
-          el.scrollLeft += singleSetWidth;
-        }
-      }
-      lastTs = ts;
-      frameId = window.requestAnimationFrame(tick);
-    };
-
-    frameId = window.requestAnimationFrame(() => {
-      singleSetWidth = el.scrollWidth / 3;
-      if (singleSetWidth > 0) {
-        el.scrollLeft = singleSetWidth;
-      }
-      frameId = window.requestAnimationFrame(tick);
-    });
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      lastTs = 0;
-    };
+  const mobileCarouselDuration = useMemo(() => {
+    const labelWeight = promptSuggestions.reduce((sum, suggestion) => sum + suggestion.label.length, 0);
+    return `${Math.max(14, Math.min(22, labelWeight * 0.45))}s`;
   }, [promptSuggestions]);
 
   const sendMessage = useCallback(async (contentOverride?: string) => {
@@ -437,238 +369,229 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
 
   return (
     <>
+      <style>{`
+        @keyframes project-chat-prompt-marquee {
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(calc(-50% - 0.25rem), 0, 0); }
+        }
+      `}</style>
       <div
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md"
         onClick={onClose}
       />
 
-      <div
-        className={`fixed bottom-4 right-4 top-4 z-50 flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0a0b0f] shadow-2xl transition-[width,left] duration-200 ${isFullscreen ? "left-4" : ""}`}
-        style={isFullscreen ? undefined : { width: `min(${panelWidth}px, calc(100vw - 2rem))` }}
-      >
-        {!isFullscreen && (
-          <div
-            onPointerDown={onDragStart}
-            className="group absolute bottom-0 left-0 top-0 z-10 hidden w-3 cursor-col-resize items-center justify-center transition-colors hover:bg-white/5 md:flex"
-          >
-            <GripVertical className="h-5 w-5 text-white/10 transition-colors group-hover:text-white/30" />
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <Bot className="h-4 w-4 flex-none text-primary" />
-            <span className="truncate text-sm font-medium text-white">Portfolio Agent</span>
-            <span className="ml-1.5 flex-none rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
-              EARLY BETA
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsFullscreen((f) => !f)}
-              className="hidden rounded p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white md:flex"
-              aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            >
-              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </button>
-
-            <div className="relative">
-              <button
-                onClick={() => setModelDropdownOpen((o) => !o)}
-                className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-400 transition-colors hover:border-primary/40 hover:text-gray-200"
-              >
-                <span className="max-w-[100px] truncate">
-                  {selectedModel?.label || "Model"}
+      <div className="fixed inset-0 z-50 md:inset-4">
+        <div className="flex h-full flex-col overflow-hidden bg-[#0a0b0f] md:rounded-2xl md:border md:border-white/10 md:shadow-2xl">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4 md:px-6">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 flex-none text-primary" />
+                <span className="truncate text-sm font-medium text-white">
+                  Portfolio Agent
                 </span>
-                <ChevronDown className="h-3 w-3" />
-              </button>
-              {modelDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setModelDropdownOpen(false)}
-                  />
-                  <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded border border-white/10 bg-[#12131a] py-1 shadow-xl">
-                    {models.map((m) => (
-                      <button
-                        key={m.id}
-                        className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${m.modelId === selectedModelId
-                          ? "bg-primary/10 text-primary"
-                          : "text-gray-300 hover:bg-white/5"
-                          }`}
-                        onClick={() => {
-                          setSelectedModelId(m.modelId);
-                          setModelDropdownOpen(false);
-                        }}
-                      >
-                        <span className="font-medium">{m.label}</span>
-                        <span className="ml-2 text-gray-500">{m.provider}</span>
-                      </button>
-                    ))}
-                    {models.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-gray-500">
-                        No models available
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+                  Early Beta
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Ask about {project.title}
+              </p>
             </div>
 
-            <button
-              onClick={onClose}
-              className="rounded p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3 min-h-0">
-          {messages.length === 0 && !isStreaming && (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-              <Bot className="h-8 w-8 text-primary/40" />
-              <div>
-                <p className="text-sm text-gray-400">
-                  Ask me anything about <span className="text-primary">{project.title}</span>
-                </p>
-                <p className="mt-1 text-xs text-gray-600">
-                  {project.tech.join(" / ")}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {messages.length === 0 && isStreaming && !isThinking && (
-            <div className="flex justify-start gap-2.5">
-              <div className="mt-0.5 flex-none">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
-                  <Bot className="h-3.5 w-3.5 text-primary" />
-                </div>
-              </div>
-              <div className="max-w-[80%] rounded-lg bg-white/5 px-3 py-2">
-                <TypingIndicator />
-              </div>
-            </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {msg.role === "assistant" && (
-                <div className="mt-0.5 flex-none">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                </div>
-              )}
-              <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm leading-relaxed ${msg.role === "user"
-                  ? "bg-primary/20 text-white"
-                  : "bg-white/5 text-gray-200"
-                  }`}
-              >
-                {msg.content ? (
-                  <ChatMarkdown content={msg.content} />
-                ) : (
-                  <TypingIndicator />
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <button
+                  onClick={() => setModelDropdownOpen((o) => !o)}
+                  className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-400 transition-colors hover:border-primary/40 hover:text-gray-200"
+                >
+                  <span className="max-w-[100px] truncate">
+                    {selectedModel?.label || "Model"}
+                  </span>
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {modelDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setModelDropdownOpen(false)}
+                    />
+                    <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded border border-white/10 bg-[#12131a] py-1 shadow-xl">
+                      {models.map((m) => (
+                        <button
+                          key={m.id}
+                          className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${m.modelId === selectedModelId
+                            ? "bg-primary/10 text-primary"
+                            : "text-gray-300 hover:bg-white/5"
+                            }`}
+                          onClick={() => {
+                            setSelectedModelId(m.modelId);
+                            setModelDropdownOpen(false);
+                          }}
+                        >
+                          <span className="font-medium">{m.label}</span>
+                          <span className="ml-2 text-gray-500">{m.provider}</span>
+                        </button>
+                      ))}
+                      {models.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-gray-500">
+                          No models available
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
-              {msg.role === "user" && (
-                <div className="mt-0.5 flex-none">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10">
-                    <User className="h-3.5 w-3.5 text-gray-400" />
+
+              <button
+                onClick={onClose}
+                className="rounded p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+                aria-label="Close chat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
+              {messages.length === 0 && !isStreaming && (
+                <div className="flex min-h-[40vh] flex-col justify-center py-10">
+                  <p className="text-sm text-gray-300">
+                    Ask me anything about <span className="text-primary">{project.title}</span>.
+                  </p>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+                    I can explain the project, walk through architecture, inspect repository context, and connect the work back to its creator.
+                  </p>
+                  <p className="mt-3 text-xs text-gray-600">
+                    {project.tech.join(" / ")}
+                  </p>
+                </div>
+              )}
+
+              {messages.length === 0 && isStreaming && !isThinking && (
+                <section className="py-5">
+                  <TypingIndicator />
+                </section>
+              )}
+
+              <div className="space-y-6">
+                {messages.map((msg, i) => (
+                  <section
+                    key={i}
+                    className="py-1"
+                  >
+                    {msg.role === "assistant" ? (
+                      <div className="w-full text-sm leading-relaxed text-gray-200">
+                        {msg.content ? <ChatMarkdown content={msg.content} /> : <TypingIndicator />}
+                      </div>
+                    ) : (
+                      <div className="flex justify-end">
+                        <div className="max-w-[min(82%,42rem)] rounded-[1.75rem] bg-primary px-5 py-3.5 text-left text-sm leading-relaxed text-primary-foreground shadow-[0_10px_30px_hsl(var(--primary)/0.28)]">
+                          <ChatMarkdown content={msg.content} />
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                ))}
+
+                {isThinking && <AgentThinking calls={toolCalls} />}
+
+                {error && (
+                  <div className="py-5">
+                    <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                      {error}
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/10 bg-[#0a0b0f]">
+            <div className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6 lg:px-8">
+              {promptSuggestions.length > 0 && (
+                <div className="mb-3">
+                  <div className="hidden flex-wrap gap-2 md:flex">
+                    {promptSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.label}
+                        type="button"
+                        onClick={() => void sendMessage(suggestion.prompt)}
+                        disabled={isStreaming || models.length === 0}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs leading-none text-gray-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="block whitespace-nowrap">{suggestion.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="-mx-4 overflow-hidden px-4 pb-1 md:hidden">
+                    <div
+                      className="flex min-w-max gap-2 will-change-transform motion-reduce:animate-none"
+                      style={{
+                        animationName: promptSuggestions.length > 1 ? "project-chat-prompt-marquee" : undefined,
+                        animationDuration: mobileCarouselDuration,
+                        animationTimingFunction: "linear",
+                        animationIterationCount: "infinite",
+                      }}
+                    >
+                      {carouselSuggestions.map((suggestion, index) => (
+                        <button
+                          key={`${suggestion.label}-${index}`}
+                          type="button"
+                          onClick={() => void sendMessage(suggestion.prompt)}
+                          disabled={isStreaming || models.length === 0}
+                          className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs leading-none text-gray-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className="block">{suggestion.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          ))}
 
-          {isThinking && <AgentThinking calls={toolCalls} />}
-
-          {error && (
-            <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-              {error}
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="border-t border-white/10 px-3 py-3">
-          {promptSuggestions.length > 0 && (
-            <div className="mb-3">
-              <div className="hidden flex-wrap gap-2 md:flex">
-                {promptSuggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.label}
-                    type="button"
-                    onClick={() => void sendMessage(suggestion.prompt)}
-                    disabled={isStreaming || models.length === 0}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs leading-none text-gray-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <span className="block whitespace-nowrap">{suggestion.label}</span>
-                  </button>
-                ))}
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about this project..."
+                  disabled={isStreaming || models.length === 0}
+                  rows={1}
+                  className="flex-1 resize-none rounded border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-gray-500 focus:border-primary/50 disabled:opacity-50"
+                  style={{ maxHeight: "120px" }}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = "auto";
+                    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                  }}
+                />
+                <button
+                  onClick={() => void sendMessage()}
+                  disabled={!input.trim() || isStreaming || models.length === 0}
+                  className="flex-none rounded bg-primary/20 p-2 text-primary transition-colors hover:bg-primary/30 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  {isStreaming ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
               </div>
-              <div
-                ref={promptCarouselRef}
-                className="-mx-3 overflow-x-auto px-3 pb-1 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                <div className="flex min-w-max gap-2">
-                  {carouselSuggestions.map((suggestion, index) => (
-                    <button
-                      key={`${suggestion.label}-${index}`}
-                      type="button"
-                      onClick={() => void sendMessage(suggestion.prompt)}
-                      disabled={isStreaming || models.length === 0}
-                      className="shrink-0 snap-start whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-2 text-left text-xs leading-none text-gray-300 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="block">{suggestion.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+
+              <p className="mt-1.5 font-mono text-[10px] text-gray-600">
+                {selectedModel
+                  ? `${selectedModel.provider} / ${selectedModel.label}`
+                  : "no model selected"}
+                {" "}
+                &middot; responses may be inaccurate
+              </p>
             </div>
-          )}
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about this project..."
-              disabled={isStreaming || models.length === 0}
-              rows={1}
-              className="flex-1 resize-none rounded border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-gray-500 focus:border-primary/50 disabled:opacity-50"
-              style={{ maxHeight: "120px" }}
-              onInput={(e) => {
-                const el = e.currentTarget;
-                el.style.height = "auto";
-                el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-              }}
-            />
-            <button
-              onClick={() => void sendMessage()}
-              disabled={!input.trim() || isStreaming || models.length === 0}
-              className="flex-none rounded bg-primary/20 p-2 text-primary transition-colors hover:bg-primary/30 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              {isStreaming ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </button>
           </div>
-          <p className="mt-1.5 font-mono text-[10px] text-gray-600">
-            {selectedModel
-              ? `${selectedModel.provider} / ${selectedModel.label}`
-              : "no model selected"}
-            {" "}
-            &middot; responses may be inaccurate
-          </p>
         </div>
       </div>
     </>

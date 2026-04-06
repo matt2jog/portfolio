@@ -83,6 +83,77 @@ export interface AgentConfig {
 /* ------------------------------------------------------------------ */
 
 const GRADIENT_URL = "https://inference.do-ai.run/v1/chat/completions";
+export const GRADIENT_RATE_LIMIT_MESSAGE = "AI is temporarily rate limited. Please try again later.";
+
+export class GradientApiError extends Error {
+  readonly status: number;
+  readonly errcode?: number | string;
+  readonly body: string;
+
+  constructor(status: number, body: string, errcode?: number | string, detail?: string) {
+    super(`Gradient ${status}${detail ? `: ${detail}` : ""}`);
+    this.name = "GradientApiError";
+    this.status = status;
+    this.errcode = errcode;
+    this.body = body;
+  }
+}
+
+function parseGradientErrorPayload(body: string): {
+  errcode?: number | string;
+  detail?: string;
+} {
+  if (!body) return {};
+
+  try {
+    const parsed = JSON.parse(body) as any;
+    const errcode =
+      parsed?.errcode ??
+      parsed?.code ??
+      parsed?.error?.errcode ??
+      parsed?.error?.code;
+    const detail =
+      parsed?.error?.message ??
+      parsed?.message ??
+      parsed?.detail ??
+      (typeof parsed?.error === "string" ? parsed.error : undefined);
+
+    return {
+      errcode,
+      detail: typeof detail === "string" ? detail : undefined,
+    };
+  } catch {
+    return { detail: body.trim() || undefined };
+  }
+}
+
+function createGradientApiError(status: number, body: string): GradientApiError {
+  const { errcode, detail } = parseGradientErrorPayload(body);
+  return new GradientApiError(status, body, errcode, detail);
+}
+
+export function isGradientRateLimitError(err: unknown): boolean {
+  if (err instanceof GradientApiError) {
+    return err.status === 429 || err.errcode === 429 || err.errcode === "429";
+  }
+
+  if (!err || typeof err !== "object") {
+    return false;
+  }
+
+  const maybeErr = err as {
+    status?: unknown;
+    errcode?: unknown;
+    message?: unknown;
+  };
+
+  return (
+    maybeErr.status === 429 ||
+    maybeErr.errcode === 429 ||
+    maybeErr.errcode === "429" ||
+    (typeof maybeErr.message === "string" && maybeErr.message.includes("Gradient 429"))
+  );
+}
 
 export class Agent {
   private readonly config: Required<AgentConfig>;
@@ -325,7 +396,7 @@ export class Agent {
 
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`Gradient ${res.status}: ${text}`);
+          throw createGradientApiError(res.status, text);
         }
 
         return res.json() as Promise<CompletionResponse>;
@@ -387,7 +458,10 @@ export class Agent {
       }),
     });
 
-    if (!res.ok) return "(failed to generate reply)";
+    if (!res.ok) {
+      const text = await res.text();
+      throw createGradientApiError(res.status, text);
+    }
     const data = (await res.json()) as CompletionResponse;
     return data.choices?.[0]?.message?.content ?? "";
   }
@@ -426,14 +500,15 @@ export class Agent {
     });
 
     if (!res.ok) {
+      const text = await res.text();
+      const gradientError = createGradientApiError(res.status, text);
       if (llmRun) {
         try {
-          await llmRun.end({}, `Gradient ${res.status}`);
+          await llmRun.end({}, gradientError.message);
           await llmRun.patchRun();
         } catch { /* silent */ }
       }
-      yield "(error generating response)";
-      return;
+      throw gradientError;
     }
 
     const reader = res.body as any;

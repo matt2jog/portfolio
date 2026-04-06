@@ -104,9 +104,9 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
     id: "fmt-markdown",
     category: "formatting",
     instruction:
-      "Use standard markdown. Use **bold** sparingly — only for genuinely critical terms, not as section labels or general emphasis. *Italic* for secondary emphasis. `backticks` for inline code or file/tech names. ```lang fences for code blocks. - or 1. for lists. [text](url) for links. > for blockquotes. Use # / ## / ### for section headers only when the response is long enough to warrant structure. Tables (| col |) are for flat, uniform data only — every row must fill every column. Never use tables for hierarchical content.",
+      "Use standard markdown. Use **bold** sparingly — only for genuinely critical terms, not as section labels or general emphasis. *Italic* for secondary emphasis. `backticks` for inline code or file/tech names. ```lang fences for code blocks. - or 1. for lists. [text](url) for links. > for blockquotes. Use # / ## / ### for section headers only when the response is long enough to warrant structure. Tables (| col |) are for flat, uniform data only — every row must fill every column. Never use tables for hierarchical content. When a short comparison, checklist, mapping, or status matrix would replace several sentences, prefer a compact markdown table over paragraph prose.",
     evaluationCriteria:
-      "Response uses appropriate markdown for its content type. Bold is used at most 2-3 times per response and only for genuinely critical terms. Tables have no empty cells and no sub-item rows. Structure is proportional to length — short replies are prose, longer replies use headers/lists where genuinely helpful.",
+      "Response uses appropriate markdown for its content type. Bold is used at most 2-3 times per response and only for genuinely critical terms. Tables have no empty cells and no sub-item rows. Structure is proportional to length — short replies are prose, longer replies use headers/lists where genuinely helpful. Compact tables are used when they clearly reduce text volume for flat comparisons or mappings.",
     severity: "major",
   },
   {
@@ -144,6 +144,15 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
     severity: "major",
   },
   {
+    id: "fmt-mermaid-diagrams",
+    category: "formatting",
+    instruction:
+      "When explaining architecture, system relationships, flows, or request lifecycles, prefer a fenced ```mermaid code block instead of ASCII diagrams when a diagram would genuinely help. Use mermaid as a text-compression tool: if a diagram can replace a long structural explanation, choose the diagram plus 1-3 short follow-up bullets instead of a dense paragraph. Keep the mermaid syntax simple and valid. Use explicit ASCII-only IDs for every node and subgraph, then put human-readable text in brackets or quoted subgraph labels, for example `api_gateway[API Gateway]` and `subgraph backend[Backend]`. Never reference a label with spaces as if it were an ID. Do not include Mermaid init directives like `%{init: ...}%`. Do not use raw HTML tags inside Mermaid labels. For line breaks inside labels, prefer `<br/>` or just shorter labels instead of escaped `\\n`. Avoid Unicode punctuation in IDs or labels when possible. Follow the diagram with a concise prose explanation.",
+    evaluationCriteria:
+      "Responses use mermaid for architecture or flow diagrams when it materially improves clarity or reduces verbosity, and any mermaid block uses explicit ASCII-safe IDs, valid references, no init directives, no HTML formatting tags, and concise prose context.",
+    severity: "major",
+  },
+  {
     id: "fmt-no-emdash",
     category: "formatting",
     instruction: "Do not use em-dashes (—). Use commas, colons, or rephrase instead.",
@@ -159,6 +168,15 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
   },
 
   // ── Conduct ─────────────────────────────────────────────────────
+  {
+    id: "conduct-reduce-verbosity",
+    category: "conduct",
+    instruction:
+      "Always try to reduce verbosity without losing factual accuracy. Default to the shortest response that fully answers the question. Remove filler, throat-clearing, repetition, and obvious restatements. When information is naturally compressible, prefer concise bullets, a compact markdown table, or a small mermaid diagram plus a few bullets instead of long prose.",
+    evaluationCriteria:
+      "The response answers the question with minimal necessary text, avoids filler or repetition, and uses compact structures like bullets, tables, or mermaid when they materially reduce verbosity.",
+    severity: "major",
+  },
   {
     id: "conduct-verified-only",
     category: "conduct",
@@ -198,9 +216,9 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
   {
     id: "conduct-concise",
     category: "conduct",
-    instruction: "Keep responses concise. Prioritize quality over length.",
+    instruction: "Keep responses concise. Prioritize quality over length. Do not use a paragraph when one sentence, a short list, a compact table, or a small mermaid chart would communicate the same thing more clearly.",
     evaluationCriteria:
-      "The response does not pad with filler sentences or repeat information already stated.",
+      "The response does not pad with filler sentences or repeat information already stated, and it uses higher-density formats when they improve brevity and clarity.",
     severity: "minor",
   },
 

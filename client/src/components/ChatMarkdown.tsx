@@ -1,3 +1,4 @@
+import { Children, isValidElement, useEffect, useId, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -5,6 +6,144 @@ import "highlight.js/styles/github-dark.css";
 
 interface ChatMarkdownProps {
   content: string;
+}
+
+type MermaidModule = typeof import("mermaid");
+let mermaidModulePromise: Promise<MermaidModule> | null = null;
+let mermaidInitialized = false;
+
+async function getMermaidModule() {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import("mermaid");
+  }
+  const module = await mermaidModulePromise;
+  const mermaid = module.default;
+
+  if (!mermaidInitialized) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: {
+        background: "#0a0b0f",
+        primaryColor: "#0f1720",
+        primaryTextColor: "#e5e7eb",
+        primaryBorderColor: "#2dd4bf",
+        lineColor: "#64748b",
+        secondaryColor: "#111827",
+        secondaryTextColor: "#d1d5db",
+        tertiaryColor: "#0f1720",
+        tertiaryTextColor: "#cbd5e1",
+        mainBkg: "#0f1720",
+        textColor: "#e5e7eb",
+        fontFamily: "JetBrains Mono, ui-monospace, monospace",
+      },
+      flowchart: {
+        htmlLabels: true,
+        useMaxWidth: true,
+        curve: "basis",
+      },
+      sequence: {
+        useMaxWidth: true,
+        wrap: true,
+      },
+    });
+    mermaidInitialized = true;
+  }
+
+  return mermaid;
+}
+
+function getNodeText(node: unknown): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getNodeText).join("");
+  if (isValidElement<{ children?: unknown }>(node)) return getNodeText(node.props.children);
+  return "";
+}
+
+function sanitizeMermaidChart(chart: string): string {
+  return chart
+    .trim()
+    .replace(/^\s*```mermaid\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/^\s*%\{[\s\S]*?\}%\s*\n?/gm, "")
+    .replace(/<br\s*\/?>/gi, "<br/>")
+    .replace(/\\n/g, "<br/>")
+    .replace(/<\/?(strong|b|em|i|code|span|div|p)[^>]*>/gi, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[‐‑‒–—]/g, "-")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .replace(/&nbsp;/gi, " ");
+}
+
+function MermaidDiagram({ chart }: { chart: string }) {
+  const id = useId().replace(/:/g, "");
+  const [svg, setSvg] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const preparedChart = useMemo(() => sanitizeMermaidChart(chart), [chart]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderChart() {
+      try {
+        const mermaid = await getMermaidModule();
+        const { svg: renderedSvg } = await mermaid.render(`mermaid-${id}`, preparedChart);
+        if (!cancelled) {
+          setSvg(renderedSvg);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSvg("");
+          setError(err instanceof Error ? err.message : "Failed to render diagram");
+        }
+      }
+    }
+
+    void renderChart();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, preparedChart]);
+
+  if (error) {
+    return (
+      <div className="my-2 rounded border border-amber-500/20 bg-amber-500/10 p-3">
+        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.18em] text-amber-300">
+          Mermaid Render Failed
+        </p>
+        <p className="mb-2 break-words text-xs text-amber-100/90">
+          {error}
+        </p>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs text-gray-200">
+          {preparedChart}
+        </pre>
+      </div>
+    );
+  }
+
+  if (!svg) {
+    return (
+      <div className="my-2 rounded border border-white/10 bg-black/30 p-3 text-xs text-gray-400">
+        Rendering diagram...
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-3 overflow-x-auto rounded border border-white/10 bg-black/30 p-3">
+      <div
+        className="[&_svg]:h-auto [&_svg]:max-w-full"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+    </div>
+  );
 }
 
 export default function ChatMarkdown({ content }: ChatMarkdownProps) {
@@ -50,11 +189,21 @@ export default function ChatMarkdown({ content }: ChatMarkdownProps) {
               </code>
             );
           },
-          pre: ({ children }) => (
-            <pre className="my-2 overflow-x-auto rounded border border-white/5 bg-black/40 p-3 text-xs">
-              {children}
-            </pre>
-          ),
+          pre: ({ children }) => {
+            const firstChild = Children.toArray(children)[0];
+            if (
+              isValidElement<{ className?: string; children?: unknown }>(firstChild) &&
+              typeof firstChild.props.className === "string" &&
+              firstChild.props.className.includes("language-mermaid")
+            ) {
+              return <MermaidDiagram chart={getNodeText(firstChild.props.children).trim()} />;
+            }
+            return (
+              <pre className="my-2 overflow-x-auto rounded border border-white/5 bg-black/40 p-3 text-xs">
+                {children}
+              </pre>
+            );
+          },
           ul: ({ children }) => (
             <ul className="my-1.5 ml-4 list-disc space-y-0.5 break-words text-gray-300 [overflow-wrap:anywhere]">{children}</ul>
           ),

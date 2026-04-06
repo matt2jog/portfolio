@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
@@ -35,7 +35,7 @@ import {
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { Agent } from "./agent";
+import { Agent, GRADIENT_RATE_LIMIT_MESSAGE, isGradientRateLimitError } from "./agent";
 import { pushPromptVersion } from "./agent/tracing";
 import {
   GitHubRepoTool,
@@ -52,6 +52,13 @@ const PROMPT_SUGGESTIONS_VERSION = "v4";
 let projectsCache: { data: any[]; timestamp: number } | null = null;
 type PromptSuggestion = { label: string; prompt: string };
 const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
+
+function writeSseAssistantMessage(res: Response, content: string) {
+  if (res.writableEnded) return;
+  const chunk = JSON.stringify({ choices: [{ delta: { content } }] });
+  res.write(`data: ${chunk}\n\n`);
+  res.write("data: [DONE]\n\n");
+}
 
 function getProjectsCacheTtlMs() {
   const parsed = Number.parseInt(process.env.PROJECTS_CACHE_TTL_MINUTES || "", 10);
@@ -341,8 +348,16 @@ export async function registerRoutes(
       res.json({ hash: promptInputsHash, suggestions });
     } catch (err: any) {
       const fallback = fallbackPromptSuggestions(project.title);
-      promptSuggestionsCache.set(cacheKey, fallback);
-      res.json({ hash: promptInputsHash, suggestions: fallback, fallback: true, error: err.message });
+      const rateLimited = isGradientRateLimitError(err);
+      if (!rateLimited) {
+        promptSuggestionsCache.set(cacheKey, fallback);
+      }
+      res.json({
+        hash: promptInputsHash,
+        suggestions: fallback,
+        fallback: true,
+        error: rateLimited ? GRADIENT_RATE_LIMIT_MESSAGE : err.message,
+      });
     }
   });
 
@@ -470,9 +485,7 @@ export async function registerRoutes(
           ownerGithub,
           ownerPortfolio,
         });
-        const chunk = JSON.stringify({ choices: [{ delta: { content: welcomeMessage } }] });
-        res.write(`data: ${chunk}\n\n`);
-        res.write("data: [DONE]\n\n");
+        writeSseAssistantMessage(res, welcomeMessage);
         res.end();
         return;
       }
@@ -488,6 +501,12 @@ export async function registerRoutes(
       res.write("data: [DONE]\n\n");
       res.end();
     } catch (err: any) {
+      if (isGradientRateLimitError(err)) {
+        writeSseAssistantMessage(res, GRADIENT_RATE_LIMIT_MESSAGE);
+        res.end();
+        return;
+      }
+
       if (!res.headersSent) {
         res.status(500).json({ error: "AI request failed", details: err.message });
       } else {
@@ -1088,7 +1107,7 @@ function buildWelcomeMessage(args: {
 
   return [
     args.aiSummary,
-    "**I'm here to help, I can...**",
+    "**I'm here to help, I can:**",
     "- Explain the technical implementation and architectural decisions behind this project.",
     "- Pull from the actual project source code when needed.",
     "- Check the repository context, commits, and related history.",
