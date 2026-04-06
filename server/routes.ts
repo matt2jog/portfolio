@@ -36,6 +36,7 @@ import {
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Agent, GRADIENT_RATE_LIMIT_MESSAGE, isGradientRateLimitError } from "./agent";
+import { ensureRenderableMermaid } from "./agent/mermaid";
 import { pushPromptVersion } from "./agent/tracing";
 import {
   GitHubRepoTool,
@@ -490,15 +491,21 @@ export async function registerRoutes(
         return;
       }
 
+      let bufferedAssistantText = "";
       for await (const event of agent.stream([...seed, ...userMessages])) {
         if (event.type === "tool_call") {
           res.write(`event: tool_call\ndata: ${JSON.stringify({ name: event.name, args: event.args })}\n\n`);
         } else {
-          const chunk = JSON.stringify({ choices: [{ delta: { content: event.delta } }] });
-          res.write(`data: ${chunk}\n\n`);
+          bufferedAssistantText += event.delta;
         }
       }
-      res.write("data: [DONE]\n\n");
+
+      const finalizedAssistantText = await ensureRenderableMermaid(bufferedAssistantText, {
+        modelId,
+        token: gradientToken,
+      });
+
+      writeSseAssistantMessage(res, finalizedAssistantText.content);
       res.end();
     } catch (err: any) {
       if (isGradientRateLimitError(err)) {

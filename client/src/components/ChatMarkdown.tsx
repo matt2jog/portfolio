@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
+import { sanitizeMermaidChart } from "@shared/mermaid";
 
 interface ChatMarkdownProps {
   content: string;
@@ -60,25 +61,6 @@ function getNodeText(node: unknown): string {
   if (Array.isArray(node)) return node.map(getNodeText).join("");
   if (isValidElement<{ children?: unknown }>(node)) return getNodeText(node.props.children);
   return "";
-}
-
-function sanitizeMermaidChart(chart: string): string {
-  return chart
-    .trim()
-    .replace(/^\s*```mermaid\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/^\s*%\{[\s\S]*?\}%\s*\n?/gm, "")
-    .replace(/<br\s*\/?>/gi, "<br/>")
-    .replace(/\\n/g, "<br/>")
-    .replace(/<\/?(strong|b|em|i|code|span|div|p)[^>]*>/gi, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/[‐‑‒–—]/g, "-")
-    .replace(/[“”]/g, "\"")
-    .replace(/[‘’]/g, "'")
-    .replace(/&nbsp;/gi, " ");
 }
 
 function MermaidDiagram({ chart }: { chart: string }) {
