@@ -1,143 +1,108 @@
-import React, { useMemo } from "react";
-import katex from "katex";
-import "katex/dist/katex.min.css";
-
-/**
- * Lightweight renderer for chat messages.
- * Handles: $..$ (inline LaTeX), $$...$$ (display LaTeX),
- * **bold**, `inline code`, ```code blocks```, and newlines.
- */
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 
 interface ChatMarkdownProps {
   content: string;
 }
 
-type Segment =
-  | { type: "text"; value: string }
-  | { type: "latex-inline"; value: string }
-  | { type: "latex-display"; value: string }
-  | { type: "code-block"; lang: string; value: string }
-  | { type: "code-inline"; value: string };
-
-function tokenize(input: string): Segment[] {
-  const segments: Segment[] = [];
-  // Order matters — greedier patterns first
-  const pattern =
-    /(\$\$[\s\S]+?\$\$)|(```(\w*)\n?([\s\S]*?)```)|(`[^`]+?`)|(\$[^$\n]+?\$)/g;
-
-  let last = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(input)) !== null) {
-    if (match.index > last) {
-      segments.push({ type: "text", value: input.slice(last, match.index) });
-    }
-
-    if (match[1]) {
-      // $$...$$ display LaTeX
-      segments.push({ type: "latex-display", value: match[1].slice(2, -2).trim() });
-    } else if (match[2]) {
-      // ```...``` code block
-      segments.push({ type: "code-block", lang: match[3] || "", value: match[4] || "" });
-    } else if (match[5]) {
-      // `...` inline code
-      segments.push({ type: "code-inline", value: match[5].slice(1, -1) });
-    } else if (match[6]) {
-      // $...$ inline LaTeX
-      segments.push({ type: "latex-inline", value: match[6].slice(1, -1).trim() });
-    }
-
-    last = match.index + match[0].length;
-  }
-
-  if (last < input.length) {
-    segments.push({ type: "text", value: input.slice(last) });
-  }
-
-  return segments;
-}
-
-function renderTextWithBold(text: string): (string | React.ReactElement)[] {
-  const parts: (string | React.ReactElement)[] = [];
-  const boldPattern = /\*\*(.+?)\*\*/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = boldPattern.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    parts.push(<strong key={`b${key++}`} className="font-semibold text-white">{match[1]}</strong>);
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
-}
-
-function renderLatex(latex: string, displayMode: boolean): React.ReactElement {
-  try {
-    const html = katex.renderToString(latex, {
-      displayMode,
-      throwOnError: false,
-      trust: false,
-    });
-    return (
-      <span
-        className={displayMode ? "block my-2 overflow-x-auto" : "inline"}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    );
-  } catch {
-    return (
-      <code className="text-red-400 text-xs">
-        {displayMode ? `$$${latex}$$` : `$${latex}$`}
-      </code>
-    );
-  }
-}
-
 export default function ChatMarkdown({ content }: ChatMarkdownProps) {
-  const rendered = useMemo(() => {
-    const segments = tokenize(content);
-
-    return segments.map((seg, i) => {
-      switch (seg.type) {
-        case "latex-display":
-          return <div key={i}>{renderLatex(seg.value, true)}</div>;
-
-        case "latex-inline":
-          return <span key={i}>{renderLatex(seg.value, false)}</span>;
-
-        case "code-block":
-          return (
-            <pre key={i} className="my-2 rounded bg-black/40 border border-white/5 px-3 py-2 text-xs overflow-x-auto">
-              <code>{seg.value}</code>
+  const sanitized = content.replace(/<br\s*\/?>/gi, "\n");
+  return (
+    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={{
+          br: () => null,
+          p: ({ children }) => (
+            <p className="mb-2 break-words leading-relaxed last:mb-0 [overflow-wrap:anywhere]">{children}</p>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="break-all text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
+            >
+              {children}
+            </a>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-semibold text-white">{children}</strong>
+          ),
+          em: ({ children }) => (
+            <em className="italic text-gray-300">{children}</em>
+          ),
+          code: ({ className, children, ...props }) => {
+            const isBlock = !!className;
+            if (isBlock) {
+              return (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code className="break-all rounded bg-white/10 px-1 text-xs font-mono text-primary/90">
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => (
+            <pre className="my-2 overflow-x-auto rounded border border-white/5 bg-black/40 p-3 text-xs">
+              {children}
             </pre>
-          );
-
-        case "code-inline":
-          return (
-            <code key={i} className="rounded bg-white/10 px-1 py-0.5 text-xs font-mono">
-              {seg.value}
-            </code>
-          );
-
-        case "text": {
-          // Split by newlines, render bold within each line
-          const lines = seg.value.split("\n");
-          return (
-            <span key={i}>
-              {lines.map((line, j) => (
-                <span key={j}>
-                  {j > 0 && <br />}
-                  {renderTextWithBold(line)}
-                </span>
-              ))}
-            </span>
-          );
-        }
-      }
-    });
-  }, [content]);
-
-  return <>{rendered}</>;
+          ),
+          ul: ({ children }) => (
+            <ul className="my-1.5 ml-4 list-disc space-y-0.5 break-words text-gray-300 [overflow-wrap:anywhere]">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-1.5 ml-4 list-decimal space-y-0.5 break-words text-gray-300 [overflow-wrap:anywhere]">{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li className="break-words leading-relaxed [overflow-wrap:anywhere]">{children}</li>
+          ),
+          h1: ({ children }) => (
+            <h1 className="mb-1 mt-3 break-words text-base font-bold text-white first:mt-0 [overflow-wrap:anywhere]">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-1 mt-3 break-words text-sm font-bold text-white first:mt-0 [overflow-wrap:anywhere]">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-1 mt-2 break-words text-sm font-semibold text-gray-200 first:mt-0 [overflow-wrap:anywhere]">{children}</h3>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="my-2 border-l-2 border-primary/50 pl-3 italic text-gray-400">
+              {children}
+            </blockquote>
+          ),
+          table: ({ children }) => (
+            <div className="my-2 overflow-x-auto">
+              <table className="w-full border-collapse text-xs">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="border-b border-white/10 text-white">{children}</thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody className="text-gray-300">{children}</tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="border-b border-white/5">{children}</tr>
+          ),
+          th: ({ children }) => (
+            <th className="px-2 py-1 text-left font-semibold">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="break-words px-2 py-1 [overflow-wrap:anywhere]">{children}</td>
+          ),
+          hr: () => <hr className="my-3 border-white/10" />,
+        }}
+      >
+        {sanitized}
+      </ReactMarkdown>
+    </div>
+  );
 }

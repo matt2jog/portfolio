@@ -6,6 +6,10 @@ import type { RunTree } from "langsmith/run_trees";
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
+export type AgentYield =
+  | { type: "text"; delta: string }
+  | { type: "tool_call"; name: string; args: Record<string, unknown> };
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
@@ -192,8 +196,11 @@ export class Agent {
    * Streaming agentic loop. Tool rounds execute non-streaming. The
    * final reply streams as text deltas. The whole conversation is
    * traced as a parent chain run in LangSmith.
+   *
+   * Yields AgentYield events: tool_call events before each tool executes,
+   * then text deltas for the final reply.
    */
-  async *stream(userMessages: ChatMessage[]): AsyncGenerator<string> {
+  async *stream(userMessages: ChatMessage[]): AsyncGenerator<AgentYield> {
     const messages = this.buildMessages(userMessages);
 
     const parentRun = createRun({
@@ -230,12 +237,16 @@ export class Agent {
           // Model already gave a text reply during the probe — yield it
           if (choice.message.content) {
             fullOutput = choice.message.content;
-            yield choice.message.content;
+            yield { type: "text", delta: choice.message.content };
           }
           return;
         }
 
         for (const call of choice.message.tool_calls) {
+          let callArgs: Record<string, unknown>;
+          try { callArgs = JSON.parse(call.function.arguments); } catch { callArgs = {}; }
+          yield { type: "tool_call", name: call.function.name, args: callArgs };
+
           const result = await this.executeTool(call, parentRun ?? undefined);
           messages.push({ role: "tool", content: result, tool_call_id: call.id });
         }
@@ -246,7 +257,7 @@ export class Agent {
       // Stream the final reply
       for await (const delta of this.streamCompletion(messages, parentRun ?? undefined)) {
         fullOutput += delta;
-        yield delta;
+        yield { type: "text", delta };
       }
     } catch (err: any) {
       error = err?.message ?? "unknown error";

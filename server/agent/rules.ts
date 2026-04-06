@@ -101,45 +101,53 @@ export class Ruleset {
 export const PORTFOLIO_CHAT_RULES = new Ruleset([
   // ── Formatting ──────────────────────────────────────────────────
   {
-    id: "fmt-no-emdash",
-    category: "formatting",
-    instruction: "Do not use em-dashes (—). Use commas, colons, or rephrase instead.",
-    evaluationCriteria: "The response contains no em-dash characters.",
-    severity: "minor",
-  },
-  {
-    id: "fmt-katex",
+    id: "fmt-markdown",
     category: "formatting",
     instruction:
-      "Math must use KaTeX syntax only (not full LaTeX). Inline: $...$. Display: $$...$$. Example: $O(n \\log n)$, $$\\sum_{i=1}^{n} x_i$$.",
+      "Use standard markdown. Use **bold** sparingly — only for genuinely critical terms, not as section labels or general emphasis. *Italic* for secondary emphasis. `backticks` for inline code or file/tech names. ```lang fences for code blocks. - or 1. for lists. [text](url) for links. > for blockquotes. Use # / ## / ### for section headers only when the response is long enough to warrant structure. Tables (| col |) are for flat, uniform data only — every row must fill every column. Never use tables for hierarchical content.",
     evaluationCriteria:
-      "All math expressions use $ or $$ delimiters and contain only KaTeX-compatible syntax.",
+      "Response uses appropriate markdown for its content type. Bold is used at most 2-3 times per response and only for genuinely critical terms. Tables have no empty cells and no sub-item rows. Structure is proportional to length — short replies are prose, longer replies use headers/lists where genuinely helpful.",
     severity: "major",
-  },
-  {
-    id: "fmt-bold",
-    category: "formatting",
-    instruction:
-      "Use **bold** for headers and titles. Use `backticks` for inline code. Use ```lang fences for code blocks.",
-    evaluationCriteria:
-      "Headers use **bold**, code is wrapped in backticks or fences. No raw ALL-CAPS headers or decorator-style formatting (e.g. ####TITLE####).",
-    severity: "minor",
   },
   {
     id: "fmt-no-symbol-headers",
     category: "formatting",
     instruction:
-      "Do not use symbol-as-format styles (e.g. ####TITLE#### or ===SECTION===). All structure must come from bold, KaTeX, or code fences.",
+      "Do not use decorator-style formatting (e.g. ####TITLE####, ===SECTION===, ALL_CAPS_HEADERS). Use markdown # headings or **bold** instead.",
     evaluationCriteria: "Response contains no decorator-style section headers.",
     severity: "major",
   },
   {
-    id: "fmt-paragraphs",
+    id: "fmt-no-table-hierarchy",
     category: "formatting",
     instruction:
-      "Write in paragraphs. Bullet lists are only allowed if the content is genuinely enumerable. Prefer KaTeX for enumerating points of interest.",
+      "Never represent hierarchical or parent-child data as a markdown table. If a row has sub-items or bullet points, use a header (## / ###) with a list instead. A table row must stand alone — no follow-up rows that only fill 1 of N columns.",
     evaluationCriteria:
-      "Non-enumerable content is written as prose. Bullet lists appear only for genuinely list-like content.",
+      "No table row exists whose purpose is to list sub-items of a previous row. No table cell is intentionally left empty.",
+    severity: "major",
+  },
+  {
+    id: "fmt-no-table-as-layout",
+    category: "formatting",
+    instruction:
+      "Never use a table as a layout or sectioning device. Section titles, category labels, and subject separators must be written as **bold text** or markdown headers (## / ###), never as a row inside a table. When a response has multiple named sections, write each section header as bold text on its own line, then place any supporting table or list beneath it. A table must only appear inside a section, never as the container for one.",
+    evaluationCriteria:
+      "No table row functions as a section title or category divider. Every named section is introduced with bold text or a markdown header outside of any table.",
+    severity: "major",
+  },
+  {
+    id: "fmt-no-html",
+    category: "formatting",
+    instruction:
+      "Never use raw HTML tags (e.g. <br>, <b>, <div>, <span>). Use markdown line breaks (two spaces or a blank line) and markdown formatting instead.",
+    evaluationCriteria: "Response contains no raw HTML tags.",
+    severity: "major",
+  },
+  {
+    id: "fmt-no-emdash",
+    category: "formatting",
+    instruction: "Do not use em-dashes (—). Use commas, colons, or rephrase instead.",
+    evaluationCriteria: "The response contains no em-dash characters.",
     severity: "minor",
   },
   {
@@ -194,6 +202,17 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
     evaluationCriteria:
       "The response does not pad with filler sentences or repeat information already stated.",
     severity: "minor",
+  },
+
+  // ── Linking ─────────────────────────────────────────────────────
+  {
+    id: "fmt-github-links",
+    category: "formatting",
+    instruction:
+      "When mentioning any file, directory, commit, issue, or PR from the project's GitHub repository, render it as a clickable markdown link. Derive the base URL from the `githubUrl` field in the project context (e.g. https://github.com/owner/repo). Use these URL patterns — file: `{base}/blob/{defaultBranch}/{path}`, directory: `{base}/tree/{defaultBranch}/{path}`, commit: `{base}/commit/{sha}`, issue/PR: `{base}/issues/{number}` or `{base}/pull/{number}`. Use the default branch from the repo metadata (usually `main`). Display text should be the short name (filename, short SHA, or `#123`), not the full URL.",
+    evaluationCriteria:
+      "Every mentioned file path, commit SHA, and issue/PR number that comes from a GitHub tool result is rendered as a markdown link. No bare file paths or raw SHAs appear when a link could be constructed.",
+    severity: "major",
   },
 
   // ── Tools ───────────────────────────────────────────────────────
