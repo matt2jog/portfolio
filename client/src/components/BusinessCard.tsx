@@ -3,7 +3,6 @@ import ThreeDCard from "./ThreeDCard";
 import { Phone, Mail, Globe } from "lucide-react";
 import { usePersonalInformation } from "@/hooks/use-personal-information";
 import { useBio } from "@/hooks/use-bio";
-import headshotImg from "@/assets/images/headshot.jpg";
 
 interface BusinessCardProps {
   isOpen?: boolean;
@@ -107,159 +106,157 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-white/5 to-transparent pointer-events-none z-20" />
         <div className="absolute top-8 left-8 right-0 flex items-center z-30 pointer-events-none">
           <img
-            src="/logo-flat.png"
+            src="/assets/logo-flat.png"
             alt="Ouroboros Logo"
             className="w-12 h-auto object-contain mix-blend-screen opacity-50"
           />
         </div>
 
         <div className="absolute inset-0 bg-[#0B0C10] overflow-hidden rounded-2xl">
-        
-        {/* Front Face Wrapper */}
-        <div 
-          className={`absolute flex justify-center top-0 left-0 w-full h-full transition-opacity ${
-            isOpen 
-              ? "opacity-0 duration-300 delay-0 pointer-events-none" 
-              : "opacity-100 duration-500 delay-[600ms] pointer-events-auto"
-          }`}
-        >
-          {/* Inner explicitly sized content to prevent layout squish */}
-          <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
-            {/* Dog-ear peel — bottom-right corner */}
-            <div
-              ref={dogearRef}
-              className={`bcard-dogear${dogearState !== 'idle' ? ` bcard-dogear--${dogearState}` : ''}`}
-              aria-hidden="true"
-              onMouseEnter={handleDogearMouseEnter}
-              onMouseLeave={handleDogearMouseLeave}
-            >
-              <div className="bcard-dogear__paper" />
-              <div className="bcard-dogear__shadow" />
-              <div className="bcard-dogear__back" />
-            </div>
-            {/* Center Headshot */}
-            <div className="flex flex-col items-center w-full z-10 relative mt-8">
-              <div className="w-44 h-44 rounded-full overflow-hidden border-2 border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,255,255,0.15)] relative">
-                <img 
-                  src={headshotImg} 
-                  alt="Matthew Tujague"
-                  className="w-full h-full object-cover"
-                />
-                {/* Inner glow overlay */}
-                <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,255,255,0.3)] pointer-events-none" />
+
+          {/* Front Face Wrapper */}
+          <div
+            className={`absolute flex justify-center top-0 left-0 w-full h-full transition-opacity ${isOpen
+                ? "opacity-0 duration-300 delay-0 pointer-events-none"
+                : "opacity-100 duration-500 delay-[600ms] pointer-events-auto"
+              }`}
+          >
+            {/* Inner explicitly sized content to prevent layout squish */}
+            <div className="w-[340px] h-full flex flex-col items-center px-10 py-10 relative">
+              {/* Dog-ear peel — bottom-right corner */}
+              <div
+                ref={dogearRef}
+                className={`bcard-dogear${dogearState !== 'idle' ? ` bcard-dogear--${dogearState}` : ''}`}
+                aria-hidden="true"
+                onMouseEnter={handleDogearMouseEnter}
+                onMouseLeave={handleDogearMouseLeave}
+              >
+                <div className="bcard-dogear__paper" />
+                <div className="bcard-dogear__shadow" />
+                <div className="bcard-dogear__back" />
               </div>
-            </div>
-
-            {/* Flexible spacer */}
-            <div className="flex-1 min-h-8" />
-
-            {/* Name / Title */}
-            <div className="text-center w-full z-10 flex flex-col items-center">
-              <h1 className="font-semibold text-white text-[24px] leading-none drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] uppercase whitespace-nowrap">
-                {info?.name || "Matthew Tujague"}
-              </h1>
-              <h2 className="text-[#e2e2e2] font-sans tracking-[0.15em] text-[10px] uppercase font-light mt-4 mb-5 text-center leading-[1.6]">
-                {info?.title || "Software Engineer"}
-                <br />
-                <span className="text-[8px] text-[#00FFFF]/80">{info?.location || "NJ-NY-PA"}</span>
-              </h2>
-              
-              {/* Divider */}
-              <div className="w-[80%] h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[25%] h-[1px] bg-[#00FFFF] shadow-[0_0_8px_rgba(0,255,255,0.8)]" />
+              {/* Center Headshot */}
+              <div className="flex flex-col items-center w-full z-10 relative mt-8">
+                <div className="w-44 h-44 rounded-full overflow-hidden border-2 border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,255,255,0.15)] relative">
+                  <img
+                    src="/assets/headshot.png"
+                    alt="Matthew Tujague"
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Inner glow overlay */}
+                  <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,255,255,0.3)] pointer-events-none" />
+                </div>
               </div>
-            </div>
 
-            {/* Flexible spacer */}
-            <div className="flex-1 min-h-8" />
+              {/* Flexible spacer */}
+              <div className="flex-1 min-h-8" />
 
-            {/* Contact Info — grid for perfect icon alignment */}
-            <div className="z-10 w-full max-w-[220px] mx-auto">
-              <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 text-[11px] text-gray-300 items-center">
-                <Phone size={14} className="text-[#00FFFF] opacity-70" />
-                <a href={`tel:${info?.phone || "7326393889"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.phoneFormatted || "(732) 639-3889"}</a>
+              {/* Name / Title */}
+              <div className="text-center w-full z-10 flex flex-col items-center">
+                <h1 className="font-semibold text-white text-[24px] leading-none drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] uppercase whitespace-nowrap">
+                  {info?.name || "Matthew Tujague"}
+                </h1>
+                <h2 className="text-[#e2e2e2] font-sans tracking-[0.15em] text-[10px] uppercase font-light mt-4 mb-5 text-center leading-[1.6]">
+                  {info?.title || "Software Engineer"}
+                  <br />
+                  <span className="text-[8px] text-[#00FFFF]/80">{info?.location || "NJ-NY-PA"}</span>
+                </h2>
 
-                <Mail size={14} className="text-[#00FFFF] opacity-70" />
-                <a href={`mailto:${info?.email || "matthew@2jog.dev"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.email || "matthew@2jog.dev"}</a>
+                {/* Divider */}
+                <div className="w-[80%] h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent relative">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[25%] h-[1px] bg-[#00FFFF] shadow-[0_0_8px_rgba(0,255,255,0.8)]" />
+                </div>
+              </div>
 
-                <Globe size={14} className="text-[#00FFFF] opacity-70" />
-                <a href={info?.portfolioUrl || "https://2jog.dev"} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</a>
+              {/* Flexible spacer */}
+              <div className="flex-1 min-h-8" />
+
+              {/* Contact Info — grid for perfect icon alignment */}
+              <div className="z-10 w-full max-w-[220px] mx-auto">
+                <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 text-[11px] text-gray-300 items-center">
+                  <Phone size={14} className="text-[#00FFFF] opacity-70" />
+                  <a href={`tel:${info?.phone || "7326393889"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.phoneFormatted || "(732) 639-3889"}</a>
+
+                  <Mail size={14} className="text-[#00FFFF] opacity-70" />
+                  <a href={`mailto:${info?.email || "matthew@2jog.dev"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.email || "matthew@2jog.dev"}</a>
+
+                  <Globe size={14} className="text-[#00FFFF] opacity-70" />
+                  <a href={info?.portfolioUrl || "https://2jog.dev"} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</a>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Back Face Wrapper */}
-        <div 
-          className={`absolute flex justify-center top-0 left-0 w-full h-full transition-opacity ${
-            isOpen 
-              ? "opacity-100 duration-500 delay-[600ms] pointer-events-auto" 
-              : "opacity-0 duration-300 delay-0 pointer-events-none"
-          }`}
-        >
-          {/* Inner explicitly sized content */}
+          {/* Back Face Wrapper */}
           <div
-            className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col"
-            style={{ transform: "rotateY(180deg)" }}
+            className={`absolute flex justify-center top-0 left-0 w-full h-full transition-opacity ${isOpen
+                ? "opacity-100 duration-500 delay-[600ms] pointer-events-auto"
+                : "opacity-0 duration-300 delay-0 pointer-events-none"
+              }`}
           >
-            {/* Accent bar on left seam */}
-            <div className="absolute top-0 left-0 w-[1px] h-full bg-gradient-to-b from-[#00FFFF]/20 via-[#00FFFF]/10 to-transparent md:block hidden" />
+            {/* Inner explicitly sized content */}
+            <div
+              className="relative w-[340px] md:w-[760px] h-[640px] flex flex-col"
+              style={{ transform: "rotateY(180deg)" }}
+            >
+              {/* Accent bar on left seam */}
+              <div className="absolute top-0 left-0 w-[1px] h-full bg-gradient-to-b from-[#00FFFF]/20 via-[#00FFFF]/10 to-transparent md:block hidden" />
 
-            {/* Fixed spacer matching logo height (w-12 square at top-8 → bottom at 80px) */}
-            <div className="h-20 flex-shrink-0" />
+              {/* Fixed spacer matching logo height (w-12 square at top-8 → bottom at 80px) */}
+              <div className="h-20 flex-shrink-0" />
 
-            {/* Scrollable content bounded below logo area */}
-            <div className="flex-1 relative min-h-0">
-              <div
-                aria-hidden="true"
-                className="absolute top-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
-                style={{
-                  opacity: showTopBlur ? 1 : 0,
-                  background: 'linear-gradient(to bottom, #0B0C10 10%, transparent)',
-                }}
-              />
-              <div
-                ref={scrollRef}
-                className="h-full overflow-y-auto px-8 pb-10 md:px-12"
-                onScroll={checkScroll}
-              >
-              <div className="max-w-2xl mx-auto w-full md:py-4">
-                <h2 className="font-sans text-xs uppercase tracking-[0.2em] text-[#00FFFF] mb-6 opacity-90 text-center md:text-left">
-                  Professional Summary
-                </h2>
+              {/* Scrollable content bounded below logo area */}
+              <div className="flex-1 relative min-h-0">
+                <div
+                  aria-hidden="true"
+                  className="absolute top-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
+                  style={{
+                    opacity: showTopBlur ? 1 : 0,
+                    background: 'linear-gradient(to bottom, #0B0C10 10%, transparent)',
+                  }}
+                />
+                <div
+                  ref={scrollRef}
+                  className="h-full overflow-y-auto px-8 pb-10 md:px-12"
+                  onScroll={checkScroll}
+                >
+                  <div className="max-w-2xl mx-auto w-full md:py-4">
+                    <h2 className="font-sans text-xs uppercase tracking-[0.2em] text-[#00FFFF] mb-6 opacity-90 text-center md:text-left">
+                      Professional Summary
+                    </h2>
 
-                <div className="text-sm md:text-base leading-7 md:leading-8 text-gray-300">
-                  {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
-                    <span key={index}>
-                      {paragraph}
-                      {index === bioParagraphs.length - 1 && easterEggText.length === 0 ? (
-                        <span className="business-card-vim-cursor" aria-hidden="true" />
+                    <div className="text-sm md:text-base leading-7 md:leading-8 text-gray-300">
+                      {bioParagraphs.length > 0 ? bioParagraphs.map((paragraph, index) => (
+                        <span key={index}>
+                          {paragraph}
+                          {index === bioParagraphs.length - 1 && easterEggText.length === 0 ? (
+                            <span className="business-card-vim-cursor" aria-hidden="true" />
+                          ) : null}
+                          {index < bioParagraphs.length - 1 && <><br /><br /></>}
+                        </span>
+                      )) : (
+                        <p>Loading summary...</p>
+                      )}
+                      {easterEggText.length > 0 ? (
+                        <p className="font-mono text-[#00FFFF]/85 business-card-summary-easter-egg">
+                          {easterEggText}
+                          <span className="business-card-vim-cursor" aria-hidden="true" />
+                        </p>
                       ) : null}
-                      {index < bioParagraphs.length - 1 && <><br /><br /></>}
-                    </span>
-                  )) : (
-                    <p>Loading summary...</p>
-                  )}
-                  {easterEggText.length > 0 ? (
-                    <p className="font-mono text-[#00FFFF]/85 business-card-summary-easter-egg">
-                      {easterEggText}
-                      <span className="business-card-vim-cursor" aria-hidden="true" />
-                    </p>
-                  ) : null}
-                </div>{/* end text-sm */}
-              </div>{/* end max-w-2xl */}
-              </div>{/* end scrollRef */}
-              <div
-                aria-hidden="true"
-                className="absolute bottom-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
-                style={{
-                  opacity: showBottomBlur ? 1 : 0,
-                  background: 'linear-gradient(to top, #0B0C10 10%, transparent)',
-                }}
-              />
-            </div>{/* end flex-1 relative */}
-          </div>{/* end rotateY inner */}
-        </div>{/* end back face wrapper */}
+                    </div>{/* end text-sm */}
+                  </div>{/* end max-w-2xl */}
+                </div>{/* end scrollRef */}
+                <div
+                  aria-hidden="true"
+                  className="absolute bottom-0 inset-x-0 h-10 z-10 pointer-events-none transition-opacity duration-300"
+                  style={{
+                    opacity: showBottomBlur ? 1 : 0,
+                    background: 'linear-gradient(to top, #0B0C10 10%, transparent)',
+                  }}
+                />
+              </div>{/* end flex-1 relative */}
+            </div>{/* end rotateY inner */}
+          </div>{/* end back face wrapper */}
 
         </div>{/* end absolute inset-0 */}
 

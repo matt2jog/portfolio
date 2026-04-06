@@ -40,7 +40,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
               <div className="relative w-36 h-36 flex items-center justify-center">
                 {/* Dynamically generated Logo */}
                 <img 
-                  src="/logo.png" 
+                  src="/assets/logo-flat.png" 
                   alt="System Core Logo" 
                   className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(0,255,255,0.6)] mix-blend-screen"
                 />
@@ -102,7 +102,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
           >
             <div className="relative w-24 h-24 mb-6 opacity-40">
                 <img 
-                  src="/logo.png" 
+                  src="/assets/logo-flat.png" 
                   alt="Matthew Tujague Logo" 
                   className="w-full h-full object-contain mix-blend-screen"
                 />
