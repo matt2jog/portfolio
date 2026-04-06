@@ -17,6 +17,7 @@ interface BlueprintCardProps {
   setActiveCardId?: (id: string | null) => void;
   id?: string;
   isActiveFace?: boolean;
+  onChatOpen?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -63,6 +64,7 @@ export function BlueprintCard({
   setActiveCardId,
   id,
   isActiveFace = true,
+  onChatOpen,
 }: BlueprintCardProps) {
   const cardId = id || `card-${title.replace(/\s+/g, "-")}`;
   const isActive = isActiveFace && activeCardId === cardId;
@@ -133,7 +135,11 @@ export function BlueprintCard({
   };
 
   const handleClick = () => {
-    if (!isActive) activate();
+    if (!isActive) {
+      activate();
+    } else if (onChatOpen) {
+      onChatOpen();
+    }
   };
 
   const hasLinks = !!githubUrl || !!deployedUrl;

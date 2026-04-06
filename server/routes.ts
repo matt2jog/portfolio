@@ -1,5 +1,6 @@
 import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
+import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
@@ -30,12 +31,27 @@ import {
   experiences,
   insertExperienceSchema,
   updateExperienceSchema,
+  aiModels,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { Agent } from "./agent";
+import { pushPromptVersion } from "./agent/tracing";
+import {
+  GitHubRepoTool,
+  GitHubFileTreeTool,
+  GitHubReadFileTool,
+  GitHubCommitsTool,
+  GitHubIssuestool,
+  ProjectContextTool,
+} from "./agent/tools";
+import { PORTFOLIO_CHAT_RULES } from "./agent/rules";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
+const PROMPT_SUGGESTIONS_VERSION = "v4";
 let projectsCache: { data: any[]; timestamp: number } | null = null;
+type PromptSuggestion = { label: string; prompt: string };
+const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
 
 function getProjectsCacheTtlMs() {
   const parsed = Number.parseInt(process.env.PROJECTS_CACHE_TTL_MINUTES || "", 10);
@@ -222,6 +238,264 @@ export async function registerRoutes(
     res.json(data);
   });
 
+  // ========== AI CHAT ==========
+
+  app.get("/api/public/ai-models", async (_req, res) => {
+    const rows = await db.select({
+      id: aiModels.id,
+      label: aiModels.label,
+      modelId: aiModels.modelId,
+      provider: aiModels.provider,
+    }).from(aiModels)
+      .where(eq(aiModels.enabled, true))
+      .orderBy(asc(aiModels.position));
+    res.json(rows);
+  });
+
+  app.get("/api/public/chat-prompt-suggestions", async (req, res) => {
+    const gradientToken = process.env.GRADIENT_AI_TOKEN;
+    if (!gradientToken) {
+      return res.status(503).json({ error: "AI chat is not configured" });
+    }
+
+    const projectId = String(req.query.projectId || "");
+    const modelId = String(req.query.modelId || "");
+    if (!projectId || !modelId) {
+      return res.status(400).json({ error: "projectId and modelId are required" });
+    }
+
+    const [model] = await db.select().from(aiModels)
+      .where(eq(aiModels.modelId, modelId))
+      .limit(1);
+    if (!model || !model.enabled) {
+      return res.status(400).json({ error: "Model not available" });
+    }
+
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const tools = [
+      new ProjectContextTool(),
+      new GitHubRepoTool(),
+      new GitHubFileTreeTool(),
+      new GitHubReadFileTool(),
+      new GitHubCommitsTool(),
+      new GitHubIssuestool(),
+    ];
+
+    const promptInputsHash = createPromptSuggestionsHash(project, tools.map((tool) => tool.definition));
+    const cacheKey = `${modelId}:${promptInputsHash}`;
+    const cached = promptSuggestionsCache.get(cacheKey);
+    if (cached) {
+      return res.json({ hash: promptInputsHash, suggestions: cached });
+    }
+
+    const suggestionsAgent = new Agent({
+      modelId,
+      token: gradientToken,
+      systemPrompt: [
+        "You write suggested starter prompts for a portfolio project chat.",
+        "The prompts must help a visitor either understand the project better or connect more directly to its creator.",
+        "Return valid JSON only in the form {\"suggestions\":[{\"label\":\"...\",\"prompt\":\"...\"}]}.",
+        "Rules:",
+        "- Provide exactly 5 suggestions.",
+        "- Each label must be at least 2 words and at most 3 words.",
+        "- Each label must be 18 characters or fewer.",
+        "- Prefer short, compact phrasing that still feels specific.",
+        "- Each prompt must be one clear user message between 40 and 120 characters.",
+        "- The prompt should sound natural if sent directly into chat.",
+        "- Vary the angle across architecture, implementation, current progress, code-level details, and creator context.",
+        "- Do not mention tools by internal function names.",
+        "- Do not use numbering, bullets, markdown, or extra keys.",
+      ].join("\n"),
+      maxTokens: 400,
+      temperature: 0.7,
+    });
+
+    try {
+      const raw = await suggestionsAgent.run([{
+        role: "user",
+        content: JSON.stringify({
+          project: {
+            title: project.title,
+            category: project.category,
+            description: project.description,
+            longDescription: project.longDescription,
+            tech: project.tech,
+            githubUrl: project.githubUrl,
+            deployedUrl: project.deployedUrl,
+          },
+          toolsAvailable: tools.map((tool) => ({
+            name: tool.definition.name,
+            description: tool.definition.description,
+          })),
+        }),
+      }]);
+
+      const suggestions = normalizePromptSuggestions(raw, project.title);
+      promptSuggestionsCache.set(cacheKey, suggestions);
+      res.json({ hash: promptInputsHash, suggestions });
+    } catch (err: any) {
+      const fallback = fallbackPromptSuggestions(project.title);
+      promptSuggestionsCache.set(cacheKey, fallback);
+      res.json({ hash: promptInputsHash, suggestions: fallback, fallback: true, error: err.message });
+    }
+  });
+
+  app.post("/api/public/chat", async (req, res) => {
+    const gradientToken = process.env.GRADIENT_AI_TOKEN;
+    if (!gradientToken) {
+      return res.status(503).json({ error: "AI chat is not configured" });
+    }
+
+    const { projectId, modelId, messages, welcome } = req.body;
+    if (!projectId || !modelId || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "projectId, modelId, and messages[] are required" });
+    }
+
+    // Validate model is allowed
+    const [model] = await db.select().from(aiModels)
+      .where(eq(aiModels.modelId, modelId))
+      .limit(1);
+    if (!model || !model.enabled) {
+      return res.status(400).json({ error: "Model not available" });
+    }
+
+    // Get project + system prompt
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const rules = PORTFOLIO_CHAT_RULES.toPromptBlock();
+
+    const [personalInfo] = await db.select().from(personalInformation)
+      .orderBy(desc(personalInformation.updatedAt))
+      .limit(1);
+
+    const generalInformation = personalInfo
+      ? `\n\nGeneral information: The project/portfolio owner is ${personalInfo.name}. Contact: ${personalInfo.email} | ${personalInfo.phoneFormatted} | ${personalInfo.linkedinUrl}`
+      : `\n\nGeneral information: The project/portfolio owner is Matthew Tujague. Contact: matthew@2jog.dev | (732) 639-3889 | https://linkedin.com/in/matthewtujague`;
+
+    const basePrompt = project.aiSystemPrompt
+      || `You are an AI assistant for the project "${project.title}". Full project details have been loaded into this conversation as tool results — refer to them. Use the GitHub tools to fetch repository details and dig deeper whenever a question requires verified source-level information. Be professional yet conversational.`;
+
+    const systemPrompt = basePrompt + generalInformation + rules;
+
+    // Push system prompt as a versioned entry in LangSmith Hub (fire-and-forget)
+    const promptIdentifier = `project-${project.id}-system`;
+    pushPromptVersion(promptIdentifier, systemPrompt, {
+      description: `System prompt for project: ${project.title}`,
+      tags: ["project-chat", project.title],
+    });
+
+    const tools = [
+      new ProjectContextTool(),
+      new GitHubRepoTool(),
+      new GitHubFileTreeTool(),
+      new GitHubReadFileTool(),
+      new GitHubCommitsTool(),
+      new GitHubIssuestool(),
+    ];
+
+    const agent = new Agent({
+      modelId,
+      token: gradientToken,
+      systemPrompt,
+      tools,
+      maxTokens: 4096,
+      maxToolRounds: 12,
+      tracingTags: ["project-chat", modelId, project.title],
+      tracingMeta: { projectId: project.id, projectTitle: project.title, modelId },
+    });
+
+    const ownerName = personalInfo?.name ?? "Matthew Tujague";
+    const ownerEmail = personalInfo?.email ?? "matthew@2jog.dev";
+    const ownerPhone = personalInfo?.phone ?? "+17326393889";
+    const ownerLinkedin = personalInfo?.linkedinUrl ?? "https://linkedin.com/in/matthewtujague";
+    const ownerGithub = personalInfo?.githubUrl ?? "https://github.com/binimal101";
+    const ownerPortfolio = personalInfo?.portfolioUrl ?? "https://2jog.dev/";
+
+    const userMessages: Array<{ role: "user" | "assistant"; content: string }> = welcome
+      ? [{
+        role: "user",
+        content: `[WELCOME] Greet this visitor with a single short paragraph — no lists, no headers. First, give a crisp ~20-word description of this project as you would pitch it to a non-technical hiring manager: what it does and why it matters. Then naturally introduce its creator, ${ownerName}, and invite the visitor to reach out: email ${ownerEmail}, phone ${ownerPhone}, LinkedIn ${ownerLinkedin}.`,
+      }]
+      : messages.slice(-20).map((m: any) => ({
+        role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+        content: String(m.content).slice(0, 4000),
+      }));
+
+    // Always prime with project details so every turn has full context.
+    // The seed messages are synthetic tool results that live only server-side —
+    // they are never stored in the client's message state, so without re-priming
+    // every turn the model loses project context after the first response.
+    // GitHub repo overview is only fetched on the first turn to avoid hitting
+    // the GitHub API on every message.
+    const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
+    const primeCalls: Array<{ name: string; args: Record<string, unknown> }> = [
+      { name: "get_project_details", args: { project_id: project.id } },
+    ];
+    if (isFirstTurn && project.githubUrl) {
+      const ghMatch = project.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+      if (ghMatch) {
+        primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
+      }
+    }
+    const seed = await agent.primeContext(primeCalls);
+
+    try {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      if (welcome) {
+        const welcomeSummaryMessages: Array<{ role: "user"; content: string }> = [{
+          role: "user",
+          content: "[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.",
+        }];
+        const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages])).trim() || project.description;
+        const welcomeMessage = buildWelcomeMessage({
+          aiSummary,
+          ownerName,
+          ownerEmail,
+          ownerPhone,
+          ownerLinkedin,
+          ownerGithub,
+          ownerPortfolio,
+        });
+        const chunk = JSON.stringify({ choices: [{ delta: { content: welcomeMessage } }] });
+        res.write(`data: ${chunk}\n\n`);
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      }
+
+      for await (const event of agent.stream([...seed, ...userMessages])) {
+        if (event.type === "tool_call") {
+          res.write(`event: tool_call\ndata: ${JSON.stringify({ name: event.name, args: event.args })}\n\n`);
+        } else {
+          const chunk = JSON.stringify({ choices: [{ delta: { content: event.delta } }] });
+          res.write(`data: ${chunk}\n\n`);
+        }
+      }
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(500).json({ error: "AI request failed", details: err.message });
+      } else {
+        res.end();
+      }
+    }
+  });
+
   app.get("/api/public/bio", async (_req, res) => {
     const [row] = await db.select().from(bio)
       .orderBy(desc(bio.createdAt))
@@ -250,7 +524,7 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    
+
     // Fallbacks if no data exists yet (before seed)
     res.json(row || {
       name: "Matthew Tujague",
@@ -345,9 +619,9 @@ export async function registerRoutes(
   app.delete("/api/admin/projects/:id", requireAdmin, async (req, res) => {
     const projectId = routeId(req.params.id);
     await db.update(projects)
-      .set({ 
+      .set({
         deletedAt: new Date(),
-        archivedBy: req.user?.id 
+        archivedBy: req.user?.id
       })
       .where(eq(projects.id, projectId));
     invalidateProjectsCache();
@@ -384,7 +658,7 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    res.json(row || { 
+    res.json(row || {
       name: "Matthew Tujague",
       title: "Software Engineer",
       location: "NJ-NY-PA",
@@ -404,7 +678,7 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json(parsed.error);
 
     const [existing] = await db.select().from(personalInformation).limit(1);
-    
+
     let result;
     if (existing) {
       [result] = await db.update(personalInformation)
@@ -799,6 +1073,92 @@ function normalizeBullets(value: unknown): string[] {
 function routeId(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
+}
+
+function buildWelcomeMessage(args: {
+  aiSummary: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  ownerLinkedin: string;
+  ownerGithub: string;
+  ownerPortfolio: string;
+}) {
+  const firstName = args.ownerName.trim().split(/\s+/)[0] || "Matt";
+  const linkedinLabel = firstName.toLowerCase() === "matthew" ? "Matt's LinkedIn" : `${firstName}'s LinkedIn`;
+
+  return [
+    args.aiSummary,
+    "**I can...**",
+    "- Explain the technical implementation and architectural decisions behind this project.",
+    "- Pull from the actual project source code when needed.",
+    "- Check the repository context, commits, and related history.",
+    `Reach out via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [${linkedinLabel}](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
+  ].join("\n\n");
+}
+
+function createPromptSuggestionsHash(
+  project: typeof projects.$inferSelect,
+  toolsAvailable: Array<{ name: string; description: string; parameters: { type: "object"; properties: Record<string, { type: string; description: string; enum?: string[] }>; required?: string[] } }>,
+) {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      version: PROMPT_SUGGESTIONS_VERSION,
+      toolsAvailable,
+      project: {
+        id: project.id,
+        title: project.title,
+        category: project.category,
+        description: project.description,
+        longDescription: project.longDescription,
+        tech: project.tech,
+        githubUrl: project.githubUrl,
+        deployedUrl: project.deployedUrl,
+        aiSystemPrompt: project.aiSystemPrompt,
+      },
+    }))
+    .digest("hex");
+}
+
+function normalizePromptSuggestions(raw: string, projectTitle: string): PromptSuggestion[] {
+  try {
+    const parsed = JSON.parse(raw);
+    const suggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+    const normalized = suggestions
+      .map((item: unknown) => {
+        if (!item || typeof item !== "object") return null;
+        const candidate = item as { label?: unknown; prompt?: unknown };
+        const label = typeof candidate.label === "string" ? candidate.label.trim().replace(/\s+/g, " ") : "";
+        const prompt = typeof candidate.prompt === "string" ? candidate.prompt.trim().replace(/\s+/g, " ") : "";
+        return label && prompt ? { label, prompt } : null;
+      })
+      .filter((item: PromptSuggestion | null): item is PromptSuggestion => Boolean(item))
+      .filter((item: PromptSuggestion) => item.label.length <= 18)
+      .filter((item: PromptSuggestion) => {
+        const wordCount = item.label.split(/\s+/).filter(Boolean).length;
+        return wordCount >= 2 && wordCount <= 3;
+      })
+      .filter((item: PromptSuggestion) => item.prompt.length >= 40 && item.prompt.length <= 120)
+      .slice(0, 5);
+
+    if (normalized.length === 5) {
+      return normalized;
+    }
+  } catch {
+    // Fall through to fallback handling.
+  }
+
+  return fallbackPromptSuggestions(projectTitle);
+}
+
+function fallbackPromptSuggestions(projectTitle: string): PromptSuggestion[] {
+  return [
+    { label: "Project Overview", prompt: `Give me a clear overview of ${projectTitle} and explain why it matters.` },
+    { label: "System Design", prompt: `Walk me through the architecture of ${projectTitle} from the highest level down.` },
+    { label: "Source Code", prompt: `Use the project code to explain how ${projectTitle} is actually implemented.` },
+    { label: "Recent Progress", prompt: `Check the latest progress on ${projectTitle} and summarize what changed recently.` },
+    { label: "Creator Background", prompt: "Tell me about the creator of this project and how this work reflects their strengths." },
+  ];
 }
 
 async function hydrateProjectsWithBullets(projectRows: any[]) {

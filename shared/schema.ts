@@ -30,10 +30,21 @@ export const projects = pgTable("projects", {
   hoverImage: text("hover_image"),
   deployedUrl: text("deployed_url"),
   githubUrl: text("github_url"),
+  aiSystemPrompt: text("ai_system_prompt"),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
+});
+
+export const aiModels = pgTable("ai_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  modelId: text("model_id").notNull().unique(),
+  provider: text("provider").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const xyzBullets = pgTable("xyz_bullets", {
@@ -99,6 +110,14 @@ export const insertProjectSchema = createInsertSchema(projects).pick({
   hoverImage: true,
   deployedUrl: true,
   githubUrl: true,
+  aiSystemPrompt: true,
+});
+
+export const insertAiModelSchema = createInsertSchema(aiModels).pick({
+  label: true,
+  modelId: true,
+  provider: true,
+  enabled: true,
 });
 
 export const updateProjectSchema = insertProjectSchema.partial();
@@ -193,6 +212,7 @@ export type AllSkill = typeof allSkills.$inferSelect;
 export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
 export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
+export type AiModel = typeof aiModels.$inferSelect;
 
 export const experiences = pgTable("experiences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
