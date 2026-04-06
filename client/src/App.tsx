@@ -2,7 +2,7 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,6 +10,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
 import { detectJurisdiction } from "@/lib/geoip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
@@ -64,6 +67,10 @@ function LogRocketBridge() {
   return null;
 }
 
+function dispatchConsentResolved() {
+  window.dispatchEvent(new Event("consent-resolved"));
+}
+
 function ConsentManager() {
   const [showBanner, setShowBanner] = useState(false);
   const [jurisdiction, setJurisdiction] = useState<string | null>(null);
@@ -85,26 +92,100 @@ function ConsentManager() {
       if (globalOptOut) {
         setShowBanner(false);
         setIsLoaded(true);
+        dispatchConsentResolved();
         return;
       }
 
       const shouldShow = !hasConsent && !isLegalPage;
-      
+
       setShowBanner(shouldShow);
       setIsLoaded(true);
+
+      // If no banner needed, consent is already settled
+      if (!shouldShow) {
+        dispatchConsentResolved();
+      }
     })();
   }, [location]);
-
-
 
   if (!isLoaded) return null;
 
   return (
     <ConsentBanner
       isOpen={showBanner}
-      onClose={() => setShowBanner(false)}
+      onClose={() => {
+        setShowBanner(false);
+        dispatchConsentResolved();
+      }}
       jurisdiction={jurisdiction}
     />
+  );
+}
+
+function renderKatexBody(src: string): string {
+  try {
+    return src
+      .replace(/\$\$([^$]+)\$\$/g, (_, math) =>
+        katex.renderToString(math, { displayMode: true, throwOnError: false })
+      )
+      .replace(/\$([^$\n]+)\$/g, (_, math) =>
+        katex.renderToString(math, { displayMode: false, throwOnError: false })
+      );
+  } catch {
+    return src;
+  }
+}
+
+function UrlTailoringInterceptor() {
+  const [open, setOpen] = useState(false);
+  const [dialogData, setDialogData] = useState<{ title: string; body: string } | null>(null);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get("m");
+    if (!m) return;
+
+    function attemptFetch() {
+      if (fetchedRef.current) return;
+      fetchedRef.current = true;
+      fetch(`/api/public/url-tailoring/${encodeURIComponent(m!)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.title && data?.body) {
+            setDialogData({ title: data.title, body: data.body });
+            setOpen(true);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // If consent is already settled, show after a short delay so the page renders first
+    const alreadySettled = getStoredConsent() !== null || isGlobalOptOutEnabled();
+    if (alreadySettled) {
+      const t = setTimeout(attemptFetch, 400);
+      return () => clearTimeout(t);
+    }
+
+    // Otherwise wait for consent banner to resolve
+    window.addEventListener("consent-resolved", attemptFetch, { once: true });
+    return () => window.removeEventListener("consent-resolved", attemptFetch);
+  }, []);
+
+  if (!dialogData) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="bg-black border border-white/20 text-white max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold">{dialogData.title}</DialogTitle>
+        </DialogHeader>
+        <div
+          className="text-sm text-white/80 leading-relaxed mt-2 katex-body"
+          dangerouslySetInnerHTML={{ __html: renderKatexBody(dialogData.body) }}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -131,6 +212,7 @@ function App() {
       <TooltipProvider>
         <ConsentManager />
         <LogRocketBridge />
+        <UrlTailoringInterceptor />
         <Toaster />
         <Router />
       </TooltipProvider>

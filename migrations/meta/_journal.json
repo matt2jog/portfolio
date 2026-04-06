@@ -23,5 +23,12 @@
       "tag": "0002_lumpy_living_tribunal",
       "breakpoints": true
     }
+    ,{
+      "idx": 3,
+      "version": "7",
+      "when": 1744000000000,
+      "tag": "0003_url_tailoring",
+      "breakpoints": true
+    }
   ]
 }

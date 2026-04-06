@@ -30,9 +30,13 @@ import {
   experiences,
   insertExperienceSchema,
   updateExperienceSchema,
+  urlTailoring,
+  insertUrlTailoringSchema,
+  updateUrlTailoringSchema,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import { randomBytes } from "crypto";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 let projectsCache: { data: any[]; timestamp: number } | null = null;
@@ -775,6 +779,66 @@ export async function registerRoutes(
     invalidateProjectsCache();
     await logAudit(req, "project.restore", { id: projectId });
     res.json(restored);
+  });
+
+  // ========== URL TAILORING ==========
+
+  app.get("/api/public/url-tailoring/:param", async (req, res) => {
+    const param = routeId(req.params.param);
+    const [row] = await db
+      .select({ title: urlTailoring.title, body: urlTailoring.body })
+      .from(urlTailoring)
+      .where(eq(urlTailoring.param, param))
+      .limit(1);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    res.json(row);
+  });
+
+  app.get("/api/admin/url-tailoring", requireAdmin, async (req, res) => {
+    const tag = typeof req.query.tag === "string" ? req.query.tag.trim() : undefined;
+    const rows = tag
+      ? await db.select().from(urlTailoring).where(ilike(urlTailoring.tag, `%${tag}%`)).orderBy(desc(urlTailoring.createdAt))
+      : await db.select().from(urlTailoring).orderBy(desc(urlTailoring.createdAt));
+    res.json(rows);
+  });
+
+  app.post("/api/admin/url-tailoring", requireAdmin, async (req, res) => {
+    const parsed = insertUrlTailoringSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    let param: string;
+    let attempts = 0;
+    while (true) {
+      param = randomBytes(6).toString("base64url").slice(0, 8);
+      const [existing] = await db.select({ id: urlTailoring.id }).from(urlTailoring).where(eq(urlTailoring.param, param)).limit(1);
+      if (!existing) break;
+      if (++attempts > 10) return res.status(500).json({ error: "Failed to generate unique param" });
+    }
+
+    const [created] = await db
+      .insert(urlTailoring)
+      .values({ ...parsed.data, param })
+      .returning();
+
+    await logAudit(req, "urlTailoring.create", created);
+    res.json(created);
+  });
+
+  app.put("/api/admin/url-tailoring/:id", requireAdmin, async (req, res) => {
+    const recordId = routeId(req.params.id);
+    const parsed = updateUrlTailoringSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+
+    const [updated] = await db
+      .update(urlTailoring)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(urlTailoring.id, recordId))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Not found" });
+
+    await logAudit(req, "urlTailoring.update", { id: recordId, ...parsed.data });
+    res.json(updated);
   });
 
   return httpServer;

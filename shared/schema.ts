@@ -194,6 +194,27 @@ export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
 export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 
+export const urlTailoring = pgTable("url_tailoring", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tag: text("tag").notNull().unique(),
+  param: text("param").notNull().unique(),
+  startPage: text("start_page").notNull().default("/"),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUrlTailoringSchema = createInsertSchema(urlTailoring).pick({
+  tag: true,
+  startPage: true,
+  title: true,
+  body: true,
+});
+
+export const updateUrlTailoringSchema = insertUrlTailoringSchema.partial();
+export type UrlTailoring = typeof urlTailoring.$inferSelect;
+
 export const experiences = pgTable("experiences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   role: text("role").notNull(),

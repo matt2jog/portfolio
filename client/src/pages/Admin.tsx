@@ -6,13 +6,15 @@ import Footer from "@/components/Footer";
 import AdminBioPanel from "@/components/admin/AdminBioPanel";
 import AdminProjectsPanel from "@/components/admin/AdminProjectsPanel";
 import AdminSkillsPanel from "@/components/admin/AdminSkillsPanel";
+import AdminUrlTailoringPanel from "@/components/admin/AdminUrlTailoringPanel";
 
-type AdminTab = "bio" | "projects" | "skills";
+type AdminTab = "bio" | "projects" | "skills" | "url-tailoring";
 
 const tabs: { id: AdminTab; label: string }[] = [
   { id: "bio", label: "Bio" },
   { id: "projects", label: "Projects" },
   { id: "skills", label: "Skills" },
+  { id: "url-tailoring", label: "URL Tailoring" },
 ];
 
 export default function Admin() {
@@ -74,6 +76,7 @@ export default function Admin() {
   const activePanel = useMemo(() => {
     if (activeTab === "projects") return <AdminProjectsPanel />;
     if (activeTab === "skills") return <AdminSkillsPanel />;
+    if (activeTab === "url-tailoring") return <AdminUrlTailoringPanel />;
     return <AdminBioPanel />;
   }, [activeTab]);
 
@@ -129,7 +132,7 @@ export default function Admin() {
       </div>
 
       <nav className="border border-white/10 p-2 bg-black/40 sticky top-2 z-10">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
