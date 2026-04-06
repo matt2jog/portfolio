@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -181,6 +181,38 @@ export const personalInformation = pgTable("personal_information", {
 
 export const insertPersonalInformationSchema = createInsertSchema(personalInformation).omit({ id: true, updatedAt: true });
 export const updatePersonalInformationSchema = insertPersonalInformationSchema.partial();
+
+export const adminPolicyAcceptance = pgTable(
+  "admin_policy_acceptance",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    adminId: varchar("admin_id").notNull(),
+    timestamp: timestamp("timestamp").defaultNow().notNull(),
+    policyVersion: varchar("policy_version").notNull(),
+    termsVersion: varchar("terms_version").notNull(),
+    privacyVersion: varchar("privacy_version").notNull(),
+    accepted: boolean("accepted").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("admin_policy_acceptance_unique_idx").on(
+      table.adminId,
+      table.policyVersion,
+      table.termsVersion,
+      table.privacyVersion,
+    ),
+  ],
+);
+
+export const insertAdminPolicyAcceptanceSchema = createInsertSchema(adminPolicyAcceptance).pick({
+  adminId: true,
+  policyVersion: true,
+  termsVersion: true,
+  privacyVersion: true,
+  accepted: true,
+});
+
+export type AdminPolicyAcceptance = typeof adminPolicyAcceptance.$inferSelect;
+export type InsertAdminPolicyAcceptance = typeof insertAdminPolicyAcceptanceSchema._type;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
