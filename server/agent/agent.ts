@@ -1,4 +1,6 @@
 import type { Tool } from "./tool";
+import { createRun, withRun } from "./tracing";
+import type { RunTree } from "langsmith/run_trees";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -28,6 +30,7 @@ interface CompletionChoice {
 
 interface CompletionResponse {
   choices: CompletionChoice[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 interface StreamDelta {
@@ -61,10 +64,14 @@ export interface AgentConfig {
   tools?: Tool[];
   /** Max sequential tool-call rounds before forcing a text reply (default 6) */
   maxToolRounds?: number;
-  /** Max output tokens per completion (default 1024) */
+  /** Max output tokens per completion (default 4096) */
   maxTokens?: number;
   /** Temperature (default 0.7) */
   temperature?: number;
+  /** Optional metadata attached to every LangSmith trace */
+  tracingMeta?: Record<string, unknown>;
+  /** Optional tags attached to every LangSmith trace */
+  tracingTags?: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -82,8 +89,10 @@ export class Agent {
       ...config,
       tools: config.tools ?? [],
       maxToolRounds: config.maxToolRounds ?? 6,
-      maxTokens: config.maxTokens ?? 1024,
+      maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.7,
+      tracingMeta: config.tracingMeta ?? {},
+      tracingTags: config.tracingTags ?? [],
     };
 
     this.toolMap = new Map();
@@ -95,90 +104,164 @@ export class Agent {
   /* ---- public API ------------------------------------------------- */
 
   /**
-   * Run a non-streaming agentic loop: send messages → if the model
-   * requests tool calls, execute them and loop. Returns the final
-   * assistant text message.
+   * Pre-execute a list of tool calls and return synthetic message pairs
+   * (assistant tool_call + tool result) that can be prepended to the
+   * user messages before the first LLM turn. This guarantees the model
+   * has context without relying on it to decide to call tools first.
+   *
+   * Usage: const seed = await agent.primeContext([{ name: "get_project_details", args: { project_id: "..." } }])
+   *        agent.stream([...seed, ...userMessages])
    */
-  async run(userMessages: ChatMessage[]): Promise<string> {
-    const messages = this.buildMessages(userMessages);
-    let rounds = 0;
-
-    while (rounds < this.config.maxToolRounds) {
-      const response = await this.complete(messages, false) as CompletionResponse;
-      const choice = response.choices?.[0];
-      if (!choice) return "(no response)";
-
-      const assistantMsg: ChatMessage = {
+  async primeContext(
+    calls: Array<{ name: string; args: Record<string, unknown> }>,
+  ): Promise<ChatMessage[]> {
+    const seed: ChatMessage[] = [];
+    for (const call of calls) {
+      const fakeId = `prime_${call.name}_${Date.now()}`;
+      const result = await this.executeTool(
+        { id: fakeId, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } },
+      );
+      // Skip failed tool calls — injecting error results causes the model to
+      // hallucinate when the system prompt implies the data was loaded.
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed?.error) continue;
+      } catch { /* non-JSON result is fine, include it */ }
+      // Inject as a synthetic assistant tool_call + tool result pair
+      seed.push({
         role: "assistant",
-        content: choice.message.content,
-        tool_calls: choice.message.tool_calls,
-      };
-      messages.push(assistantMsg);
-
-      // If no tool calls, we're done
-      if (!choice.message.tool_calls?.length) {
-        return choice.message.content ?? "";
-      }
-
-      // Execute each tool call and append results
-      for (const call of choice.message.tool_calls) {
-        const result = await this.executeTool(call);
-        messages.push({
-          role: "tool",
-          content: result,
-          tool_call_id: call.id,
-        });
-      }
-
-      rounds++;
+        content: null,
+        tool_calls: [{ id: fakeId, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } }],
+      });
+      seed.push({ role: "tool", content: result, tool_call_id: fakeId });
     }
-
-    // Exhausted tool rounds — force a text-only completion
-    return this.forceTextReply(messages);
+    return seed;
   }
 
   /**
-   * Run a streaming agentic loop. Yields text deltas for the FINAL
-   * assistant reply. Tool rounds execute non-streaming internally,
-   * then the last reply streams to the caller.
+   * Non-streaming agentic loop. Creates a parent "chain" trace in
+   * LangSmith, with each LLM call and tool execution as child runs.
+   */
+  async run(userMessages: ChatMessage[]): Promise<string> {
+    const messages = this.buildMessages(userMessages);
+
+    const parentRun = createRun({
+      name: `agent:${this.config.modelId}`,
+      runType: "chain",
+      inputs: { messages },
+      tags: this.config.tracingTags,
+      metadata: this.config.tracingMeta,
+    });
+
+    return withRun(
+      parentRun,
+      async () => {
+        let rounds = 0;
+
+        while (rounds < this.config.maxToolRounds) {
+          const response = await this.complete(messages, false, parentRun ?? undefined);
+          const choice = response.choices?.[0];
+          if (!choice) return "(no response)";
+
+          const assistantMsg: ChatMessage = {
+            role: "assistant",
+            content: choice.message.content,
+            tool_calls: choice.message.tool_calls,
+          };
+          messages.push(assistantMsg);
+
+          if (!choice.message.tool_calls?.length) {
+            return choice.message.content ?? "";
+          }
+
+          for (const call of choice.message.tool_calls) {
+            const result = await this.executeTool(call, parentRun ?? undefined);
+            messages.push({ role: "tool", content: result, tool_call_id: call.id });
+          }
+
+          rounds++;
+        }
+
+        return this.forceTextReply(messages);
+      },
+      (result) => ({ output: result }),
+    );
+  }
+
+  /**
+   * Streaming agentic loop. Tool rounds execute non-streaming. The
+   * final reply streams as text deltas. The whole conversation is
+   * traced as a parent chain run in LangSmith.
    */
   async *stream(userMessages: ChatMessage[]): AsyncGenerator<string> {
     const messages = this.buildMessages(userMessages);
-    let rounds = 0;
 
-    // Run tool rounds non-streaming until the model produces a text reply
-    while (rounds < this.config.maxToolRounds) {
-      const response = await this.complete(messages, false) as CompletionResponse;
-      const choice = response.choices?.[0];
-      if (!choice) return;
+    const parentRun = createRun({
+      name: `agent:${this.config.modelId}`,
+      runType: "chain",
+      inputs: { messages },
+      tags: this.config.tracingTags,
+      metadata: this.config.tracingMeta,
+    });
 
-      const assistantMsg: ChatMessage = {
-        role: "assistant",
-        content: choice.message.content,
-        tool_calls: choice.message.tool_calls,
-      };
-      messages.push(assistantMsg);
-
-      if (!choice.message.tool_calls?.length) {
-        // Model gave a text reply during non-streaming probe — yield it
-        if (choice.message.content) yield choice.message.content;
-        return;
-      }
-
-      for (const call of choice.message.tool_calls) {
-        const result = await this.executeTool(call);
-        messages.push({
-          role: "tool",
-          content: result,
-          tool_call_id: call.id,
-        });
-      }
-
-      rounds++;
+    if (parentRun) {
+      try { await parentRun.postRun(); } catch { /* silent */ }
     }
 
-    // All tool rounds done (or exhausted) — now stream the final reply
-    yield* this.streamCompletion(messages);
+    let fullOutput = "";
+    let error: string | undefined;
+
+    try {
+      let rounds = 0;
+
+      while (rounds < this.config.maxToolRounds) {
+        const response = await this.complete(messages, false, parentRun ?? undefined);
+        const choice = response.choices?.[0];
+        if (!choice) return;
+
+        const assistantMsg: ChatMessage = {
+          role: "assistant",
+          content: choice.message.content,
+          tool_calls: choice.message.tool_calls,
+        };
+        messages.push(assistantMsg);
+
+        if (!choice.message.tool_calls?.length) {
+          // Model already gave a text reply during the probe — yield it
+          if (choice.message.content) {
+            fullOutput = choice.message.content;
+            yield choice.message.content;
+          }
+          return;
+        }
+
+        for (const call of choice.message.tool_calls) {
+          const result = await this.executeTool(call, parentRun ?? undefined);
+          messages.push({ role: "tool", content: result, tool_call_id: call.id });
+        }
+
+        rounds++;
+      }
+
+      // Stream the final reply
+      for await (const delta of this.streamCompletion(messages, parentRun ?? undefined)) {
+        fullOutput += delta;
+        yield delta;
+      }
+    } catch (err: any) {
+      error = err?.message ?? "unknown error";
+      throw err;
+    } finally {
+      if (parentRun) {
+        try {
+          await parentRun.end(
+            error ? {} : { output: fullOutput },
+            error,
+          );
+          await parentRun.patchRun();
+        } catch { /* silent */ }
+      }
+    }
   }
 
   /* ---- internals -------------------------------------------------- */
@@ -193,42 +276,57 @@ export class Agent {
   private async complete(
     messages: ChatMessage[],
     stream: false,
-  ): Promise<CompletionResponse>;
-  private async complete(
-    messages: ChatMessage[],
-    stream: boolean,
-  ): Promise<CompletionResponse | Response> {
-    const body: Record<string, unknown> = {
-      model: this.config.modelId,
-      messages,
-      max_completion_tokens: this.config.maxTokens,
-      temperature: this.config.temperature,
-      stream,
-    };
-
-    if (this.config.tools.length > 0) {
-      body.tools = this.config.tools.map((t) => t.toJSON());
-    }
-
-    const res = await fetch(GRADIENT_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+    parentRun?: RunTree,
+  ): Promise<CompletionResponse> {
+    const llmRun = createRun({
+      name: this.config.modelId,
+      runType: "llm",
+      inputs: { messages },
+      parent: parentRun,
+      tags: this.config.tracingTags,
+      metadata: this.config.tracingMeta,
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Gradient ${res.status}: ${text}`);
-    }
+    return withRun(
+      llmRun,
+      async () => {
+        const body: Record<string, unknown> = {
+          model: this.config.modelId,
+          messages,
+          max_completion_tokens: this.config.maxTokens,
+          temperature: this.config.temperature,
+          stream: false,
+        };
 
-    if (stream) return res;
-    return res.json() as Promise<CompletionResponse>;
+        if (this.config.tools.length > 0) {
+          body.tools = this.config.tools.map((t) => t.toJSON());
+          body.tool_choice = "auto";
+        }
+
+        const res = await fetch(GRADIENT_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.config.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Gradient ${res.status}: ${text}`);
+        }
+
+        return res.json() as Promise<CompletionResponse>;
+      },
+      (data) => ({
+        generations: data.choices?.map((c) => ({ text: c.message.content ?? "" })) ?? [],
+        llm_output: { token_usage: data.usage },
+      }),
+    );
   }
 
-  private async executeTool(call: ToolCall): Promise<string> {
+  private async executeTool(call: ToolCall, parentRun?: RunTree): Promise<string> {
     const tool = this.toolMap.get(call.function.name);
     if (!tool) {
       return JSON.stringify({ error: `Unknown tool: ${call.function.name}` });
@@ -241,30 +339,41 @@ export class Agent {
       return JSON.stringify({ error: "Invalid tool arguments JSON" });
     }
 
-    try {
-      return await tool.execute(args);
-    } catch (err: any) {
-      return JSON.stringify({ error: err.message ?? "Tool execution failed" });
-    }
+    const toolRun = createRun({
+      name: call.function.name,
+      runType: "tool",
+      inputs: args,
+      parent: parentRun,
+      tags: this.config.tracingTags,
+    });
+
+    return withRun(
+      toolRun,
+      async () => {
+        try {
+          return await tool.execute(args);
+        } catch (err: any) {
+          return JSON.stringify({ error: err.message ?? "Tool execution failed" });
+        }
+      },
+      (output) => ({ output }),
+    );
   }
 
   private async forceTextReply(messages: ChatMessage[]): Promise<string> {
-    // Strip tools so the model can only produce text
-    const body = {
-      model: this.config.modelId,
-      messages,
-      max_completion_tokens: this.config.maxTokens,
-      temperature: this.config.temperature,
-      stream: false,
-    };
-
     const res = await fetch(GRADIENT_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.config.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: this.config.modelId,
+        messages,
+        max_completion_tokens: this.config.maxTokens,
+        temperature: this.config.temperature,
+        stream: false,
+      }),
     });
 
     if (!res.ok) return "(failed to generate reply)";
@@ -272,26 +381,46 @@ export class Agent {
     return data.choices?.[0]?.message?.content ?? "";
   }
 
-  private async *streamCompletion(messages: ChatMessage[]): AsyncGenerator<string> {
-    const body: Record<string, unknown> = {
-      model: this.config.modelId,
-      messages,
-      max_completion_tokens: this.config.maxTokens,
-      temperature: this.config.temperature,
-      stream: true,
-    };
+  private async *streamCompletion(
+    messages: ChatMessage[],
+    parentRun?: RunTree,
+  ): AsyncGenerator<string> {
+    // Create an LLM child run for the streaming completion
+    const llmRun = createRun({
+      name: `${this.config.modelId}:stream`,
+      runType: "llm",
+      inputs: { messages },
+      parent: parentRun,
+      tags: this.config.tracingTags,
+      metadata: this.config.tracingMeta,
+    });
 
-    // No tools for the final streaming pass — we want pure text
+    if (llmRun) {
+      try { await llmRun.postRun(); } catch { /* silent */ }
+    }
+
     const res = await fetch(GRADIENT_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.config.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: this.config.modelId,
+        messages,
+        max_completion_tokens: this.config.maxTokens,
+        temperature: this.config.temperature,
+        stream: true,
+      }),
     });
 
     if (!res.ok) {
+      if (llmRun) {
+        try {
+          await llmRun.end({}, `Gradient ${res.status}`);
+          await llmRun.patchRun();
+        } catch { /* silent */ }
+      }
       yield "(error generating response)";
       return;
     }
@@ -299,6 +428,7 @@ export class Agent {
     const reader = res.body as any;
     const decoder = new TextDecoder();
     let buffer = "";
+    let fullText = "";
 
     const processLines = function* (raw: string): Generator<string> {
       const lines = raw.split("\n");
@@ -310,37 +440,68 @@ export class Agent {
           const chunk = JSON.parse(data) as StreamChunk;
           const delta = chunk.choices?.[0]?.delta?.content;
           if (delta) yield delta;
-        } catch {
-          // skip
-        }
+        } catch { /* skip */ }
       }
     };
 
-    if (reader && typeof reader[Symbol.asyncIterator] === "function") {
-      for await (const chunk of reader) {
-        const text = typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
-        buffer += text;
-        const lastNewline = buffer.lastIndexOf("\n");
-        if (lastNewline === -1) continue;
-        const complete = buffer.slice(0, lastNewline + 1);
-        buffer = buffer.slice(lastNewline + 1);
-        yield* processLines(complete);
+    try {
+      if (reader && typeof reader[Symbol.asyncIterator] === "function") {
+        for await (const chunk of reader) {
+          const text = typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+          buffer += text;
+          const lastNewline = buffer.lastIndexOf("\n");
+          if (lastNewline === -1) continue;
+          const complete = buffer.slice(0, lastNewline + 1);
+          buffer = buffer.slice(lastNewline + 1);
+          for (const delta of Array.from(processLines(complete))) {
+            fullText += delta;
+            yield delta;
+          }
+        }
+        if (buffer) {
+          for (const delta of Array.from(processLines(buffer))) {
+            fullText += delta;
+            yield delta;
+          }
+        }
+      } else if (reader && typeof reader.getReader === "function") {
+        const r = reader.getReader();
+        while (true) {
+          const { done, value } = await r.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          buffer += text;
+          const lastNewline = buffer.lastIndexOf("\n");
+          if (lastNewline === -1) continue;
+          const complete = buffer.slice(0, lastNewline + 1);
+          buffer = buffer.slice(lastNewline + 1);
+          for (const delta of Array.from(processLines(complete))) {
+            fullText += delta;
+            yield delta;
+          }
+        }
+        if (buffer) {
+          for (const delta of Array.from(processLines(buffer))) {
+            fullText += delta;
+            yield delta;
+          }
+        }
       }
-      if (buffer) yield* processLines(buffer);
-    } else if (reader && typeof reader.getReader === "function") {
-      const r = reader.getReader();
-      while (true) {
-        const { done, value } = await r.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        buffer += text;
-        const lastNewline = buffer.lastIndexOf("\n");
-        if (lastNewline === -1) continue;
-        const complete = buffer.slice(0, lastNewline + 1);
-        buffer = buffer.slice(lastNewline + 1);
-        yield* processLines(complete);
+
+      if (llmRun) {
+        try {
+          await llmRun.end({ generations: [{ text: fullText }] });
+          await llmRun.patchRun();
+        } catch { /* silent */ }
       }
-      if (buffer) yield* processLines(buffer);
+    } catch (err: any) {
+      if (llmRun) {
+        try {
+          await llmRun.end({}, err?.message ?? "stream error");
+          await llmRun.patchRun();
+        } catch { /* silent */ }
+      }
+      throw err;
     }
   }
 }

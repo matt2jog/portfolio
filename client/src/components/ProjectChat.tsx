@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X, Send, Bot, User, ChevronDown, Loader2 } from "lucide-react";
+import { X, Send, Bot, User, ChevronDown, Loader2, GripVertical } from "lucide-react";
+import ChatMarkdown from "./ChatMarkdown";
 
 interface AiModel {
   id: string;
@@ -39,6 +40,31 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Resizable width (desktop only)
+  const DEFAULT_WIDTH = 528; // 440 * 1.2
+  const MIN_WIDTH = 360;
+  const MAX_WIDTH = 800;
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  const onDragStart = useCallback((e: ReactPointerEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startW: panelWidth };
+    const onMove = (ev: globalThis.PointerEvent) => {
+      if (!dragRef.current) return;
+      const delta = dragRef.current.startX - ev.clientX;
+      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragRef.current.startW + delta));
+      setPanelWidth(next);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [panelWidth]);
 
   // Auto-select first model
   useEffect(() => {
@@ -185,13 +211,27 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
       />
 
       {/* Chat panel */}
-      <div className="fixed bottom-4 right-4 top-4 w-[min(440px,calc(100vw-2rem))] z-50 flex flex-col rounded-xl border border-white/10 bg-[#0a0b0f] shadow-2xl overflow-hidden">
+      <div
+        className="fixed bottom-4 right-4 top-4 z-50 flex flex-col rounded-xl border border-white/10 bg-[#0a0b0f] shadow-2xl overflow-hidden"
+        style={{ width: `min(${panelWidth}px, calc(100vw - 2rem))` }}
+      >
+        {/* Drag handle (left edge) — desktop only */}
+        <div
+          onPointerDown={onDragStart}
+          className="hidden md:flex absolute left-0 top-0 bottom-0 w-3 cursor-col-resize items-center justify-center z-10 hover:bg-white/5 transition-colors group"
+        >
+          <GripVertical className="h-5 w-5 text-white/10 group-hover:text-white/30 transition-colors" />
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
             <Bot className="h-4 w-4 text-primary flex-none" />
             <span className="text-sm font-medium text-white truncate">
-              {project.title}
+              Portfolio Agent
+            </span>
+            <span className="ml-1.5 flex-none rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+              EARLY BETA
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -216,11 +256,10 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
                     {models.map((m) => (
                       <button
                         key={m.id}
-                        className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                          m.modelId === selectedModelId
-                            ? "text-primary bg-primary/10"
-                            : "text-gray-300 hover:bg-white/5"
-                        }`}
+                        className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${m.modelId === selectedModelId
+                          ? "text-primary bg-primary/10"
+                          : "text-gray-300 hover:bg-white/5"
+                          }`}
                         onClick={() => {
                           setSelectedModelId(m.modelId);
                           setModelDropdownOpen(false);
@@ -277,13 +316,14 @@ export default function ProjectChat({ project, onClose }: ProjectChatProps) {
                 </div>
               )}
               <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-primary/20 text-white"
-                    : "bg-white/5 text-gray-200"
-                }`}
+                className={`max-w-[80%] rounded-lg px-3 py-2 text-sm leading-relaxed ${msg.role === "user"
+                  ? "bg-primary/20 text-white"
+                  : "bg-white/5 text-gray-200"
+                  }`}
               >
-                {msg.content || (
+                {msg.content ? (
+                  <ChatMarkdown content={msg.content} />
+                ) : (
                   <span className="inline-flex items-center gap-1 text-gray-500">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Thinking...

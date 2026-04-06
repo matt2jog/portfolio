@@ -35,6 +35,16 @@ import {
 import { adminPolicyAcceptance } from "@shared/schema_policy";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Agent } from "./agent";
+import { pushPromptVersion } from "./agent/tracing";
+import {
+  GitHubRepoTool,
+  GitHubFileTreeTool,
+  GitHubReadFileTool,
+  GitHubCommitsTool,
+  GitHubIssuestool,
+  ProjectContextTool,
+} from "./agent/tools";
+import { PORTFOLIO_CHAT_RULES } from "./agent/rules";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 let projectsCache: { data: any[]; timestamp: number } | null = null;
@@ -265,14 +275,40 @@ export async function registerRoutes(
       return res.status(404).json({ error: "Project not found" });
     }
 
-    const systemPrompt = project.aiSystemPrompt
-      || `You are an AI assistant for the project "${project.title}". Description: ${project.description}. Tech stack: ${(project.tech || []).join(", ")}. Answer questions about this project helpfully and concisely.`;
+    const rules = PORTFOLIO_CHAT_RULES.toPromptBlock();
+
+    const generalInformation = `\n\nGeneral information: The project/portfolio owner is Matthew Tujague, he is a BS / CS at NJIT, and has been programming since 2019. matthew@2jog.dev, (732) 639-3889, Linkedin.com/in/matthewtujague` //TODO pull from personal_information table
+
+    const basePrompt = project.aiSystemPrompt
+      || `You are an AI assistant for the project "${project.title}". Full project details have been loaded into this conversation as tool results — refer to them. Use the GitHub tools to fetch repository details and dig deeper whenever a question requires verified source-level information. Be professional yet conversational.`;
+
+    const systemPrompt = basePrompt + generalInformation + rules;
+
+    // Push system prompt as a versioned entry in LangSmith Hub (fire-and-forget)
+    const promptIdentifier = `project-${project.id}-system`;
+    pushPromptVersion(promptIdentifier, systemPrompt, {
+      description: `System prompt for project: ${project.title}`,
+      tags: ["project-chat", project.title],
+    });
+
+    const tools = [
+      new ProjectContextTool(),
+      new GitHubRepoTool(),
+      new GitHubFileTreeTool(),
+      new GitHubReadFileTool(),
+      new GitHubCommitsTool(),
+      new GitHubIssuestool(),
+    ];
 
     const agent = new Agent({
       modelId,
       token: gradientToken,
       systemPrompt,
-      tools: [],
+      tools,
+      maxTokens: 4096,
+      maxToolRounds: 12,
+      tracingTags: ["project-chat", modelId, project.title],
+      tracingMeta: { projectId: project.id, projectTitle: project.title, modelId },
     });
 
     const userMessages = messages.slice(-20).map((m: any) => ({
@@ -280,12 +316,30 @@ export async function registerRoutes(
       content: String(m.content).slice(0, 4000),
     }));
 
+    // First turn: pre-execute context tools so the model always has full
+    // project details + repo overview before it speaks, without relying on
+    // it to decide to call tools itself.
+    const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
+    let seed: import("./agent").ChatMessage[] = [];
+    if (isFirstTurn) {
+      const primeCalls: Array<{ name: string; args: Record<string, unknown> }> = [
+        { name: "get_project_details", args: { project_id: project.id } },
+      ];
+      if (project.githubUrl) {
+        const ghMatch = project.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (ghMatch) {
+          primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
+        }
+      }
+      seed = await agent.primeContext(primeCalls);
+    }
+
     try {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
-      for await (const delta of agent.stream(userMessages)) {
+      for await (const delta of agent.stream([...seed, ...userMessages])) {
         const chunk = JSON.stringify({ choices: [{ delta: { content: delta } }] });
         res.write(`data: ${chunk}\n\n`);
       }
@@ -328,7 +382,7 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    
+
     // Fallbacks if no data exists yet (before seed)
     res.json(row || {
       name: "Matthew Tujague",
@@ -423,9 +477,9 @@ export async function registerRoutes(
   app.delete("/api/admin/projects/:id", requireAdmin, async (req, res) => {
     const projectId = routeId(req.params.id);
     await db.update(projects)
-      .set({ 
+      .set({
         deletedAt: new Date(),
-        archivedBy: req.user?.id 
+        archivedBy: req.user?.id
       })
       .where(eq(projects.id, projectId));
     invalidateProjectsCache();
@@ -462,7 +516,7 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    res.json(row || { 
+    res.json(row || {
       name: "Matthew Tujague",
       title: "Software Engineer",
       location: "NJ-NY-PA",
@@ -482,7 +536,7 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json(parsed.error);
 
     const [existing] = await db.select().from(personalInformation).limit(1);
-    
+
     let result;
     if (existing) {
       [result] = await db.update(personalInformation)
