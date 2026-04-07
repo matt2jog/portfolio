@@ -52,6 +52,8 @@ import { PORTFOLIO_CHAT_RULES } from "./agent/rules";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
+const MAX_EVALUATION_REWRITE_ATTEMPTS = 2;
+const EMPTY_CHAT_RESPONSE_FALLBACK = "I hit an internal quality-check issue before finalizing a response. Please try that again.";
 let projectsCache: { data: any[]; timestamp: number } | null = null;
 type PromptSuggestion = { label: string; prompt: string };
 
@@ -650,32 +652,103 @@ export async function registerRoutes(
         parentRun: chatRun ?? undefined,
       });
 
+      let responseContent = finalizedAssistantText.content.trim();
+      let mermaidRepaired = finalizedAssistantText.repaired;
+      let mermaidDowngraded = finalizedAssistantText.downgraded;
+
+      // Safety net: if streaming produced no assistant text, force one non-streaming regeneration attempt.
+      if (!responseContent) {
+        try {
+          const regenerated = (await agent.run([...seed, ...userMessages] as any, chatRun ?? undefined)).trim();
+          if (regenerated) {
+            const regeneratedFinal = await ensureRenderableMermaid(regenerated, {
+              modelId,
+              provider,
+              parentRun: chatRun ?? undefined,
+            });
+            responseContent = regeneratedFinal.content.trim();
+            mermaidRepaired = mermaidRepaired || regeneratedFinal.repaired;
+            mermaidDowngraded = mermaidDowngraded || regeneratedFinal.downgraded;
+          }
+        } catch {
+          // Ignore regeneration failures and fall back to a static message below.
+        }
+      }
+
       // Signal that evaluation is running so the client can show the status row
       const evalStatus = randomEvaluatorStatus();
       res.write(`event: evaluator\ndata: ${JSON.stringify({ status: evalStatus })}\n\n`);
 
       // Run evaluator and capture result for tracing — never let it break the response
-      const evalResult = await evaluateResponse({
-        response: finalizedAssistantText.content,
+      let evalResult = await evaluateResponse({
+        response: responseContent,
         userMessages,
         modelId,
         provider,
         parentRun: chatRun ?? undefined,
       }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
 
-      writeSseAssistantMessage(res, finalizedAssistantText.content);
+      let evaluationRewriteAttempts = 0;
+      while (responseContent && !evalResult.pass && evaluationRewriteAttempts < MAX_EVALUATION_REWRITE_ATTEMPTS) {
+        const revised = (await agent.run([
+          ...seed,
+          ...userMessages,
+          { role: "assistant", content: responseContent },
+          {
+            role: "user",
+            content: [
+              "[EVALUATOR_REWRITE]",
+              "Your previous answer failed quality checks.",
+              "Rewrite the full answer so it still answers the user's latest request, while fixing every listed violation.",
+              "Return only the revised answer with no preamble.",
+              "Violations:",
+              JSON.stringify(evalResult.violations),
+            ].join("\n"),
+          },
+        ] as any, chatRun ?? undefined)).trim();
+
+        if (!revised) break;
+
+        const revisedFinal = await ensureRenderableMermaid(revised, {
+          modelId,
+          provider,
+          parentRun: chatRun ?? undefined,
+        });
+        const revisedContent = revisedFinal.content.trim();
+        if (!revisedContent) break;
+
+        responseContent = revisedContent;
+        mermaidRepaired = mermaidRepaired || revisedFinal.repaired;
+        mermaidDowngraded = mermaidDowngraded || revisedFinal.downgraded;
+        evaluationRewriteAttempts += 1;
+
+        evalResult = await evaluateResponse({
+          response: responseContent,
+          userMessages,
+          modelId,
+          provider,
+          parentRun: chatRun ?? undefined,
+        }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
+      }
+
+      if (!responseContent) {
+        responseContent = EMPTY_CHAT_RESPONSE_FALLBACK;
+      }
+
+      writeSseAssistantMessage(res, responseContent);
       res.end();
 
       // Patch the top-level chatRun with the final output + eval result
       if (chatRun) {
         const chatOutput = {
-          output: finalizedAssistantText.content,
+          output: responseContent,
           evaluation: {
             pass: evalResult.pass,
             score: evalResult.score,
             violations: evalResult.violations,
-            mermaidRepaired: finalizedAssistantText.repaired,
-            mermaidDowngraded: finalizedAssistantText.downgraded,
+            rewriteAttempts: evaluationRewriteAttempts,
+            mermaidRepaired,
+            mermaidDowngraded,
           },
         };
         await chatRun.end(chatOutput).catch(() => {});

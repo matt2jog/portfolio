@@ -103,6 +103,8 @@ interface ChatMessage {
   content: string;
 }
 
+const EMPTY_ASSISTANT_STREAM_FALLBACK = "I hit an internal quality-check issue before finalizing a response. Please try that again.";
+
 interface ProjectChatProps {
   project: {
     id: string;
@@ -226,13 +228,15 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
       }
     }
 
-    if (!assistantContent && hasAddedAssistantMsg) {
+    if (!assistantContent) {
+      assistantContent = EMPTY_ASSISTANT_STREAM_FALLBACK;
       setMessages((prev) => {
         const updated = [...prev];
-        if (updated[updated.length - 1]?.content === "") {
-          updated[updated.length - 1] = { role: "assistant", content: "(No response received)" };
+        if (hasAddedAssistantMsg && updated[updated.length - 1]?.role === "assistant") {
+          updated[updated.length - 1] = { role: "assistant", content: EMPTY_ASSISTANT_STREAM_FALLBACK };
+          return updated;
         }
-        return updated;
+        return [...updated, { role: "assistant", content: EMPTY_ASSISTANT_STREAM_FALLBACK }];
       });
     }
 
