@@ -38,7 +38,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./agent";
 import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
-import { evaluateResponse, randomEvaluatorStatus } from "./agent/evaluator";
+import { evaluateResponse, randomEvaluatorStatus, randomDiagramStatus } from "./agent/evaluator";
 import { pushPromptVersion, createRun } from "./agent/tracing";
 import {
   GitHubRepoTool,
@@ -134,7 +134,7 @@ function writeSseEvaluatorStatus(res: Response, status: string) {
   res.write(`event: evaluator\ndata: ${JSON.stringify({ status })}\n\n`);
 }
 
-function writeSseAgentPhase(res: Response, phase: "thinking" | "refining") {
+function writeSseAgentPhase(res: Response, phase: "thinking" | "refining" | "diagramming") {
   if (res.writableEnded) return;
   res.write(`event: agent_phase\ndata: ${JSON.stringify({ phase })}\n\n`);
 }
@@ -712,7 +712,8 @@ export async function registerRoutes(
       }
 
       if (bufferedAssistantText.includes("```mermaid")) {
-        writeSseEvaluatorStatus(res, "CREATING diagrams");
+        writeSseAgentPhase(res, "diagramming");
+        writeSseEvaluatorStatus(res, randomDiagramStatus());
       }
 
       const finalizedAssistantText = await finalizeAssistantResponseSafely(bufferedAssistantText, {
@@ -732,7 +733,8 @@ export async function registerRoutes(
           const regenerated = (await agent.run([...seed, ...userMessages] as any, chatRun ?? undefined)).trim();
           if (regenerated) {
             if (regenerated.includes("```mermaid")) {
-              writeSseEvaluatorStatus(res, "CREATING diagrams");
+              writeSseAgentPhase(res, "diagramming");
+              writeSseEvaluatorStatus(res, randomDiagramStatus());
             }
             const regeneratedFinal = await finalizeAssistantResponseSafely(regenerated, {
               modelId,
@@ -807,7 +809,8 @@ export async function registerRoutes(
         if (!revised) break;
 
         if (revised.includes("```mermaid")) {
-          writeSseEvaluatorStatus(res, "CREATING diagrams");
+          writeSseAgentPhase(res, "diagramming");
+          writeSseEvaluatorStatus(res, randomDiagramStatus());
         }
 
         const revisedFinal = await finalizeAssistantResponseSafely(revised, {

@@ -67,18 +67,83 @@ function EvaluatorRow({ status }: { status: string }) {
   );
 }
 
-function AgentThinking({ calls, evaluatorStatus, phase }: { calls: ToolCallEntry[]; evaluatorStatus?: string | null; phase: "thinking" | "refining" }) {
+function AgentThinking({ calls, evaluatorStatus, phase }: { calls: ToolCallEntry[]; evaluatorStatus?: string | null; phase: "thinking" | "refining" | "diagramming" }) {
+  const [visitedPhases, setVisitedPhases] = useState<Set<string>>(new Set([phase]));
+  
+  useEffect(() => {
+    setVisitedPhases((prev) => {
+      if (prev.has(phase)) return prev;
+      const next = new Set(prev);
+      next.add(phase);
+      return next;
+    });
+  }, [phase]);
+
+  const hasThinking = calls.length > 0 || visitedPhases.has("thinking");
+  // The backend order during stream can be Thinking -> Diagramming -> Refining
+  const hasDiagramming = visitedPhases.has("diagramming");
+  const hasRefining = visitedPhases.has("refining");
+
   return (
-    <section className="py-5">
-      <div className="mb-3 font-mono text-[11px] tracking-[0.18em] text-primary/70">
-        {phase}
-      </div>
-      <div className="space-y-1.5">
-        {calls.map((call, i) => (
-          <ToolCallRow key={i} call={call} />
-        ))}
-        {evaluatorStatus && <EvaluatorRow status={evaluatorStatus} />}
-      </div>
+    <section className="py-2 space-y-5">
+      {hasThinking && (
+        <div className="animate-in fade-in duration-200">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[11px] italic uppercase tracking-[0.18em] text-primary/70 mb-3">
+            {phase === "thinking" ? (
+              <span className="relative flex h-2 w-2 flex-none">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+              </span>
+            ) : (
+              <span className="h-1.5 w-1.5 flex-none rounded-full bg-primary/40"></span>
+            )}
+            Thinking...
+          </div>
+          <div className="space-y-1.5">
+            {calls.map((call, i) => (
+              <ToolCallRow key={i} call={call} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {hasDiagramming && (
+        <div className="animate-in fade-in duration-200">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[11px] italic uppercase tracking-[0.18em] text-primary/70 mb-3">
+            {phase === "diagramming" ? (
+              <span className="relative flex h-2 w-2 flex-none">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+              </span>
+            ) : (
+              <span className="h-1.5 w-1.5 flex-none rounded-full bg-primary/40"></span>
+            )}
+            Creating Diagrams...
+          </div>
+          <div className="space-y-1.5">
+            {phase === "diagramming" && evaluatorStatus && <EvaluatorRow status={evaluatorStatus} />}
+          </div>
+        </div>
+      )}
+
+      {hasRefining && (
+        <div className="animate-in fade-in duration-200">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[11px] italic uppercase tracking-[0.18em] text-primary/70 mb-3">
+            {phase === "refining" ? (
+              <span className="relative flex h-2 w-2 flex-none">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+              </span>
+            ) : (
+              <span className="h-1.5 w-1.5 flex-none rounded-full bg-primary/40"></span>
+            )}
+            Refining...
+          </div>
+          <div className="space-y-1.5">
+            {phase === "refining" && evaluatorStatus && <EvaluatorRow status={evaluatorStatus} />}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -133,7 +198,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
   const [isThinking, setIsThinking] = useState(false);
   const [toolCalls, setToolCalls] = useState<ToolCallEntry[]>([]);
   const [evaluatorStatus, setEvaluatorStatus] = useState<string | null>(null);
-  const [agentPhase, setAgentPhase] = useState<"thinking" | "refining">("thinking");
+  const [agentPhase, setAgentPhase] = useState<"thinking" | "refining" | "diagramming">("thinking");
   const [error, setError] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
 
@@ -189,7 +254,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
         if (currentEventType === "agent_phase") {
           try {
             const parsed = JSON.parse(data);
-            const phase = parsed.phase === "refining" ? "refining" : "thinking";
+            const phase = parsed.phase === "refining" ? "refining" : parsed.phase === "diagramming" ? "diagramming" : "thinking";
             setAgentPhase(phase);
             setIsThinking(true);
           } catch {}
@@ -199,7 +264,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
         if (currentEventType === "evaluator") {
           try {
             const parsed = JSON.parse(data);
-            setAgentPhase("refining");
+            setAgentPhase((prev) => prev === "diagramming" ? "diagramming" : "refining");
             if (parsed.status) setEvaluatorStatus(parsed.status as string);
           } catch {}
           continue;

@@ -18,9 +18,7 @@ export interface EvaluationResult {
 }
 
 export const EVALUATOR_STATUS_NAMES = [
-  "CREATING diagrams",
   "ARTICULATING",
-  "THINKING",
   "JUSTIFYING",
   "REASONING",
   "REFLECTING",
@@ -29,8 +27,21 @@ export const EVALUATOR_STATUS_NAMES = [
   "CALIBRATING",
 ] as const;
 
+export const DIAGRAM_STATUS_NAMES = [
+  "MAPPING",
+  "ROUTING",
+  "RENDERING",
+  "STRUCTURING",
+  "CONNECTING",
+  "GENERATING",
+] as const;
+
 export function randomEvaluatorStatus(): string {
   return EVALUATOR_STATUS_NAMES[Math.floor(Math.random() * EVALUATOR_STATUS_NAMES.length)];
+}
+
+export function randomDiagramStatus(): string {
+  return DIAGRAM_STATUS_NAMES[Math.floor(Math.random() * DIAGRAM_STATUS_NAMES.length)];
 }
 
 const EVALUATOR_SYSTEM_PROMPT = [
