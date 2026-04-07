@@ -18,6 +18,7 @@ export interface EvaluationResult {
 }
 
 export const EVALUATOR_STATUS_NAMES = [
+  "CREATING diagrams",
   "ARTICULATING",
   "THINKING",
   "JUSTIFYING",

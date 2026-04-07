@@ -177,6 +177,6 @@ export async function* parseSseStream(
   }
 
   if (buffer) {
-    for (const d of processLines(buffer)) yield d;
+    for (const d of Array.from(processLines(buffer))) yield d;
   }
 }

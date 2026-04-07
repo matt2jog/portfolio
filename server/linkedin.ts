@@ -247,8 +247,15 @@ async function ensureLinkedinTimelineFresh(_config: LinkedinProviderConfig, wait
         lastSyncError = null;
       })
       .catch((err) => {
-        lastSyncError = err instanceof Error ? err.message : "LinkedIn sync failed";
-        console.error("Failed to sync LinkedIn timeline:", err);
+        const errorMessage = err instanceof Error ? err.message : "LinkedIn sync failed";
+        
+        if (errorMessage.includes("403")) {
+          lastSyncError = "LinkedIn features in maintenence";
+          console.warn("LinkedIn sync skipped: LinkedIn features in maintenence (403 Limit Exceeded)");
+        } else {
+          lastSyncError = errorMessage;
+          console.error("Failed to sync LinkedIn timeline:", err);
+        }
       })
       .finally(() => {
         syncPromise = null;

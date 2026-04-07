@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import createDOMPurify from "dompurify";
 import { Agent } from "./agent";
 import type { LLMProvider } from "./providers/base";
+import { createRun, withRun } from "./tracing";
 import {
   downgradeBrokenMermaidBlocks,
   extractMermaidBlocks,
@@ -25,6 +26,8 @@ interface MermaidRepairResult {
   downgraded: boolean;
   attempts: number;
 }
+
+const MERMAID_TRACE_RESPONSE_LIMIT = 12000;
 
 let mermaidModulePromise: Promise<MermaidModule["default"]> | null = null;
 
@@ -88,6 +91,12 @@ function normalizeMermaidError(err: unknown): string {
   return String(err || "Unknown Mermaid error");
 }
 
+function truncateForTrace(value: string): string {
+  if (value.length <= MERMAID_TRACE_RESPONSE_LIMIT) return value;
+  const remaining = value.length - MERMAID_TRACE_RESPONSE_LIMIT;
+  return `${value.slice(0, MERMAID_TRACE_RESPONSE_LIMIT)}\n...[truncated ${remaining} chars]`;
+}
+
 async function validateMermaidBlocks(content: string): Promise<MermaidValidationFailure[]> {
   const blocks = extractMermaidBlocks(content);
   if (blocks.length === 0) {
@@ -119,7 +128,12 @@ function parseRepairs(raw: string): MermaidRepair[] {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const jsonSource = fenced?.[1] ?? trimmed;
-  const parsed = JSON.parse(jsonSource) as any;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonSource) as any;
+  } catch {
+    return [];
+  }
   const repairs = Array.isArray(parsed) ? parsed : parsed?.repairs;
 
   if (!Array.isArray(repairs)) {
@@ -192,65 +206,119 @@ export async function ensureRenderableMermaid(
     return { content, repaired: false, downgraded: false, attempts: 0 };
   }
 
-  const maxAttempts = options.maxAttempts ?? 3;
-  let currentContent = content;
-  let repaired = false;
+  const maxAttempts = options.maxAttempts ?? 4;
+  const mermaidBlockCount = extractMermaidBlocks(content).length;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const failures = await validateMermaidBlocks(currentContent);
-    if (failures.length === 0) {
+  const mermaidRun = createRun({
+    name: "mermaid-repair-loop",
+    runType: "chain",
+    inputs: {
+      responseBefore: truncateForTrace(content),
+      mermaidBlockCount,
+      maxAttempts,
+    },
+    parent: options.parentRun,
+    tags: ["project-chat", "mermaid-loop", options.modelId, options.provider.constructor.name],
+    metadata: { modelId: options.modelId, provider: options.provider.constructor.name },
+  });
+
+  return withRun(
+    mermaidRun,
+    async () => {
+      let currentContent = content;
+      let repaired = false;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const failures = await validateMermaidBlocks(currentContent);
+        if (failures.length === 0) {
+          return {
+            content: currentContent,
+            repaired,
+            downgraded: false,
+            attempts: attempt - 1,
+          };
+        }
+
+        let repairs: MermaidRepair[] = [];
+        try {
+          repairs = await requestMermaidRepairs(
+            currentContent,
+            failures,
+            options.modelId,
+            options.provider,
+            mermaidRun ?? options.parentRun,
+            attempt,
+          );
+        } catch {
+          repairs = [];
+        }
+
+        if (repairs.length === 0) {
+          if (attempt < maxAttempts) {
+            continue;
+          }
+
+          return {
+            content: downgradeBrokenMermaidBlocks(
+              currentContent,
+              failures.map((failure) => failure.index),
+            ),
+            repaired,
+            downgraded: true,
+            attempts: attempt,
+          };
+        }
+
+        const nextContent = replaceMermaidBlocks(currentContent, repairs);
+        if (nextContent === currentContent) {
+          if (attempt < maxAttempts) {
+            continue;
+          }
+
+          return {
+            content: downgradeBrokenMermaidBlocks(
+              currentContent,
+              failures.map((failure) => failure.index),
+            ),
+            repaired,
+            downgraded: true,
+            attempts: attempt,
+          };
+        }
+
+        currentContent = nextContent;
+        repaired = true;
+      }
+
+      const remainingFailures = await validateMermaidBlocks(currentContent);
+      if (remainingFailures.length === 0) {
+        return {
+          content: currentContent,
+          repaired,
+          downgraded: false,
+          attempts: maxAttempts,
+        };
+      }
+
       return {
-        content: currentContent,
-        repaired,
-        downgraded: false,
-        attempts: attempt - 1,
-      };
-    }
-
-    const repairs = await requestMermaidRepairs(
-      currentContent,
-      failures,
-      options.modelId,
-      options.provider,
-      options.parentRun,
-      attempt,
-    );
-
-    if (repairs.length === 0) {
-      const downgradedContent = downgradeBrokenMermaidBlocks(
-        currentContent,
-        failures.map((failure) => failure.index),
-      );
-
-      return {
-        content: downgradedContent,
+        content: downgradeBrokenMermaidBlocks(
+          currentContent,
+          remainingFailures.map((failure) => failure.index),
+        ),
         repaired,
         downgraded: true,
-        attempts: attempt,
+        attempts: maxAttempts,
       };
-    }
-
-    currentContent = replaceMermaidBlocks(currentContent, repairs);
-    repaired = true;
-  }
-
-  const remainingFailures = await validateMermaidBlocks(currentContent);
-  if (remainingFailures.length === 0) {
-    return {
-      content: currentContent,
-      repaired,
-      downgraded: false,
-      attempts: maxAttempts,
-    };
-  }
-
-  return {
-    content: downgradeBrokenMermaidBlocks(
-      currentContent,
-      remainingFailures.map((failure) => failure.index),
-    ),
-    repaired,
-    downgraded: true,
-    attempts: maxAttempts,
-  };
+    },
+    (result) => ({
+      output: {
+        responseBefore: truncateForTrace(content),
+        responseAfter: truncateForTrace(result.content),
+        mermaidBlockCount,
+        repaired: result.repaired,
+        downgraded: result.downgraded,
+        attempts: result.attempts,
+      },
+    }),
+  );
 }

@@ -155,6 +155,15 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
     severity: "major",
   },
   {
+    id: "fmt-mermaid-compiler-safe",
+    category: "formatting",
+    instruction:
+      "When you output Mermaid, optimize for parser safety over expressiveness. Keep diagrams compact (prefer <= 12 nodes) and avoid copying long prose, markdown tables, or code paths into node labels. Any label containing punctuation like parentheses, brackets, slashes, asterisks, colons, or plus signs must be quoted (for example `node[\"Chrome Extension (React)\"]`). Prefer plain ASCII in labels and edge text, and avoid Unicode symbols like emoji or arrow glyphs inside labels. If a parser-safe diagram cannot be produced confidently, do not output Mermaid and use a short markdown list instead.",
+    evaluationCriteria:
+      "Mermaid blocks are compact and parser-safe: labels with special punctuation are quoted, labels avoid long prose or markdown artifacts, and Unicode symbols that commonly break parsing are absent. If those constraints cannot be met, no mermaid block is emitted.",
+    severity: "major",
+  },
+  {
     id: "fmt-no-emdash",
     category: "formatting",
     instruction: "Do not use em-dashes (—). Use commas, colons, or rephrase instead.",

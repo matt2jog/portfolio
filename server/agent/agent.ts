@@ -157,6 +157,13 @@ export class Agent {
           rounds++;
         }
 
+        if (rounds >= this.config.maxToolRounds) {
+          messages.push({
+            role: "user",
+            content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
+          });
+        }
+
         return this.forceTextReply(messages);
       },
       (result) => ({ output: result }),
@@ -227,6 +234,13 @@ export class Agent {
         }
 
         rounds++;
+      }
+
+      if (rounds >= this.config.maxToolRounds) {
+        messages.push({
+          role: "user",
+          content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
+        });
       }
 
       // Stream the final reply

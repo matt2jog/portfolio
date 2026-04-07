@@ -67,11 +67,11 @@ function EvaluatorRow({ status }: { status: string }) {
   );
 }
 
-function AgentThinking({ calls, evaluatorStatus }: { calls: ToolCallEntry[]; evaluatorStatus?: string | null }) {
+function AgentThinking({ calls, evaluatorStatus, phase }: { calls: ToolCallEntry[]; evaluatorStatus?: string | null; phase: "thinking" | "refining" }) {
   return (
     <section className="py-5">
-      <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.24em] text-primary/60">
-        Agent Working
+      <div className="mb-3 font-mono text-[11px] tracking-[0.18em] text-primary/70">
+        {phase}
       </div>
       <div className="space-y-1.5">
         {calls.map((call, i) => (
@@ -133,6 +133,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
   const [isThinking, setIsThinking] = useState(false);
   const [toolCalls, setToolCalls] = useState<ToolCallEntry[]>([]);
   const [evaluatorStatus, setEvaluatorStatus] = useState<string | null>(null);
+  const [agentPhase, setAgentPhase] = useState<"thinking" | "refining">("thinking");
   const [error, setError] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
 
@@ -179,6 +180,17 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
           try {
             const parsed = JSON.parse(data);
             setToolCalls((prev) => [...prev, { name: parsed.name, args: parsed.args ?? {} }]);
+            setAgentPhase("thinking");
+            setIsThinking(true);
+          } catch {}
+          continue;
+        }
+
+        if (currentEventType === "agent_phase") {
+          try {
+            const parsed = JSON.parse(data);
+            const phase = parsed.phase === "refining" ? "refining" : "thinking";
+            setAgentPhase(phase);
             setIsThinking(true);
           } catch {}
           continue;
@@ -187,6 +199,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
         if (currentEventType === "evaluator") {
           try {
             const parsed = JSON.parse(data);
+            setAgentPhase("refining");
             if (parsed.status) setEvaluatorStatus(parsed.status as string);
           } catch {}
           continue;
@@ -318,6 +331,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     setError(null);
     setToolCalls([]);
     setEvaluatorStatus(null);
+    setAgentPhase("thinking");
     setIsThinking(false);
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
@@ -325,6 +339,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     setMessages(nextMessages);
     setInput("");
     setIsStreaming(true);
+    setAgentPhase("thinking");
     isAutoScrolling.current = true;
 
     const controller = new AbortController();
@@ -353,6 +368,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     } finally {
       setIsStreaming(false);
       setIsThinking(false);
+      setAgentPhase("thinking");
       abortRef.current = null;
     }
   }, [consumeChatStream, input, isStreaming, messages, project.id, selectedModelId]);
@@ -363,6 +379,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     setIsThinking(false);
     setToolCalls([]);
     setEvaluatorStatus(null);
+    setAgentPhase("thinking");
     isAutoScrolling.current = true;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -386,6 +403,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
       setIsThinking(false);
       setToolCalls([]);
       setEvaluatorStatus(null);
+      setAgentPhase("thinking");
       abortRef.current = null;
     }
   }, [consumeChatStream, messages.length, project.id, selectedModelId]);
@@ -398,6 +416,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     setIsThinking(false);
     setToolCalls([]);
     setEvaluatorStatus(null);
+    setAgentPhase("thinking");
     abortRef.current?.abort();
   }, []);
 
@@ -480,7 +499,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
                     )}
                   </section>
                 ))}
-                {isThinking && <AgentThinking calls={toolCalls} evaluatorStatus={evaluatorStatus} />}
+                {isThinking && <AgentThinking calls={toolCalls} evaluatorStatus={evaluatorStatus} phase={agentPhase} />}
                 {isStreaming && messages.length > 0 && messages[messages.length - 1].role === "user" && (
                   <section className="py-2">
                     <TypingIndicator />

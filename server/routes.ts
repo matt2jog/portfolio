@@ -54,8 +54,15 @@ const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
 const MAX_EVALUATION_REWRITE_ATTEMPTS = 2;
 const EMPTY_CHAT_RESPONSE_FALLBACK = "I hit an internal quality-check issue before finalizing a response. Please try that again.";
+const EVALUATION_TRACE_RESPONSE_LIMIT = 2000;
 let projectsCache: { data: any[]; timestamp: number } | null = null;
 type PromptSuggestion = { label: string; prompt: string };
+
+function toTraceResponsePreview(value: string): string {
+  if (value.length <= EVALUATION_TRACE_RESPONSE_LIMIT) return value;
+  const remaining = value.length - EVALUATION_TRACE_RESPONSE_LIMIT;
+  return `${value.slice(0, EVALUATION_TRACE_RESPONSE_LIMIT)}\n...[truncated ${remaining} chars]`;
+}
 
 /* ------------------------------------------------------------------ */
 /*  AI provider singleton                                               */
@@ -120,6 +127,57 @@ function writeSseAssistantMessages(res: Response, messages: string[]) {
     res.write(`event: assistant_message\ndata: ${payload}\n\n`);
   }
   res.write("data: [DONE]\n\n");
+}
+
+function writeSseEvaluatorStatus(res: Response, status: string) {
+  if (res.writableEnded) return;
+  res.write(`event: evaluator\ndata: ${JSON.stringify({ status })}\n\n`);
+}
+
+function writeSseAgentPhase(res: Response, phase: "thinking" | "refining") {
+  if (res.writableEnded) return;
+  res.write(`event: agent_phase\ndata: ${JSON.stringify({ phase })}\n\n`);
+}
+
+async function finalizeAssistantResponseSafely(
+  content: string,
+  options: {
+    modelId: string;
+    provider: LLMProvider;
+    parentRun?: import("langsmith/run_trees").RunTree;
+  },
+) {
+  const original = content.trim();
+  if (!original) {
+    return {
+      content: "",
+      repaired: false,
+      downgraded: false,
+      mermaidRepairFailed: false,
+    };
+  }
+
+  try {
+    const finalized = await ensureRenderableMermaid(original, {
+      modelId: options.modelId,
+      provider: options.provider,
+      parentRun: options.parentRun,
+    });
+
+    return {
+      content: finalized.content.trim() || original,
+      repaired: finalized.repaired,
+      downgraded: finalized.downgraded,
+      mermaidRepairFailed: false,
+    };
+  } catch {
+    return {
+      content: original,
+      repaired: false,
+      downgraded: false,
+      mermaidRepairFailed: true,
+    };
+  }
 }
 
 function getProjectsCacheTtlMs() {
@@ -278,6 +336,9 @@ export async function registerRoutes(
       const data = await getLinkedinActivity();
       res.json(data);
     } catch (err: any) {
+      if (err.message && err.message.includes("403")) {
+        return res.status(403).json({ error: "LinkedIn features in maintenence" });
+      }
       res.status(500).json({ error: "Failed to fetch LinkedIn activity", details: err.message });
     }
   });
@@ -288,6 +349,9 @@ export async function registerRoutes(
       const data = await getLinkedinTimeline(page);
       res.json(data);
     } catch (err: any) {
+      if (err.message && err.message.includes("403")) {
+        return res.status(403).json({ error: "LinkedIn features in maintenence" });
+      }
       res.status(500).json({ error: "Failed to fetch LinkedIn timeline", details: err.message });
     }
   });
@@ -638,6 +702,7 @@ export async function registerRoutes(
       }
 
       let bufferedAssistantText = "";
+      writeSseAgentPhase(res, "thinking");
       for await (const event of agent.stream([...seed, ...userMessages] as any, chatRun ?? undefined)) {
         if (event.type === "tool_call") {
           res.write(`event: tool_call\ndata: ${JSON.stringify({ name: event.name, args: event.args })}\n\n`);
@@ -646,29 +711,38 @@ export async function registerRoutes(
         }
       }
 
-      const finalizedAssistantText = await ensureRenderableMermaid(bufferedAssistantText, {
+      if (bufferedAssistantText.includes("```mermaid")) {
+        writeSseEvaluatorStatus(res, "CREATING diagrams");
+      }
+
+      const finalizedAssistantText = await finalizeAssistantResponseSafely(bufferedAssistantText, {
         modelId,
         provider,
         parentRun: chatRun ?? undefined,
       });
 
-      let responseContent = finalizedAssistantText.content.trim();
+      let responseContent = finalizedAssistantText.content;
       let mermaidRepaired = finalizedAssistantText.repaired;
       let mermaidDowngraded = finalizedAssistantText.downgraded;
+      let mermaidRepairFailed = finalizedAssistantText.mermaidRepairFailed;
 
       // Safety net: if streaming produced no assistant text, force one non-streaming regeneration attempt.
       if (!responseContent) {
         try {
           const regenerated = (await agent.run([...seed, ...userMessages] as any, chatRun ?? undefined)).trim();
           if (regenerated) {
-            const regeneratedFinal = await ensureRenderableMermaid(regenerated, {
+            if (regenerated.includes("```mermaid")) {
+              writeSseEvaluatorStatus(res, "CREATING diagrams");
+            }
+            const regeneratedFinal = await finalizeAssistantResponseSafely(regenerated, {
               modelId,
               provider,
               parentRun: chatRun ?? undefined,
             });
-            responseContent = regeneratedFinal.content.trim();
+            responseContent = regeneratedFinal.content;
             mermaidRepaired = mermaidRepaired || regeneratedFinal.repaired;
             mermaidDowngraded = mermaidDowngraded || regeneratedFinal.downgraded;
+            mermaidRepairFailed = mermaidRepairFailed || regeneratedFinal.mermaidRepairFailed;
           }
         } catch {
           // Ignore regeneration failures and fall back to a static message below.
@@ -676,8 +750,9 @@ export async function registerRoutes(
       }
 
       // Signal that evaluation is running so the client can show the status row
+      writeSseAgentPhase(res, "refining");
       const evalStatus = randomEvaluatorStatus();
-      res.write(`event: evaluator\ndata: ${JSON.stringify({ status: evalStatus })}\n\n`);
+      writeSseEvaluatorStatus(res, evalStatus);
 
       // Run evaluator and capture result for tracing — never let it break the response
       let evalResult = await evaluateResponse({
@@ -688,38 +763,65 @@ export async function registerRoutes(
         parentRun: chatRun ?? undefined,
       }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
 
+      const evaluationRounds: Array<{
+        round: number;
+        source: "initial" | "rewrite";
+        pass: boolean;
+        score: number;
+        violations: unknown[];
+        responsePreview: string;
+      }> = [{
+        round: 0,
+        source: "initial",
+        pass: evalResult.pass,
+        score: evalResult.score,
+        violations: evalResult.violations,
+        responsePreview: toTraceResponsePreview(responseContent),
+      }];
+
       let evaluationRewriteAttempts = 0;
       while (responseContent && !evalResult.pass && evaluationRewriteAttempts < MAX_EVALUATION_REWRITE_ATTEMPTS) {
-        const revised = (await agent.run([
-          ...seed,
-          ...userMessages,
-          { role: "assistant", content: responseContent },
-          {
-            role: "user",
-            content: [
-              "[EVALUATOR_REWRITE]",
-              "Your previous answer failed quality checks.",
-              "Rewrite the full answer so it still answers the user's latest request, while fixing every listed violation.",
-              "Return only the revised answer with no preamble.",
-              "Violations:",
-              JSON.stringify(evalResult.violations),
-            ].join("\n"),
-          },
-        ] as any, chatRun ?? undefined)).trim();
+        let revised = "";
+        try {
+          revised = (await agent.run([
+            ...seed,
+            ...userMessages,
+            { role: "assistant", content: responseContent },
+            {
+              role: "user",
+              content: [
+                "[EVALUATOR_REWRITE]",
+                "Your previous answer failed quality checks.",
+                "Rewrite the full answer so it still answers the user's latest request, while fixing every listed violation.",
+                "Return only the revised answer with no preamble.",
+                "Violations:",
+                JSON.stringify(evalResult.violations),
+              ].join("\n"),
+            },
+          ] as any, chatRun ?? undefined)).trim();
+        } catch {
+          // Keep the last known-good response if rewrite generation fails.
+          break;
+        }
 
         if (!revised) break;
 
-        const revisedFinal = await ensureRenderableMermaid(revised, {
+        if (revised.includes("```mermaid")) {
+          writeSseEvaluatorStatus(res, "CREATING diagrams");
+        }
+
+        const revisedFinal = await finalizeAssistantResponseSafely(revised, {
           modelId,
           provider,
           parentRun: chatRun ?? undefined,
         });
-        const revisedContent = revisedFinal.content.trim();
+        const revisedContent = revisedFinal.content;
         if (!revisedContent) break;
 
         responseContent = revisedContent;
         mermaidRepaired = mermaidRepaired || revisedFinal.repaired;
         mermaidDowngraded = mermaidDowngraded || revisedFinal.downgraded;
+        mermaidRepairFailed = mermaidRepairFailed || revisedFinal.mermaidRepairFailed;
         evaluationRewriteAttempts += 1;
 
         evalResult = await evaluateResponse({
@@ -729,6 +831,15 @@ export async function registerRoutes(
           provider,
           parentRun: chatRun ?? undefined,
         }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
+
+        evaluationRounds.push({
+          round: evaluationRewriteAttempts,
+          source: "rewrite",
+          pass: evalResult.pass,
+          score: evalResult.score,
+          violations: evalResult.violations,
+          responsePreview: toTraceResponsePreview(responseContent),
+        });
       }
 
       if (!responseContent) {
@@ -740,6 +851,21 @@ export async function registerRoutes(
 
       // Patch the top-level chatRun with the final output + eval result
       if (chatRun) {
+        let acceptedRound: {
+          round: number;
+          source: "initial" | "rewrite";
+          pass: boolean;
+          score: number;
+          violations: unknown[];
+          responsePreview: string;
+        } | null = null;
+        for (let i = evaluationRounds.length - 1; i >= 0; i -= 1) {
+          if (evaluationRounds[i].pass) {
+            acceptedRound = evaluationRounds[i];
+            break;
+          }
+        }
+
         const chatOutput = {
           output: responseContent,
           evaluation: {
@@ -747,8 +873,12 @@ export async function registerRoutes(
             score: evalResult.score,
             violations: evalResult.violations,
             rewriteAttempts: evaluationRewriteAttempts,
+            rounds: evaluationRounds,
+            acceptedRound,
+            finalResponsePreview: toTraceResponsePreview(responseContent),
             mermaidRepaired,
             mermaidDowngraded,
+            mermaidRepairFailed,
           },
         };
         await chatRun.end(chatOutput).catch(() => {});

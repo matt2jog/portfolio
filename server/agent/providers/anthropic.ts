@@ -328,7 +328,7 @@ export class AnthropicProvider extends LLMProvider {
     }
 
     if (buffer) {
-      for (const d of extractDeltas(buffer)) yield d;
+      for (const d of Array.from(extractDeltas(buffer))) yield d;
     }
   }
 }
