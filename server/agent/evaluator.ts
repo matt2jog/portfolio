@@ -81,14 +81,14 @@ export async function evaluateResponse(options: {
   parentRun?: RunTree;
 }): Promise<EvaluationResult> {
   const evaluatorAgent = new Agent({
-    name: "evaluator",
+    name: "response-evaluator",
     modelId: options.modelId,
     provider: options.provider,
     systemPrompt: EVALUATOR_SYSTEM_PROMPT,
     maxTokens: 1024,
     temperature: 0.1,
     tracingTags: ["project-chat", "evaluator", options.modelId, options.provider.constructor.name],
-    tracingMeta: { type: "response-evaluation", modelId: options.modelId, provider: options.provider.constructor.name },
+    tracingMeta: { type: "response-evaluation", provider: options.provider.constructor.name },
   });
 
   try {

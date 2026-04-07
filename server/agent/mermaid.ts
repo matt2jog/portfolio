@@ -140,9 +140,10 @@ async function requestMermaidRepairs(
   modelId: string,
   provider: LLMProvider,
   parentRun?: import("langsmith/run_trees").RunTree,
+  attempt?: number,
 ): Promise<MermaidRepair[]> {
   const repairAgent = new Agent({
-    name: "mermaid refiner",
+    name: attempt !== undefined ? `mermaid-repair:attempt-${attempt}` : "mermaid-repair",
     modelId,
     provider,
     systemPrompt: [
@@ -159,7 +160,7 @@ async function requestMermaidRepairs(
     maxTokens: 1600,
     temperature: 0.2,
     tracingTags: ["project-chat", "mermaid-repair", modelId, provider.constructor.name],
-    tracingMeta: { brokenMermaidBlocks: failures.length, modelId, provider: provider.constructor.name },
+    tracingMeta: { brokenMermaidBlocks: failures.length, provider: provider.constructor.name, attempt: attempt ?? 1 },
   });
 
   const raw = await repairAgent.run([{
@@ -212,6 +213,7 @@ export async function ensureRenderableMermaid(
       options.modelId,
       options.provider,
       options.parentRun,
+      attempt,
     );
 
     if (repairs.length === 0) {

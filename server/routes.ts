@@ -101,11 +101,22 @@ async function getAiProvider(): Promise<LLMProvider | undefined> {
   return _aiProvider;
 }
 const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
+// Deduplicates concurrent requests for the same cache key → single LLM call
+const promptSuggestionsInflight = new Map<string, Promise<PromptSuggestion[]>>();
 
 function writeSseAssistantMessage(res: Response, content: string) {
   if (res.writableEnded) return;
   const chunk = JSON.stringify({ choices: [{ delta: { content } }] });
   res.write(`data: ${chunk}\n\n`);
+  res.write("data: [DONE]\n\n");
+}
+
+function writeSseAssistantMessages(res: Response, messages: string[]) {
+  if (res.writableEnded) return;
+  for (const content of messages) {
+    const payload = JSON.stringify({ content });
+    res.write(`event: assistant_message\ndata: ${payload}\n\n`);
+  }
   res.write("data: [DONE]\n\n");
 }
 
@@ -373,12 +384,31 @@ export async function registerRoutes(
 
     const promptInputsHash = createPromptSuggestionsHash(project, tools.map((tool) => tool.definition));
     const cacheKey = `${modelId}:${promptInputsHash}`;
+
+    // Fast path: already computed
     const cached = promptSuggestionsCache.get(cacheKey);
     if (cached) {
       return res.json({ hash: promptInputsHash, suggestions: cached });
     }
 
+    // Coalesce: join an in-flight computation rather than spawning a duplicate
+    const existing = promptSuggestionsInflight.get(cacheKey);
+    if (existing) {
+      try {
+        const suggestions = await existing;
+        return res.json({ hash: promptInputsHash, suggestions });
+      } catch {
+        // Inflight failed for another requester; fall through and return fallback
+        return res.json({
+          hash: promptInputsHash,
+          suggestions: fallbackPromptSuggestions(project.title),
+          fallback: true,
+        });
+      }
+    }
+
     const suggestionsAgent = new Agent({
+      name: "prompt-suggestions",
       modelId,
       provider,
       systemPrompt: [
@@ -398,29 +428,34 @@ export async function registerRoutes(
       ].join("\n"),
       maxTokens: 400,
       temperature: 0.7,
+      tracingTags: ["project-chat", "prompt-suggestions", modelId],
+      tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
-    try {
-      const raw = await suggestionsAgent.run([{
-        role: "user",
-        content: JSON.stringify({
-          project: {
-            title: project.title,
-            category: project.category,
-            description: project.description,
-            longDescription: project.longDescription,
-            tech: project.tech,
-            githubUrl: project.githubUrl,
-            deployedUrl: project.deployedUrl,
-          },
-          toolsAvailable: tools.map((tool) => ({
-            name: tool.definition.name,
-            description: tool.definition.description,
-          })),
-        }),
-      }]);
+    // Register the promise before awaiting so concurrent requests share it
+    const computePromise = suggestionsAgent.run([{
+      role: "user",
+      content: JSON.stringify({
+        project: {
+          title: project.title,
+          category: project.category,
+          description: project.description,
+          longDescription: project.longDescription,
+          tech: project.tech,
+          githubUrl: project.githubUrl,
+          deployedUrl: project.deployedUrl,
+        },
+        toolsAvailable: tools.map((tool) => ({
+          name: tool.definition.name,
+          description: tool.definition.description,
+        })),
+      }),
+    }]).then((raw) => normalizePromptSuggestions(raw, project.title));
 
-      const suggestions = normalizePromptSuggestions(raw, project.title);
+    promptSuggestionsInflight.set(cacheKey, computePromise);
+
+    try {
+      const suggestions = await computePromise;
       promptSuggestionsCache.set(cacheKey, suggestions);
       res.json({ hash: promptInputsHash, suggestions });
     } catch (err: any) {
@@ -435,6 +470,8 @@ export async function registerRoutes(
         fallback: true,
         error: rateLimited ? suggestionsAgent.rateLimitMessage : err.message,
       });
+    } finally {
+      promptSuggestionsInflight.delete(cacheKey);
     }
   });
 
@@ -499,6 +536,7 @@ export async function registerRoutes(
     ];
 
     const agent = new Agent({
+      name: "orchestrator",
       modelId,
       provider,
       systemPrompt,
@@ -506,7 +544,7 @@ export async function registerRoutes(
       maxTokens: 4096,
       maxToolRounds: 12,
       tracingTags: ["project-chat", modelId, provider.constructor.name, project.title],
-      tracingMeta: { projectId: project.id, projectTitle: project.title, modelId, provider: provider.constructor.name },
+      tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
     const ownerName = personalInfo?.name ?? "Matthew Tujague";
@@ -526,8 +564,17 @@ export async function registerRoutes(
         content: String(m.content).slice(0, 4000),
       }));
 
+    const chatRun = createRun({
+      name: welcome ? "welcome-summary" : "project-chat",
+      runType: "chain",
+      inputs: { messages: userMessages },
+      tags: ["project-chat", modelId, provider.constructor.name, project.title],
+      metadata: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name, modelId },
+    });
+    if (chatRun) await chatRun.postRun().catch(() => {});
+
+    // Wrap primeContext in its own named trace span when not a welcome message
     let seed: any[] = [];
-    
     if (!welcome) {
       const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
       const primeCalls: Array<{ name: string; args: Record<string, unknown> }> = [
@@ -539,17 +586,21 @@ export async function registerRoutes(
           primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
         }
       }
-      seed = await agent.primeContext(primeCalls) as any;
+      const primeRun = createRun({
+        name: "prime-context",
+        runType: "chain",
+        inputs: { projectId: project.id, hasGithub: !!project.githubUrl, calls: primeCalls.map((c) => c.name) },
+        parent: chatRun ?? undefined,
+        tags: ["project-chat", "prime-context", modelId],
+        metadata: { projectId: project.id, modelId },
+      });
+      if (primeRun) await primeRun.postRun().catch(() => {});
+      seed = await agent.primeContext(primeCalls, primeRun ?? undefined) as any;
+      if (primeRun) {
+        await primeRun.end({ output: { seedMessages: seed.length } }).catch(() => {});
+        await primeRun.patchRun().catch(() => {});
+      }
     }
-
-    const chatRun = createRun({
-      name: welcome ? "project summary" : "project chat completion",
-      runType: "chain",
-      inputs: { messages: userMessages },
-      tags: ["project-chat", modelId, provider.constructor.name, project.title],
-      metadata: { projectId: project.id, projectTitle: project.title, modelId, provider: provider.constructor.name },
-    });
-    if (chatRun) await chatRun.postRun().catch(() => {});
 
     try {
       res.setHeader("Content-Type", "text/event-stream");
@@ -562,7 +613,7 @@ export async function registerRoutes(
           content: `Project Details: ${JSON.stringify(project)}\n\n[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.`,
         }];
         const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any, chatRun ?? undefined)).trim() || project.description;
-        const welcomeMessage = buildWelcomeMessage({
+        const welcomeMessages = buildWelcomeMessages({
           aiSummary,
           ownerName,
           ownerEmail,
@@ -571,11 +622,11 @@ export async function registerRoutes(
           ownerGithub,
           ownerPortfolio,
         });
-        writeSseAssistantMessage(res, welcomeMessage);
+        writeSseAssistantMessages(res, welcomeMessages);
         
         if (chatRun) {
           try {
-            await chatRun.end({ output: welcomeMessage });
+            await chatRun.end({ output: welcomeMessages.join("\n\n") });
             await chatRun.patchRun();
           } catch { /* silent */ }
         }
@@ -603,16 +654,34 @@ export async function registerRoutes(
       const evalStatus = randomEvaluatorStatus();
       res.write(`event: evaluator\ndata: ${JSON.stringify({ status: evalStatus })}\n\n`);
 
-      await evaluateResponse({
+      // Run evaluator and capture result for tracing — never let it break the response
+      const evalResult = await evaluateResponse({
         response: finalizedAssistantText.content,
         userMessages,
         modelId,
         provider,
         parentRun: chatRun ?? undefined,
-      }).catch(() => { /* silent — evaluation must never affect the user */ });
+      }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
 
       writeSseAssistantMessage(res, finalizedAssistantText.content);
       res.end();
+
+      // Patch the top-level chatRun with the final output + eval result
+      if (chatRun) {
+        const chatOutput = {
+          output: finalizedAssistantText.content,
+          evaluation: {
+            pass: evalResult.pass,
+            score: evalResult.score,
+            violations: evalResult.violations,
+            mermaidRepaired: finalizedAssistantText.repaired,
+            mermaidDowngraded: finalizedAssistantText.downgraded,
+          },
+        };
+        await chatRun.end(chatOutput).catch(() => {});
+        await chatRun.patchRun().catch(() => {});
+      }
+      return;
     } catch (err: any) {
       if (agent.isRateLimitError(err)) {
         writeSseAssistantMessage(res, agent.rateLimitMessage);
@@ -626,7 +695,8 @@ export async function registerRoutes(
         res.end();
       }
     } finally {
-      if (chatRun) {
+      // Only end chatRun here if not already patched in the success path above
+      if (chatRun && !res.writableEnded) {
         await chatRun.end().catch(() => {});
         await chatRun.patchRun().catch(() => {});
       }
@@ -1212,7 +1282,7 @@ function routeId(value: string | string[] | undefined): string {
   return value ?? "";
 }
 
-function buildWelcomeMessage(args: {
+function buildWelcomeMessages(args: {
   aiSummary: string;
   ownerName: string;
   ownerEmail: string;
@@ -1224,13 +1294,15 @@ function buildWelcomeMessage(args: {
   const firstName = args.ownerName.trim().split(/\s+/)[0] || "Matt";
 
   return [
-    args.aiSummary,
-    "**I'm here to help, I can:**",
+    [`**What this is:** ${args.aiSummary}`].join("\n"),
+    [
+      "**I'm here to help, I can:**",
     "- Explain the technical implementation and architectural decisions behind this project.",
     "- Pull from the actual project source code when needed.",
     "- Check the repository context, commits, and related history.",
+    ].join("\n"),
     `Reach out to ${firstName} via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [LinkedIn](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
-  ].join("\n\n");
+  ];
 }
 
 function createPromptSuggestionsHash(

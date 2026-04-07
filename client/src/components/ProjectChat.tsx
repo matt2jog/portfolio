@@ -190,6 +190,18 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
           continue;
         }
 
+        if (currentEventType === "assistant_message") {
+          try {
+            const parsed = JSON.parse(data);
+            const content = typeof parsed.content === "string" ? parsed.content : "";
+            if (!content) continue;
+            assistantContent += content;
+            setIsThinking(false);
+            setMessages((prev) => [...prev, { role: "assistant", content }]);
+          } catch {}
+          continue;
+        }
+
         try {
           const parsed = JSON.parse(data);
           const delta = parsed.choices?.[0]?.delta?.content;
@@ -444,6 +456,11 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
                   <p className="text-sm text-gray-300">Ask me anything about <span className="text-primary">{project.title}</span>.</p>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">I can explain the project, walk through architecture, inspect repository context, and connect the work back to its creator.</p>
                   <p className="mt-3 text-xs text-gray-600">{project.tech.join(" / ")}</p>
+                </div>
+              )}
+              {messages.length === 0 && isStreaming && (
+                <div className="flex min-h-[40vh] flex-col justify-center py-10">
+                  <TypingIndicator />
                 </div>
               )}
               <div className="space-y-6">

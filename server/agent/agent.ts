@@ -86,6 +86,7 @@ export class Agent {
    */
   async primeContext(
     calls: Array<{ name: string; args: Record<string, unknown> }>,
+    parentRun?: RunTree,
   ): Promise<ChatMessage[]> {
     const seed: ChatMessage[] = [];
     for (const call of calls) {
@@ -94,7 +95,7 @@ export class Agent {
         id: fakeId,
         type: "function",
         function: { name: call.name, arguments: JSON.stringify(call.args) },
-      });
+      }, parentRun);
       // Skip failed tool calls — injecting error results causes the model to
       // hallucinate when the system prompt implies the data was loaded.
       try {
@@ -119,12 +120,12 @@ export class Agent {
     const messages = this.buildMessages(userMessages);
 
     const run = createRun({
-      name: `agent:${this.config.modelId}`,
+      name: this.config.name,
       runType: "chain",
       inputs: { messages },
       parent: parentRun,
       tags: this.config.tracingTags,
-      metadata: this.config.tracingMeta,
+      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
     });
 
     return withRun(
@@ -133,7 +134,7 @@ export class Agent {
         let rounds = 0;
 
         while (rounds < this.config.maxToolRounds) {
-          const response = await this.complete(messages, run ?? undefined);
+          const response = await this.complete(messages, run ?? undefined, `tool-round-${rounds + 1}`);
           const choice = response.choices?.[0];
           if (!choice) return "(no response)";
 
@@ -174,12 +175,12 @@ export class Agent {
     const messages = this.buildMessages(userMessages);
 
     const run = createRun({
-      name: `agent:${this.config.modelId}`,
+      name: this.config.name,
       runType: "chain",
       inputs: { messages },
       parent: parentRun,
       tags: this.config.tracingTags,
-      metadata: this.config.tracingMeta,
+      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
     });
 
     if (run) {
@@ -193,7 +194,7 @@ export class Agent {
       let rounds = 0;
 
       while (rounds < this.config.maxToolRounds) {
-        const response = await this.complete(messages, run ?? undefined);
+        const response = await this.complete(messages, run ?? undefined, `tool-round-${rounds + 1}`);
         const choice = response.choices?.[0];
         if (!choice) return;
 
@@ -261,14 +262,15 @@ export class Agent {
   private async complete(
     messages: ChatMessage[],
     parentRun?: RunTree,
+    runNameSuffix?: string,
   ): Promise<CompletionResponse> {
     const llmRun = createRun({
-      name: this.config.modelId,
+      name: runNameSuffix ? `${this.config.name}:${runNameSuffix}` : `${this.config.name}:llm`,
       runType: "llm",
       inputs: { messages },
       parent: parentRun,
       tags: this.config.tracingTags,
-      metadata: this.config.tracingMeta,
+      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
     });
 
     return withRun(
@@ -307,12 +309,14 @@ export class Agent {
       return JSON.stringify({ error: "Invalid tool arguments JSON" });
     }
 
+    // Name is just the tool name — no model prefix needed
     const toolRun = createRun({
       name: call.function.name,
       runType: "tool",
       inputs: args,
       parent: parentRun,
       tags: this.config.tracingTags,
+      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
     });
 
     return withRun(
@@ -343,12 +347,12 @@ export class Agent {
     parentRun?: RunTree,
   ): AsyncGenerator<string> {
     const llmRun = createRun({
-      name: `${this.config.modelId}:stream`,
+      name: `${this.config.name}:llm-stream`,
       runType: "llm",
       inputs: { messages },
       parent: parentRun,
       tags: this.config.tracingTags,
-      metadata: this.config.tracingMeta,
+      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
     });
 
     if (llmRun) {
