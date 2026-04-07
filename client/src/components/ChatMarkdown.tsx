@@ -1,4 +1,4 @@
-import { Children, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Children, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -74,6 +74,10 @@ interface TransformState {
   y: number;
 }
 
+const MIN_MERMAID_ZOOM = 0.5;
+const MAX_MERMAID_ZOOM = 4;
+const PAN_OVERSCROLL_FACTOR = 1.5;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -86,6 +90,21 @@ function getMidpoint(a: Point, b: Point): Point {
   return {
     x: (a.x + b.x) / 2,
     y: (a.y + b.y) / 2,
+  };
+}
+
+function getCenteredTransform(
+  viewport: HTMLDivElement,
+  content: HTMLDivElement,
+  scale: number,
+): TransformState {
+  const scaledWidth = content.offsetWidth * scale;
+  const scaledHeight = content.offsetHeight * scale;
+
+  return {
+    scale,
+    x: (viewport.clientWidth - scaledWidth) / 2,
+    y: (viewport.clientHeight - scaledHeight) / 2,
   };
 }
 
@@ -125,21 +144,11 @@ function MermaidDiagram({ chart }: { chart: string }) {
     const contentHeight = content.offsetHeight;
     const scaledWidth = contentWidth * next.scale;
     const scaledHeight = contentHeight * next.scale;
+    const slackX = Math.max(viewportWidth, scaledWidth) * PAN_OVERSCROLL_FACTOR;
+    const slackY = Math.max(viewportHeight, scaledHeight) * PAN_OVERSCROLL_FACTOR;
 
-    let x = next.x;
-    let y = next.y;
-
-    if (scaledWidth <= viewportWidth) {
-      x = (viewportWidth - scaledWidth) / 2;
-    } else {
-      x = clamp(x, viewportWidth - scaledWidth, 0);
-    }
-
-    if (scaledHeight <= viewportHeight) {
-      y = (viewportHeight - scaledHeight) / 2;
-    } else {
-      y = clamp(y, viewportHeight - scaledHeight, 0);
-    }
+    const x = clamp(next.x, viewportWidth - scaledWidth - slackX, slackX);
+    const y = clamp(next.y, viewportHeight - scaledHeight - slackY, slackY);
 
     const clamped = { scale: next.scale, x, y };
     transformRef.current = clamped;
@@ -147,7 +156,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
     return clamped;
   };
 
-  const zoomAroundPoint = (nextScale: number, point: Point) => {
+  const zoomAroundPoint = useCallback((nextScale: number, point: Point) => {
     const current = transformRef.current;
     const ratio = nextScale / current.scale;
     applyTransform({
@@ -155,6 +164,15 @@ function MermaidDiagram({ chart }: { chart: string }) {
       x: point.x - (point.x - current.x) * ratio,
       y: point.y - (point.y - current.y) * ratio,
     });
+  }, []);
+
+  const clearDragState = () => {
+    dragPointerIdRef.current = null;
+    dragLastPointRef.current = null;
+    if (typeof document !== "undefined") {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
   };
 
   useEffect(() => {
@@ -184,8 +202,42 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
   useEffect(() => {
     if (!svg) return;
-    applyTransform({ scale: 1, x: 0, y: 0 });
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+    applyTransform(getCenteredTransform(viewport, content, 1));
   }, [svg]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextScale = clamp(
+        transformRef.current.scale * (event.deltaY > 0 ? 0.9 : 1.1),
+        MIN_MERMAID_ZOOM,
+        MAX_MERMAID_ZOOM,
+      );
+      const rect = viewport.getBoundingClientRect();
+      zoomAroundPoint(nextScale, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+    };
+  }, [zoomAroundPoint, svg]);
+
+  useEffect(() => {
+    return () => {
+      clearDragState();
+    };
+  }, []);
 
   if (error) {
     return (
@@ -222,8 +274,9 @@ function MermaidDiagram({ chart }: { chart: string }) {
             type="button"
             onClick={() => {
               const viewport = viewportRef.current;
-              if (!viewport) return;
-              const nextScale = clamp(transformRef.current.scale / 1.2, 1, 4);
+              const content = contentRef.current;
+              if (!viewport || !content) return;
+              const nextScale = clamp(transformRef.current.scale / 1.2, MIN_MERMAID_ZOOM, MAX_MERMAID_ZOOM);
               zoomAroundPoint(nextScale, {
                 x: viewport.clientWidth / 2,
                 y: viewport.clientHeight / 2,
@@ -239,7 +292,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
             onClick={() => {
               const viewport = viewportRef.current;
               if (!viewport) return;
-              const nextScale = clamp(transformRef.current.scale * 1.2, 1, 4);
+              const nextScale = clamp(transformRef.current.scale * 1.2, MIN_MERMAID_ZOOM, MAX_MERMAID_ZOOM);
               zoomAroundPoint(nextScale, {
                 x: viewport.clientWidth / 2,
                 y: viewport.clientHeight / 2,
@@ -252,7 +305,12 @@ function MermaidDiagram({ chart }: { chart: string }) {
           </button>
           <button
             type="button"
-            onClick={() => applyTransform({ scale: 1, x: 0, y: 0 })}
+            onClick={() => {
+              const viewport = viewportRef.current;
+              const content = contentRef.current;
+              if (!viewport || !content) return;
+              applyTransform(getCenteredTransform(viewport, content, 1));
+            }}
             className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-gray-300 transition-colors hover:border-primary/40 hover:text-white"
           >
             Reset
@@ -262,25 +320,9 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
       <div
         ref={viewportRef}
-        className="relative overflow-hidden rounded border border-white/5 bg-black/20 touch-none"
-        onWheel={(event) => {
-          event.preventDefault();
-          const viewport = viewportRef.current;
-          if (!viewport) return;
-
-          const rect = viewport.getBoundingClientRect();
-          const nextScale = clamp(
-            transformRef.current.scale * (event.deltaY > 0 ? 0.9 : 1.1),
-            1,
-            4,
-          );
-
-          zoomAroundPoint(nextScale, {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
-          });
-        }}
+        className="relative h-[clamp(240px,38vh,420px)] overflow-hidden rounded border border-white/5 bg-black/20 select-none touch-none md:h-[clamp(280px,42vh,520px)]"
         onPointerDown={(event) => {
+          event.preventDefault();
           const viewport = viewportRef.current;
           if (!viewport) return;
 
@@ -292,6 +334,10 @@ function MermaidDiagram({ chart }: { chart: string }) {
           if (pointersRef.current.size === 1) {
             dragPointerIdRef.current = event.pointerId;
             dragLastPointRef.current = point;
+            if (typeof document !== "undefined") {
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "grabbing";
+            }
           }
 
           if (pointersRef.current.size === 2) {
@@ -326,8 +372,8 @@ function MermaidDiagram({ chart }: { chart: string }) {
             const midpoint = getMidpoint(a, b);
             const nextScale = clamp(
               pinchStart.scale * (distance / Math.max(pinchStart.distance, 1)),
-              1,
-              4,
+              MIN_MERMAID_ZOOM,
+              MAX_MERMAID_ZOOM,
             );
             const ratio = nextScale / pinchStart.scale;
 
@@ -340,8 +386,8 @@ function MermaidDiagram({ chart }: { chart: string }) {
           }
 
           if (dragPointerIdRef.current !== event.pointerId || !dragLastPointRef.current) return;
-          if (transformRef.current.scale <= 1) return;
 
+          event.preventDefault();
           const deltaX = point.x - dragLastPointRef.current.x;
           const deltaY = point.y - dragLastPointRef.current.y;
           dragLastPointRef.current = point;
@@ -353,6 +399,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
           });
         }}
         onPointerUp={(event) => {
+          event.preventDefault();
           const viewport = viewportRef.current;
           if (viewport?.hasPointerCapture(event.pointerId)) {
             viewport.releasePointerCapture(event.pointerId);
@@ -361,8 +408,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
           pointersRef.current.delete(event.pointerId);
 
           if (dragPointerIdRef.current === event.pointerId) {
-            dragPointerIdRef.current = null;
-            dragLastPointRef.current = null;
+            clearDragState();
           }
 
           if (pointersRef.current.size < 2) {
@@ -373,13 +419,16 @@ function MermaidDiagram({ chart }: { chart: string }) {
             const [remainingId, remainingPoint] = Array.from(pointersRef.current.entries())[0];
             dragPointerIdRef.current = remainingId;
             dragLastPointRef.current = remainingPoint;
+            if (typeof document !== "undefined") {
+              document.body.style.userSelect = "none";
+              document.body.style.cursor = "grabbing";
+            }
           }
         }}
         onPointerCancel={(event) => {
           pointersRef.current.delete(event.pointerId);
           if (dragPointerIdRef.current === event.pointerId) {
-            dragPointerIdRef.current = null;
-            dragLastPointRef.current = null;
+            clearDragState();
           }
           if (pointersRef.current.size < 2) {
             pinchStartRef.current = null;
@@ -388,7 +437,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
       >
         <div
           ref={contentRef}
-          className="origin-top-left will-change-transform [&_svg]:h-auto [&_svg]:max-w-full"
+          className="origin-top-left will-change-transform [&_svg]:h-auto [&_svg]:max-w-none"
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
           }}
@@ -406,21 +455,21 @@ function MermaidDiagram({ chart }: { chart: string }) {
 export default function ChatMarkdown({ content }: ChatMarkdownProps) {
   const sanitized = content.replace(/<br\s*\/?>/gi, "\n");
   return (
-    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
+    <div className="min-w-0 break-normal">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
           br: () => null,
           p: ({ children }) => (
-            <p className="mb-2 break-words leading-relaxed last:mb-0 [overflow-wrap:anywhere]">{children}</p>
+            <p className="mb-2 break-normal leading-relaxed last:mb-0">{children}</p>
           ),
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noreferrer noopener"
-              className="break-all text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
+              className="break-normal text-primary underline underline-offset-2 transition-colors hover:text-primary/80"
             >
               {children}
             </a>
@@ -441,7 +490,7 @@ export default function ChatMarkdown({ content }: ChatMarkdownProps) {
               );
             }
             return (
-              <code className="break-all rounded bg-white/10 px-1 text-xs font-mono text-primary/90">
+              <code className="break-normal rounded bg-white/10 px-1 text-xs font-mono text-primary/90">
                 {children}
               </code>
             );
@@ -462,22 +511,22 @@ export default function ChatMarkdown({ content }: ChatMarkdownProps) {
             );
           },
           ul: ({ children }) => (
-            <ul className="my-1.5 ml-4 list-disc space-y-0.5 break-words text-gray-300 [overflow-wrap:anywhere]">{children}</ul>
+            <ul className="my-1.5 ml-4 list-disc space-y-0.5 break-normal text-gray-300">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-1.5 ml-4 list-decimal space-y-0.5 break-words text-gray-300 [overflow-wrap:anywhere]">{children}</ol>
+            <ol className="my-1.5 ml-4 list-decimal space-y-0.5 break-normal text-gray-300">{children}</ol>
           ),
           li: ({ children }) => (
-            <li className="break-words leading-relaxed [overflow-wrap:anywhere]">{children}</li>
+            <li className="break-normal leading-relaxed">{children}</li>
           ),
           h1: ({ children }) => (
-            <h1 className="mb-1 mt-3 break-words text-base font-bold text-white first:mt-0 [overflow-wrap:anywhere]">{children}</h1>
+            <h1 className="mb-1 mt-3 break-normal text-base font-bold text-white first:mt-0">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-1 mt-3 break-words text-sm font-bold text-white first:mt-0 [overflow-wrap:anywhere]">{children}</h2>
+            <h2 className="mb-1 mt-3 break-normal text-sm font-bold text-white first:mt-0">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-2 break-words text-sm font-semibold text-gray-200 first:mt-0 [overflow-wrap:anywhere]">{children}</h3>
+            <h3 className="mb-1 mt-2 break-normal text-sm font-semibold text-gray-200 first:mt-0">{children}</h3>
           ),
           blockquote: ({ children }) => (
             <blockquote className="my-2 border-l-2 border-primary/50 pl-3 italic text-gray-400">
@@ -502,7 +551,7 @@ export default function ChatMarkdown({ content }: ChatMarkdownProps) {
             <th className="px-2 py-1 text-left font-semibold">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="break-words px-2 py-1 [overflow-wrap:anywhere]">{children}</td>
+            <td className="break-normal px-2 py-1">{children}</td>
           ),
           hr: () => <hr className="my-3 border-white/10" />,
         }}

@@ -115,6 +115,7 @@
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
     "jimp": "^1.6.0",
+    "playwright": "^1.59.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",

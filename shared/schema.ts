@@ -42,6 +42,7 @@ export const aiModels = pgTable("ai_models", {
   label: text("label").notNull(),
   modelId: text("model_id").notNull().unique(),
   provider: text("provider").notNull(),
+  fireworksModelId: text("fireworks_model_id"),
   enabled: boolean("enabled").notNull().default(true),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

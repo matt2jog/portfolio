@@ -16,6 +16,7 @@ import Admin from "@/pages/Admin";
 import Tree from "@/pages/Tree";
 import Activity from "@/pages/Activity";
 import Portfolio from "@/pages/Portfolio";
+import ProjectChatPage from "@/pages/ProjectChatPage";
 import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
@@ -114,6 +115,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/tree" component={Tree} />
       <Route path="/activity" component={Activity} />
+      <Route path="/portfolio/:projectId/chat" component={ProjectChatPage} />
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/about" component={About} />
       <Route path="/privacy" component={Privacy} />

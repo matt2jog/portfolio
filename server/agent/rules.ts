@@ -135,12 +135,14 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
       "No table row functions as a section title or category divider. Every named section is introduced with bold text or a markdown header outside of any table.",
     severity: "major",
   },
+
   {
-    id: "fmt-no-html",
+    id: "fmt-mermaid-no-text-only",
     category: "formatting",
     instruction:
-      "Never use raw HTML tags (e.g. <br>, <b>, <div>, <span>). Use markdown line breaks (two spaces or a blank line) and markdown formatting instead.",
-    evaluationCriteria: "Response contains no raw HTML tags.",
+      "Never use a mermaid diagram to represent purely textual content with no meaningful relationships, flows, or connections between items. Every mermaid block must contain at least two nodes connected by an edge, arrow, or sequence step. Do not use mermaid as a decorated list or stylized text box — if the content is a flat list of items with no relationships between them, use a markdown list instead.",
+    evaluationCriteria:
+      "No mermaid block contains only isolated nodes with no connecting edges. Every diagram has at least two nodes joined by an arrow, step, or relationship. Any diagram that is just a visual list of labels with no edges is a violation.",
     severity: "major",
   },
   {
@@ -157,13 +159,6 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
     category: "formatting",
     instruction: "Do not use em-dashes (—). Use commas, colons, or rephrase instead.",
     evaluationCriteria: "The response contains no em-dash characters.",
-    severity: "minor",
-  },
-  {
-    id: "fmt-emoji",
-    category: "formatting",
-    instruction: "Use emojis sparingly where they add warmth or emphasis, not decoratively.",
-    evaluationCriteria: "Emojis are used at most 1-2 times per response and add meaning.",
     severity: "minor",
   },
 
@@ -186,15 +181,15 @@ export const PORTFOLIO_CHAT_RULES = new Ruleset([
       "Every factual claim in the response can be traced to a tool result or explicit context in the conversation.",
     severity: "critical",
   },
-  {
-    id: "conduct-no-code-gen",
-    category: "conduct",
-    instruction:
-      "Do not generate code, pseudocode, or implementation logic unless the exact code exists verbatim in a tool result (e.g. a GitHub file read).",
-    evaluationCriteria:
-      "The response contains no code blocks or pseudocode unless the content was retrieved verbatim from a tool result.",
-    severity: "critical",
-  },
+  // {
+  //   id: "conduct-no-code-gen",
+  //   category: "conduct",
+  //   instruction:
+  //     "Do not generate code, pseudocode, or implementation logic unless the exact code exists verbatim in a tool result (e.g. a GitHub file read).",
+  //   evaluationCriteria:
+  //     "The response contains no code blocks or pseudocode unless the content was retrieved verbatim from a tool result.",
+  //   severity: "critical",
+  // },
   {
     id: "conduct-employer-tone",
     category: "conduct",

@@ -5,8 +5,10 @@ import ProjectChat from "@/components/ProjectChat";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type TransitionEvent, useCallback, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 
 export default function Portfolio() {
+  const [, setLocation] = useLocation();
   const fallbackProjects = [
     {
       title: "Lorem Ipsum I",
@@ -77,11 +79,26 @@ export default function Portfolio() {
   const projectsPerFace = 4;
   const totalGroups = Math.max(1, Math.ceil(projects.length / projectsPerFace));
 
-  const [rotationStep, setRotationStep] = useState(0);
-  const [faceKs, setFaceKs] = useState([0, 1, 2, -1]);
+  const initRotation = useMemo(() => {
+    if (typeof window === "undefined") return 0;
+    const params = new URLSearchParams(window.location.search);
+    const rot = params.get('rotation');
+    return rot ? parseInt(rot, 10) || 0 : 0;
+  }, []);
+
+  const [rotationStep, setRotationStep] = useState(initRotation);
+  const [faceKs, setFaceKs] = useState(() => {
+    const R = initRotation;
+    const newFaces = [0, 0, 0, 0];
+    const S = ((R % 4) + 4) % 4;
+    newFaces[S] = R;
+    newFaces[(S + 1) % 4] = R + 1;
+    newFaces[(S + 2) % 4] = R + 2;
+    newFaces[(S + 3) % 4] = R - 1;
+    return newFaces;
+  });
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [animDuration, setAnimDuration] = useState(1200);
-  const [chatProject, setChatProject] = useState<{ id: string; title: string; description: string; tech: string[] } | null>(null);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
   const groupIndex = ((rotationStep % totalGroups) + totalGroups) % totalGroups;
@@ -248,7 +265,7 @@ export default function Portfolio() {
                             isActiveFace={faceIndex === rotationIndex}
                             onChatOpen={
                               faceIndex === rotationIndex
-                                ? () => setChatProject({ id: project.id, title: project.title, description: project.description, tech: project.tech })
+                                ? () => setLocation(`/portfolio/${project.id}/chat?rotation=${rotationStep}`)
                                 : undefined
                             }
                           />
@@ -290,13 +307,6 @@ export default function Portfolio() {
 
         <Footer />
       </main>
-
-      {chatProject && (
-        <ProjectChat
-          project={chatProject}
-          onClose={() => setChatProject(null)}
-        />
-      )}
     </div>
   );
 }

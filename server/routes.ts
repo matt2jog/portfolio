@@ -34,10 +34,12 @@ import {
   aiModels,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { Agent, GRADIENT_RATE_LIMIT_MESSAGE, isGradientRateLimitError } from "./agent";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./agent";
+import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
-import { pushPromptVersion } from "./agent/tracing";
+import { evaluateResponse, randomEvaluatorStatus } from "./agent/evaluator";
+import { pushPromptVersion, createRun } from "./agent/tracing";
 import {
   GitHubRepoTool,
   GitHubFileTreeTool,
@@ -52,6 +54,52 @@ const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
 let projectsCache: { data: any[]; timestamp: number } | null = null;
 type PromptSuggestion = { label: string; prompt: string };
+
+/* ------------------------------------------------------------------ */
+/*  AI provider singleton                                               */
+/*                                                                     */
+/*  Built once on first use. Uses Gradient as primary and Fireworks    */
+/*  as fallback with per-model 1-hour cooldown on rate limits.         */
+/*  Model map is loaded from the ai_models table (fireworks_model_id). */
+/* ------------------------------------------------------------------ */
+
+let _aiProvider: LLMProvider | undefined;
+
+async function getAiProvider(): Promise<LLMProvider | undefined> {
+  if (_aiProvider) return _aiProvider;
+
+  const gradientToken = process.env.GRADIENT_AI_TOKEN;
+  if (!gradientToken) return undefined;
+
+  const gradient = new GradientProvider({ token: gradientToken });
+  const fireworksToken = process.env.FIREWORKS_AI_TOKEN;
+
+  if (!fireworksToken) {
+    _aiProvider = gradient;
+    return _aiProvider;
+  }
+
+  // Build the gradient → fireworks model ID map from the DB
+  const rows = await db
+    .select({ modelId: aiModels.modelId, fireworksModelId: aiModels.fireworksModelId })
+    .from(aiModels)
+    .where(eq(aiModels.enabled, true));
+
+  const modelMap: Record<string, string> = {};
+  for (const row of rows) {
+    if (row.fireworksModelId) {
+      modelMap[row.modelId] = row.fireworksModelId;
+    }
+  }
+
+  _aiProvider = new FallbackProvider({
+    primary: gradient,
+    fallback: new FireworksProvider({ apiKey: fireworksToken }),
+    modelMap,
+  });
+
+  return _aiProvider;
+}
 const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
 
 function writeSseAssistantMessage(res: Response, content: string) {
@@ -246,6 +294,32 @@ export async function registerRoutes(
     res.json(data);
   });
 
+  app.get("/api/public/projects/:id", async (req, res) => {
+    const projectId = routeId(req.params.id);
+    if (!projectId) {
+      return res.status(400).json({ error: "Project id is required" });
+    }
+
+    const ttlMs = getProjectsCacheTtlMs();
+    if (projectsCache && Date.now() - projectsCache.timestamp <= ttlMs) {
+      const cachedProject = projectsCache.data.find((project) => project.id === projectId);
+      if (cachedProject) {
+        return res.json(cachedProject);
+      }
+    }
+
+    const [project] = await db.select().from(projects)
+      .where(and(eq(projects.id, projectId), sql`${projects.deletedAt} IS NULL`))
+      .limit(1);
+
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const [hydratedProject] = await hydrateProjectsWithBullets([project]);
+    res.json(hydratedProject);
+  });
+
   // ========== AI CHAT ==========
 
   app.get("/api/public/ai-models", async (_req, res) => {
@@ -261,8 +335,8 @@ export async function registerRoutes(
   });
 
   app.get("/api/public/chat-prompt-suggestions", async (req, res) => {
-    const gradientToken = process.env.GRADIENT_AI_TOKEN;
-    if (!gradientToken) {
+    const provider = await getAiProvider();
+    if (!provider) {
       return res.status(503).json({ error: "AI chat is not configured" });
     }
 
@@ -288,11 +362,13 @@ export async function registerRoutes(
 
     const tools = [
       new ProjectContextTool(),
-      new GitHubRepoTool(),
-      new GitHubFileTreeTool(),
-      new GitHubReadFileTool(),
-      new GitHubCommitsTool(),
-      new GitHubIssuestool(),
+      ...(project.githubUrl ? [
+        new GitHubRepoTool(),
+        new GitHubFileTreeTool(),
+        new GitHubReadFileTool(),
+        new GitHubCommitsTool(),
+        new GitHubIssuestool(),
+      ] : []),
     ];
 
     const promptInputsHash = createPromptSuggestionsHash(project, tools.map((tool) => tool.definition));
@@ -304,7 +380,7 @@ export async function registerRoutes(
 
     const suggestionsAgent = new Agent({
       modelId,
-      token: gradientToken,
+      provider,
       systemPrompt: [
         "You write suggested starter prompts for a portfolio project chat.",
         "The prompts must help a visitor either understand the project better or connect more directly to its creator.",
@@ -349,7 +425,7 @@ export async function registerRoutes(
       res.json({ hash: promptInputsHash, suggestions });
     } catch (err: any) {
       const fallback = fallbackPromptSuggestions(project.title);
-      const rateLimited = isGradientRateLimitError(err);
+      const rateLimited = suggestionsAgent.isRateLimitError(err);
       if (!rateLimited) {
         promptSuggestionsCache.set(cacheKey, fallback);
       }
@@ -357,14 +433,14 @@ export async function registerRoutes(
         hash: promptInputsHash,
         suggestions: fallback,
         fallback: true,
-        error: rateLimited ? GRADIENT_RATE_LIMIT_MESSAGE : err.message,
+        error: rateLimited ? suggestionsAgent.rateLimitMessage : err.message,
       });
     }
   });
 
   app.post("/api/public/chat", async (req, res) => {
-    const gradientToken = process.env.GRADIENT_AI_TOKEN;
-    if (!gradientToken) {
+    const provider = await getAiProvider();
+    if (!provider) {
       return res.status(503).json({ error: "AI chat is not configured" });
     }
 
@@ -413,22 +489,24 @@ export async function registerRoutes(
 
     const tools = [
       new ProjectContextTool(),
-      new GitHubRepoTool(),
-      new GitHubFileTreeTool(),
-      new GitHubReadFileTool(),
-      new GitHubCommitsTool(),
-      new GitHubIssuestool(),
+      ...(project.githubUrl ? [
+        new GitHubRepoTool(),
+        new GitHubFileTreeTool(),
+        new GitHubReadFileTool(),
+        new GitHubCommitsTool(),
+        new GitHubIssuestool(),
+      ] : []),
     ];
 
     const agent = new Agent({
       modelId,
-      token: gradientToken,
+      provider,
       systemPrompt,
       tools,
       maxTokens: 4096,
       maxToolRounds: 12,
-      tracingTags: ["project-chat", modelId, project.title],
-      tracingMeta: { projectId: project.id, projectTitle: project.title, modelId },
+      tracingTags: ["project-chat", modelId, provider.constructor.name, project.title],
+      tracingMeta: { projectId: project.id, projectTitle: project.title, modelId, provider: provider.constructor.name },
     });
 
     const ownerName = personalInfo?.name ?? "Matthew Tujague";
@@ -448,23 +526,30 @@ export async function registerRoutes(
         content: String(m.content).slice(0, 4000),
       }));
 
-    // Always prime with project details so every turn has full context.
-    // The seed messages are synthetic tool results that live only server-side —
-    // they are never stored in the client's message state, so without re-priming
-    // every turn the model loses project context after the first response.
-    // GitHub repo overview is only fetched on the first turn to avoid hitting
-    // the GitHub API on every message.
-    const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
-    const primeCalls: Array<{ name: string; args: Record<string, unknown> }> = [
-      { name: "get_project_details", args: { project_id: project.id } },
-    ];
-    if (isFirstTurn && project.githubUrl) {
-      const ghMatch = project.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-      if (ghMatch) {
-        primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
+    let seed: any[] = [];
+    
+    if (!welcome) {
+      const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
+      const primeCalls: Array<{ name: string; args: Record<string, unknown> }> = [
+        { name: "get_project_details", args: { project_id: project.id } },
+      ];
+      if (isFirstTurn && project.githubUrl) {
+        const ghMatch = project.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+        if (ghMatch) {
+          primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
+        }
       }
+      seed = await agent.primeContext(primeCalls) as any;
     }
-    const seed = await agent.primeContext(primeCalls);
+
+    const chatRun = createRun({
+      name: welcome ? "project summary" : "project chat completion",
+      runType: "chain",
+      inputs: { messages: userMessages },
+      tags: ["project-chat", modelId, provider.constructor.name, project.title],
+      metadata: { projectId: project.id, projectTitle: project.title, modelId, provider: provider.constructor.name },
+    });
+    if (chatRun) await chatRun.postRun().catch(() => {});
 
     try {
       res.setHeader("Content-Type", "text/event-stream");
@@ -474,9 +559,9 @@ export async function registerRoutes(
       if (welcome) {
         const welcomeSummaryMessages: Array<{ role: "user"; content: string }> = [{
           role: "user",
-          content: "[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.",
+          content: `Project Details: ${JSON.stringify(project)}\n\n[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.`,
         }];
-        const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages])).trim() || project.description;
+        const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any, chatRun ?? undefined)).trim() || project.description;
         const welcomeMessage = buildWelcomeMessage({
           aiSummary,
           ownerName,
@@ -487,12 +572,20 @@ export async function registerRoutes(
           ownerPortfolio,
         });
         writeSseAssistantMessage(res, welcomeMessage);
+        
+        if (chatRun) {
+          try {
+            await chatRun.end({ output: welcomeMessage });
+            await chatRun.patchRun();
+          } catch { /* silent */ }
+        }
+        
         res.end();
         return;
       }
 
       let bufferedAssistantText = "";
-      for await (const event of agent.stream([...seed, ...userMessages])) {
+      for await (const event of agent.stream([...seed, ...userMessages] as any, chatRun ?? undefined)) {
         if (event.type === "tool_call") {
           res.write(`event: tool_call\ndata: ${JSON.stringify({ name: event.name, args: event.args })}\n\n`);
         } else {
@@ -502,14 +595,27 @@ export async function registerRoutes(
 
       const finalizedAssistantText = await ensureRenderableMermaid(bufferedAssistantText, {
         modelId,
-        token: gradientToken,
+        provider,
+        parentRun: chatRun ?? undefined,
       });
+
+      // Signal that evaluation is running so the client can show the status row
+      const evalStatus = randomEvaluatorStatus();
+      res.write(`event: evaluator\ndata: ${JSON.stringify({ status: evalStatus })}\n\n`);
+
+      await evaluateResponse({
+        response: finalizedAssistantText.content,
+        userMessages,
+        modelId,
+        provider,
+        parentRun: chatRun ?? undefined,
+      }).catch(() => { /* silent — evaluation must never affect the user */ });
 
       writeSseAssistantMessage(res, finalizedAssistantText.content);
       res.end();
     } catch (err: any) {
-      if (isGradientRateLimitError(err)) {
-        writeSseAssistantMessage(res, GRADIENT_RATE_LIMIT_MESSAGE);
+      if (agent.isRateLimitError(err)) {
+        writeSseAssistantMessage(res, agent.rateLimitMessage);
         res.end();
         return;
       }
@@ -518,6 +624,11 @@ export async function registerRoutes(
         res.status(500).json({ error: "AI request failed", details: err.message });
       } else {
         res.end();
+      }
+    } finally {
+      if (chatRun) {
+        await chatRun.end().catch(() => {});
+        await chatRun.patchRun().catch(() => {});
       }
     }
   });
