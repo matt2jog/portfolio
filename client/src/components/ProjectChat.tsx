@@ -497,9 +497,9 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
       <style>{`@keyframes project-chat-prompt-marquee { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(calc(-50% - 0.25rem), 0, 0); } }`}</style>
       {!standalone && <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md" onClick={onClose} />}
       <div className={standalone ? "min-h-screen bg-[#0a0b0f] relative" : "fixed inset-0 z-50 md:inset-4 relative"}>
-        <div className={standalone ? "flex min-h-screen flex-col overflow-hidden bg-[#0a0b0f]" : "flex h-full flex-col overflow-hidden bg-[#0a0b0f] md:rounded-2xl md:border md:border-white/10 md:shadow-2xl"}>
+        <div className={standalone ? "flex min-h-screen flex-col bg-[#0a0b0f]" : "flex h-full flex-col overflow-hidden bg-[#0a0b0f] md:rounded-2xl md:border md:border-white/10 md:shadow-2xl"}>
           <button onClick={onClose} className={`fixed bottom-24 right-6 z-[100] flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_4px_24px_hsl(var(--primary)/0.6)] transition-all duration-300 md:bottom-28 md:right-8 ${showFloatingClose ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0 pointer-events-none"}`} aria-label="Back to projects"><X className="h-6 w-6 stroke-[2.5]" /></button>
-          <div className="relative flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 md:items-center md:px-6">
+          <div className="fixed top-0 inset-x-0 z-40 flex items-start justify-between gap-3 border-b border-white/10 bg-[#0a0b0f]/95 backdrop-blur px-4 py-4 md:items-center md:px-6">
             <div className="min-w-0 pr-2 md:max-w-[28rem]">
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 flex-none text-primary md:h-5 md:w-5" />
@@ -537,7 +537,7 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
               <button onClick={onClose} className="rounded p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="Close chat"><X className="h-4 w-4" /></button>
             </div>
           </div>
-          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={(e) => { const target = e.currentTarget; isAutoScrolling.current = (target.scrollHeight - target.scrollTop - target.clientHeight) < 75; setShowFloatingClose(target.scrollTop > 80); }}>
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto mt-[76px]" onScroll={(e) => { const target = e.currentTarget; isAutoScrolling.current = (target.scrollHeight - target.scrollTop - target.clientHeight) < 75; setShowFloatingClose(target.scrollTop > 80); }}>
             <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
               {messages.length === 0 && !isStreaming && (
                 <div className="flex min-h-[40vh] flex-col justify-center py-10">
@@ -575,8 +575,8 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
               </div>
             </div>
           </div>
-          <div className="border-t border-white/10 bg-[#0a0b0f]">
-            <div className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6 lg:px-8">
+          <div className="sticky bottom-0 z-40 border-t border-white/10 bg-[#0a0b0f]/95 backdrop-blur px-4 py-4 md:px-6 lg:px-8">
+            <div className="mx-auto w-full max-w-7xl">
               {promptSuggestions.length > 0 && (
                 <div className="mb-3">
                   <div className="hidden flex-wrap gap-2 md:flex">
