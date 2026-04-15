@@ -18,8 +18,8 @@ interface StarProps {
 }
 
 function Star({ node, position }: StarProps) {
-  // Use CSS styles to determine the box and text appearance
-  const boxClass = "border-gray-700 bg-black/60 shadow-sm scale-100";
+  // Use solid background instead of backdrop-blur to prevent WebKit edge-clipping shine
+  const boxClass = "border-gray-700 bg-[#0a0a0a] shadow-sm scale-100";
       
   const textClass = "text-gray-400";
 
@@ -27,7 +27,7 @@ function Star({ node, position }: StarProps) {
     <group position={position}>
       <Html center distanceFactor={15}>
         <div 
-          className={`border px-4 py-2 rounded-md backdrop-blur-sm whitespace-nowrap flex items-center justify-center select-none ${boxClass}`}
+          className={`border px-4 py-2 rounded-md whitespace-nowrap flex items-center justify-center select-none ${boxClass}`}
         >
           <p className={`text-xl tracking-wide ${textClass}`}>{node.skill_name}</p>
         </div>
@@ -240,7 +240,7 @@ export function SkillsConstellation() {
   return (
     <div className="absolute inset-0 w-full h-full pointer-events-none">
       {/* Navigation Dots */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-6 md:right-10 flex flex-col gap-4 pointer-events-auto z-40">
+      <div className="absolute top-auto bottom-12 md:top-1/2 md:bottom-auto left-0 right-0 md:left-auto md:right-10 flex flex-row md:flex-col justify-center items-center gap-4 md:-translate-y-1/2 pointer-events-auto z-40">
         {groups.map((group, index) => (
           <button
             key={group.id}
@@ -255,7 +255,7 @@ export function SkillsConstellation() {
         ))}
       </div>
 
-      <div className="absolute inset-y-0 right-0 w-[100vw] lg:w-[65vw] xl:w-[55vw] z-10 pointer-events-auto">
+      <div className="absolute top-auto bottom-0 lg:top-0 h-[65vh] lg:h-full lg:inset-y-0 right-0 w-full lg:w-[65vw] xl:w-[55vw] z-10 pointer-events-auto">
         <Canvas camera={{ position: [0, 0, 22], fov: 60 }}>
           {/* Pass ONLY the active group's nodes to the scene to render a unique constellation per page */}
           <ConstellationScene data={currentGroup.nodes} key={currentGroup.id} />
