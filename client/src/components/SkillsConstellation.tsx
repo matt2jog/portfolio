@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Html, Line } from "@react-three/drei";
 import * as THREE from "three";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 
 interface ConstellationNode {
   portfolio_skill_id: string;
@@ -40,6 +41,8 @@ function Star({ node, position, isActive }: StarProps) {
 }
 
 function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[], onPathComplete: () => void }) {
+  const { gl } = useThree();
+  
   // Generate static positions based on groupings
   const { positions, edges, path } = useMemo(() => {
     const posMap = new Map<string, [number, number, number]>();
@@ -186,40 +189,67 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
   const targetQuaternion = useRef(new THREE.Quaternion());
   const [currentTargetIndex, setCurrentTargetIndex] = useState(0);
 
+  const isInteracting = useRef(false);
+  const isPointerDown = useRef(false);
+  const interactionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetInteractionTimeout = () => {
+    isInteracting.current = true;
+    if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
+    interactionTimeout.current = setTimeout(() => {
+      // Only release interaction control if the user isn't actively holding it
+      if (!isPointerDown.current) {
+        isInteracting.current = false;
+      }
+    }, 1500); // Wait 1.5s after interaction (and damping) completely stops
+  };
+
   // Configuration for visual element procession speed
-  const MAX_TRAVERSAL_SECONDS = 10;
+  const MAX_TRAVERSAL_SECONDS = 20;
   const MIN_TRAVERSAL_SECONDS = 2;
   const ELEMENTS_PER_SECOND = 2.0;
   const PAUSE_AFTER_ROTATION_MS = 80; // Milliseconds to pause on each element, independent of traversal speed
+  const TRAVERSAL_START_DELAY_MS = 1500; // Prolong initial page load to give user time to process the title change
 
   // Cycle the targeted node based on dynamic traversal physics
   useEffect(() => {
     if (path.length === 0) return;
 
-    // Calculate visual procession times dynamically based on chain length
-    const unclampedDuration = path.length / ELEMENTS_PER_SECOND;
-    const totalDurationSeconds = Math.max(MIN_TRAVERSAL_SECONDS, Math.min(MAX_TRAVERSAL_SECONDS, unclampedDuration));
-    
-    // MS per element (total time allocated / number of points in chain)
-    const timePerElementMs = (totalDurationSeconds / path.length) * 1000;
+    let interval: ReturnType<typeof setInterval>;
 
-    // Add exactly the rigid pause buffer after rotation calculation completes
-    const interval = setInterval(() => {
-      setCurrentTargetIndex(i => {
-        if (i + 1 >= path.length) {
-          onPathComplete();
-          return 0;
-        }
-        return i + 1;
-      });
-    }, timePerElementMs + PAUSE_AFTER_ROTATION_MS);
+    // Wait before starting the sequence logic to let title glitch animation and user focus settle
+    const startTimeout = setTimeout(() => {
+      // Calculate visual procession times dynamically based on chain length
+      const unclampedDuration = path.length / ELEMENTS_PER_SECOND;
+      const totalDurationSeconds = Math.max(MIN_TRAVERSAL_SECONDS, Math.min(MAX_TRAVERSAL_SECONDS, unclampedDuration));
+      
+      // MS per element (total time allocated / number of points in chain)
+      const timePerElementMs = (totalDurationSeconds / path.length) * 1000;
+
+      // Add exactly the rigid pause buffer after rotation calculation completes
+      interval = setInterval(() => {
+        if (isInteracting.current) return; // Pause procession if the user is interacting
+        
+        setCurrentTargetIndex(i => {
+          if (i + 1 >= path.length) {
+            onPathComplete();
+            return 0;
+          }
+          return i + 1;
+        });
+      }, timePerElementMs + PAUSE_AFTER_ROTATION_MS);
+    }, TRAVERSAL_START_DELAY_MS);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(startTimeout);
+      if (interval) clearInterval(interval);
+    };
   }, [path.length, onPathComplete]);
 
   // Interpolate camera rotation to trace the MST chain
   useFrame((state, delta) => {
     if (!groupRef.current || path.length === 0) return;
+    if (isInteracting.current) return; // Cease math/rotation completely while the user controls view
 
     const targetId = path[currentTargetIndex];
     const targetPosArray = positions.get(targetId);
@@ -227,14 +257,15 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
 
     // Use the exact node's coordinates in the sphere
     const localPos = new THREE.Vector3(...targetPosArray).normalize();
-    // Demand that node be pointed outwards (+Z axis) towards the camera
-    const cameraDir = new THREE.Vector3(0, 0, 1);
+    
+    // Demand that node be pointed outwards (+Z axis) towards the camera's dynamically shifted viewpoint!
+    const cameraDir = state.camera.position.clone().normalize();
 
     // Calculate rotation via unit vectors
     targetQuaternion.current.setFromUnitVectors(localPos, cameraDir);
 
-    // Calculate dynamic slerp speed to match the procession timescale without overshooting
-    const baseSlerpStep = 8;
+    // Calculate dynamic slerp speed
+    const baseSlerpStep = 3.5;
     groupRef.current.quaternion.slerp(targetQuaternion.current, delta * baseSlerpStep);
   });
 
@@ -246,9 +277,34 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
       {/* Center Group Name Anchor */}
       <group position={[0, 0, 0]}>
         <Html center distanceFactor={15}>
-          <div className="select-none pointer-events-none flex flex-col items-center justify-center opacity-90 mix-blend-screen">
-            <h1 
-              className="text-4xl md:text-5xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]"
+          <div className="select-none pointer-events-none flex flex-col items-center justify-center mix-blend-screen">
+            <motion.h1 
+              initial={{ 
+                opacity: 0,
+                scale: 1.5,
+                filter: "blur(20px) contrast(300%) grayscale(100%)",
+                skewX: -30,
+              }}
+              animate={{ 
+                opacity: [0, 0.4, 0, 0.8, 0.2, 0.9],
+                scale: [1.2, 1.1, 1.3, 0.9, 1.05, 1],
+                filter: [
+                  "blur(10px) contrast(200%) hue-rotate(90deg)",
+                  "blur(0px) contrast(150%) hue-rotate(0deg)",
+                  "blur(5px) contrast(300%) hue-rotate(-90deg)",
+                  "blur(1px) contrast(120%) hue-rotate(0deg)",
+                  "blur(2px) contrast(100%) hue-rotate(180deg)",
+                  "blur(0px) contrast(100%) hue-rotate(0deg)"
+                ],
+                skewX: [-40, 20, -10, 5, -2, 0],
+                x: [-20, 15, -10, 5, -2, 0]
+              }}
+              transition={{ 
+                duration: 0.9, 
+                ease: "circOut",
+                times: [0, 0.2, 0.4, 0.6, 0.8, 1] 
+              }}
+              className="text-4xl md:text-5xl lg:text-7xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]"
               style={{
                 WebkitMaskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
                 WebkitMaskSize: '4px 4px',
@@ -257,7 +313,7 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
               }}
             >
               {data[0]?.group_name || "Miscellaneous"}
-            </h1>
+            </motion.h1>
           </div>
         </Html>
       </group>
@@ -288,7 +344,24 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
       ))}
       
       {/* Removed autoRotate because useFrame handles smooth slerp to targets natively now! */}
-      <OrbitControls enableZoom={false} enablePan={false} />
+      <OrbitControls 
+        enableZoom={false} 
+        enablePan={false}
+        onChange={() => {
+          // Triggers during user drag AND during inertia/damping slide
+          resetInteractionTimeout();
+        }}
+        onStart={() => {
+          // Triggers strictly when a pointer clicks/touches the canvas
+          isPointerDown.current = true;
+          resetInteractionTimeout();
+        }}
+        onEnd={() => {
+          // Triggers strictly when the pointer releases
+          isPointerDown.current = false;
+          resetInteractionTimeout();
+        }}
+      />
     </group>
   );
 }
