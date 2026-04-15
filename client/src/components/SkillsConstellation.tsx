@@ -39,7 +39,7 @@ function Star({ node, position, isActive }: StarProps) {
   );
 }
 
-function ConstellationScene({ data }: { data: ConstellationNode[] }) {
+function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[], onPathComplete: () => void }) {
   // Generate static positions based on groupings
   const { positions, edges, path } = useMemo(() => {
     const posMap = new Map<string, [number, number, number]>();
@@ -205,11 +205,17 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
 
     // Add exactly the rigid pause buffer after rotation calculation completes
     const interval = setInterval(() => {
-      setCurrentTargetIndex(i => (i + 1) % path.length);
+      setCurrentTargetIndex(i => {
+        if (i + 1 >= path.length) {
+          onPathComplete();
+          return 0;
+        }
+        return i + 1;
+      });
     }, timePerElementMs + PAUSE_AFTER_ROTATION_MS);
     
     return () => clearInterval(interval);
-  }, [path.length]);
+  }, [path.length, onPathComplete]);
 
   // Interpolate camera rotation to trace the MST chain
   useFrame((state, delta) => {
@@ -328,6 +334,10 @@ export function SkillsConstellation() {
 
   const currentGroup = groups[currentGroupIndex];
   
+  const handlePathComplete = () => {
+    setCurrentGroupIndex((prev) => (prev < groups.length - 1 ? prev + 1 : 0));
+  };
+  
   return (
     <div className="absolute inset-0 w-full h-full pointer-events-none">
       {/* Navigation Dots */}
@@ -349,7 +359,11 @@ export function SkillsConstellation() {
       <div className="absolute top-auto bottom-0 lg:top-0 h-[65vh] lg:h-full lg:inset-y-0 right-0 w-full lg:w-[65vw] xl:w-[55vw] z-10 pointer-events-auto">
         <Canvas camera={{ position: [0, 0, 22], fov: 60 }}>
           {/* Pass ONLY the active group's nodes to the scene to render a unique constellation per page */}
-          <ConstellationScene data={currentGroup.nodes} key={currentGroup.id} />
+          <ConstellationScene 
+            data={currentGroup.nodes} 
+            key={currentGroup.id} 
+            onPathComplete={handlePathComplete} 
+          />
         </Canvas>
       </div>
     </div>
