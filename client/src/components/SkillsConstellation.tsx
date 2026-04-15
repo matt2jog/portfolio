@@ -15,37 +15,19 @@ interface ConstellationNode {
 interface StarProps {
   node: ConstellationNode;
   position: [number, number, number];
-  isHovered: boolean;
-  isActiveGroup: boolean;
-  onHover: (id: string | null) => void;
 }
 
-function Star({ node, position, isHovered, isActiveGroup, onHover }: StarProps) {
+function Star({ node, position }: StarProps) {
   // Use CSS styles to determine the box and text appearance
-  const boxClass = isHovered 
-    ? "border-cyan-400 bg-cyan-950/80 shadow-[0_0_20px_rgba(0,240,255,0.6)] scale-110" 
-    : isActiveGroup 
-      ? "border-gray-400 bg-gray-900/80 shadow-[0_0_10px_rgba(255,255,255,0.2)] scale-105" 
-      : "border-gray-700 bg-black/60 shadow-sm scale-100";
+  const boxClass = "border-gray-700 bg-black/60 shadow-sm scale-100";
       
-  const textClass = isHovered 
-    ? "text-cyan-300 font-bold" 
-    : isActiveGroup 
-      ? "text-white font-semibold" 
-      : "text-gray-400";
+  const textClass = "text-gray-400";
 
   return (
     <group position={position}>
-      <Html center distanceFactor={15} zIndexRange={[100, 0]}>
+      <Html center distanceFactor={15}>
         <div 
-          className={`transition-all duration-300 cursor-pointer border px-4 py-2 rounded-md backdrop-blur-sm whitespace-nowrap flex items-center justify-center ${boxClass}`}
-          onPointerEnter={(e) => {
-            e.stopPropagation();
-            onHover(node.skill_id);
-          }}
-          onPointerLeave={() => {
-            onHover(null);
-          }}
+          className={`border px-4 py-2 rounded-md backdrop-blur-sm whitespace-nowrap flex items-center justify-center select-none ${boxClass}`}
         >
           <p className={`text-xl tracking-wide ${textClass}`}>{node.skill_name}</p>
         </div>
@@ -55,8 +37,6 @@ function Star({ node, position, isHovered, isActiveGroup, onHover }: StarProps) 
 }
 
 function ConstellationScene({ data }: { data: ConstellationNode[] }) {
-  const [hoveredSkillId, setHoveredSkillId] = useState<string | null>(null);
-
   // Generate static positions based on groupings
   const { positions, edges } = useMemo(() => {
     const posMap = new Map<string, [number, number, number]>();
@@ -150,14 +130,11 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
     return { positions: posMap, edges: links };
   }, [data]);
 
-  const activeNode = data.find(n => n.skill_id === hoveredSkillId);
-  const activeGroupId = activeNode?.group_id;
-
   const groupRef = useRef<THREE.Group>(null);
   
   // Slowly rotate the entire constellation
   useFrame(() => {
-    if (groupRef.current && !hoveredSkillId) {
+    if (groupRef.current) {
       groupRef.current.rotation.y += 0.001;
       groupRef.current.rotation.x += 0.0005;
     }
@@ -169,9 +146,8 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
       <pointLight position={[10, 10, 10]} intensity={1} />
       
       {edges.map((edge, i) => {
-        const isEdgeActive = activeGroupId && activeGroupId === edge.groupId;
-        let opacity = isEdgeActive ? 0.8 : 0.2;
-        let color = isEdgeActive ? "#00f0ff" : "#888888";
+        let opacity = 0.2;
+        let color = "#888888";
         
         return (
           <Line
@@ -180,7 +156,7 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
             color={color}
             opacity={opacity}
             transparent
-            lineWidth={isEdgeActive ? 3 : 1.5}
+            lineWidth={1.5}
           />
         );
       })}
@@ -190,13 +166,10 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
           key={node.skill_id}
           node={node}
           position={positions.get(node.skill_id)!}
-          isHovered={hoveredSkillId === node.skill_id}
-          isActiveGroup={Boolean(activeGroupId && node.group_id === activeGroupId)}
-          onHover={setHoveredSkillId}
         />
       ))}
       
-      <OrbitControls enableZoom={false} enablePan={false} autoRotate={!hoveredSkillId} autoRotateSpeed={0.5} />
+      <OrbitControls enableZoom={false} enablePan={false} autoRotate={true} autoRotateSpeed={0.5} />
     </group>
   );
 }
@@ -288,7 +261,7 @@ export function SkillsConstellation() {
       </div>
 
       <div className="absolute inset-0 z-10 w-full h-full">
-        <Canvas camera={{ position: [0, 0, 10], fov: 60 }}>
+        <Canvas camera={{ position: [0, 0, 15], fov: 60 }}>
           {/* Pass ONLY the active group's nodes to the scene to render a unique constellation per page */}
           <ConstellationScene data={currentGroup.nodes} key={currentGroup.id} />
         </Canvas>

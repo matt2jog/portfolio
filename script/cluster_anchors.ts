@@ -1,19 +1,22 @@
 import fs from "fs";
 import dotenv from "dotenv";
+import { db } from "../server/db.js";
+import { allSkills } from "../shared/schema.js";
+import { isNotNull } from "drizzle-orm";
 
 dotenv.config();
 
 const FIREWORKS_TOKEN = process.env.FIREWORKS_AI_TOKEN;
 const EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5";
 
-// Define our "ideal" categories with descriptive prompts so the embedding model grasps the context
 const categories = [
   { id: "languages", prompt: "A syntax-defined programming language like Python, C++, JavaScript, TypeScript, Java, Rust, or C, HTML, CSS" },
   { id: "frameworks", prompt: "A software framework, library, programming toolkit, or API wrapper like React, Node.js, Next.js, FastAPI, Tailwind, Flask" },
   { id: "AI/ML", prompt: "Artificial Intelligence, Machine Learning, embeddings, LLMs, data science, algorithms, neural networks, like LangChain, K-Means, XGBoost, Recommendation Algorithms, RAG, BERT" },
   { id: "infrastructure", prompt: "Cloud infrastructure, server hosting, networking, embedded systems, OS, hardware, or physical systems like AWS, GCP, Linux, Windows, macOS, Kubernetes, Docker, Ardupilot, GKE" },
   { id: "data & messaging", prompt: "A database system, data storage, message broker, event streaming, or big data processing tool like SQL, PostgreSQL, Hadoop, Kafka, PubSub, TimeScaleDB, Firestore" },
-  { id: "tools & devops", prompt: "A development tool, IDE, terminal utility, version control, CI/CD pipeline, testing or software tool like VS Code, Git, Vim, GitHub Apps, Bash, Selenium, Wireshark, Docker Compose" }
+  { id: "tools & devops", prompt: "A development tool, IDE, terminal utility, version control, CI/CD pipeline, testing or software tool like VS Code, Git, Vim, GitHub Apps, Bash, Selenium, Wireshark, Docker Compose" },
+  { id: "technology types", prompt: "A type/category of technology, for example 'wearable tech', 'health tech', 'vr/ar', or even 'blockchain technology'"}
 ];
 
 function cosineSimilarity(vecA: number[], vecB: number[]) {
@@ -53,8 +56,8 @@ async function run() {
     embedding: d.embedding
   }));
 
-  console.log("Loading skill vectors...");
-  const skills = JSON.parse(fs.readFileSync("script/skills_vectors.json", "utf8"));
+  console.log("Loading skill vectors from database...");
+  const skills = await db.select().from(allSkills).where(isNotNull(allSkills.embedding));
 
   const communities: Record<string, { community_id: string, name: string, skills: any[] }> = {};
   for (const cat of categories) {
@@ -63,6 +66,12 @@ async function run() {
     else if (friendlyName === "tools & devops") friendlyName = "Tools & DevOps";
     else if (friendlyName === "languages" || friendlyName === "frameworks" || friendlyName === "infrastructure") {
         friendlyName = friendlyName.charAt(0).toUpperCase() + friendlyName.slice(1);
+    }
+    else if (friendlyName === "AI/ML") {
+        friendlyName = "AI/ML";
+    }
+    else if (friendlyName === "technology types") {
+        friendlyName = "Tech Domains"
     }
 
     communities[cat.id] = { community_id: cat.id, name: friendlyName, skills: [] };
@@ -85,7 +94,6 @@ async function run() {
     communities[bestCategory!].skills.push({ id: skill.id, name: skill.name, similarity: maxSim.toFixed(3) });
   }
 
-  // Sort them by highest similarity
   for (const catId of Object.keys(communities)) {
     communities[catId].skills.sort((a, b) => b.similarity - a.similarity);
   }
@@ -94,7 +102,6 @@ async function run() {
   
   fs.writeFileSync("script/skill_communities_anchored.json", JSON.stringify(output, null, 2));
   
-  // Print summary
   for (const group of output) {
     console.log(`\n=== ${group.name} (${group.skills.length} skills) ===`);
     console.log(group.skills.map(s => s.name).join(", "));

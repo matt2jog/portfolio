@@ -3,7 +3,7 @@ dotenv.config();
 
 import { db } from "../server/db.js";
 import { allSkills } from "../shared/schema.js";
-import { eq, isNull } from "drizzle-orm";
+import { isNull, eq } from "drizzle-orm";
 
 const FIREWORKS_TOKEN = process.env.FIREWORKS_AI_TOKEN;
 const EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5";
@@ -18,7 +18,6 @@ async function run() {
   console.log(`Found ${skills.length} skills to embed...`);
 
   if (skills.length > 0) {
-    // Process in batches
     const batchSize = 50;
     for (let i = 0; i < skills.length; i += batchSize) {
       const batch = skills.slice(i, i + batchSize);
@@ -45,7 +44,6 @@ async function run() {
 
       const data = await res.json();
       
-      // Update DB
       for (let j = 0; j < batch.length; j++) {
         const skill = batch[j];
         const embedding = data.data[j].embedding;
