@@ -15,21 +15,24 @@ interface ConstellationNode {
 interface StarProps {
   node: ConstellationNode;
   position: [number, number, number];
+  isActive?: boolean;
 }
 
-function Star({ node, position }: StarProps) {
+function Star({ node, position, isActive }: StarProps) {
   // Use solid background instead of backdrop-blur to prevent WebKit edge-clipping shine
-  const boxClass = "border-gray-700 bg-[#0a0a0a] shadow-sm scale-100";
+  const boxClass = isActive
+    ? "border-cyan-400 bg-cyan-950 shadow-[0_0_20px_rgba(0,240,255,0.8)] scale-110 z-50"
+    : "border-gray-700 bg-[#0a0a0a] shadow-sm scale-100";
       
-  const textClass = "text-gray-400";
+  const textClass = isActive ? "text-cyan-300 font-bold" : "text-gray-400";
 
   return (
     <group position={position}>
       <Html center distanceFactor={15}>
         <div 
-          className={`border px-4 py-2 rounded-md whitespace-nowrap flex items-center justify-center select-none ${boxClass}`}
+          className={`border px-4 py-2 rounded-md whitespace-nowrap flex items-center justify-center select-none transition-all duration-500 ${boxClass}`}
         >
-          <p className={`text-xl tracking-wide ${textClass}`}>{node.skill_name}</p>
+          <p className={`text-xl tracking-wide transition-colors duration-500 ${textClass}`}>{node.skill_name}</p>
         </div>
       </Html>
     </group>
@@ -38,7 +41,7 @@ function Star({ node, position }: StarProps) {
 
 function ConstellationScene({ data }: { data: ConstellationNode[] }) {
   // Generate static positions based on groupings
-  const { positions, edges } = useMemo(() => {
+  const { positions, edges, path } = useMemo(() => {
     const posMap = new Map<string, [number, number, number]>();
     const nodeConfigs = new Map<string, ConstellationNode>();
     
@@ -116,8 +119,12 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
     };
 
     // 4. Trace the Spanning Tree pathway
+    const adj = new Map<string, string[]>();
+    allIds.forEach(id => adj.set(id, []));
     for (const edge of possibleEdges) {
       if (union(edge.u, edge.v)) {
+        adj.get(edge.u)!.push(edge.v);
+        adj.get(edge.v)!.push(edge.u);
         const node1Gid = nodeConfigs.get(edge.u)?.group_id;
         const node2Gid = nodeConfigs.get(edge.v)?.group_id;
         const sharedGid = node1Gid && node1Gid === node2Gid ? node1Gid : null;
@@ -130,17 +137,99 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
       }
     }
 
-    return { positions: posMap, edges: links };
+    // 5. Create a traversal path (DFS on the MST adjacency list)
+    const path: string[] = [];
+    const visited = new Set<string>();
+    const dfs = (node: string) => {
+      visited.add(node);
+      path.push(node);
+      for (const neighbor of adj.get(node)!) {
+        if (!visited.has(neighbor)) {
+          dfs(neighbor);
+          // Optional: Add `path.push(node)` here if you want it to visually string-backtrack 
+          // instead of jumping across branches. We'll stick to a clean consecutive leap.
+        }
+      }
+    };
+
+    // To ensure the animation starts at the true "head" of the longest chain, 
+    // we locate the graph's diameter (the two furthest leaf nodes).
+    let startNode = allIds[0];
+    if (allIds.length > 0) {
+      // Step A: Find the furthest node from an arbitrary start (this will be Leaf 1)
+      let furthestNode = allIds[0];
+      let maxDist = -1;
+      const findFurthest = (curr: string, currentDist: number, localVisited: Set<string>) => {
+        localVisited.add(curr);
+        if (currentDist > maxDist) {
+          maxDist = currentDist;
+          furthestNode = curr;
+        }
+        for (const neighbor of adj.get(curr)!) {
+          if (!localVisited.has(neighbor)) {
+            findFurthest(neighbor, currentDist + 1, localVisited);
+          }
+        }
+      };
+      findFurthest(allIds[0], 0, new Set<string>());
+      
+      // Step B: Set the guaranteed extremal leaf as our starting node
+      startNode = furthestNode;
+    }
+
+    if (allIds.length > 0) dfs(startNode);
+
+    return { positions: posMap, edges: links, path };
   }, [data]);
 
   const groupRef = useRef<THREE.Group>(null);
-  
-  // Slowly rotate the entire constellation
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += 0.001;
-      groupRef.current.rotation.x += 0.0005;
-    }
+  const targetQuaternion = useRef(new THREE.Quaternion());
+  const [currentTargetIndex, setCurrentTargetIndex] = useState(0);
+
+  // Configuration for visual element procession speed
+  const MAX_TRAVERSAL_SECONDS = 10;
+  const MIN_TRAVERSAL_SECONDS = 2;
+  const ELEMENTS_PER_SECOND = 2.0;
+  const PAUSE_AFTER_ROTATION_MS = 80; // Milliseconds to pause on each element, independent of traversal speed
+
+  // Cycle the targeted node based on dynamic traversal physics
+  useEffect(() => {
+    if (path.length === 0) return;
+
+    // Calculate visual procession times dynamically based on chain length
+    const unclampedDuration = path.length / ELEMENTS_PER_SECOND;
+    const totalDurationSeconds = Math.max(MIN_TRAVERSAL_SECONDS, Math.min(MAX_TRAVERSAL_SECONDS, unclampedDuration));
+    
+    // MS per element (total time allocated / number of points in chain)
+    const timePerElementMs = (totalDurationSeconds / path.length) * 1000;
+
+    // Add exactly the rigid pause buffer after rotation calculation completes
+    const interval = setInterval(() => {
+      setCurrentTargetIndex(i => (i + 1) % path.length);
+    }, timePerElementMs + PAUSE_AFTER_ROTATION_MS);
+    
+    return () => clearInterval(interval);
+  }, [path.length]);
+
+  // Interpolate camera rotation to trace the MST chain
+  useFrame((state, delta) => {
+    if (!groupRef.current || path.length === 0) return;
+
+    const targetId = path[currentTargetIndex];
+    const targetPosArray = positions.get(targetId);
+    if (!targetPosArray) return;
+
+    // Use the exact node's coordinates in the sphere
+    const localPos = new THREE.Vector3(...targetPosArray).normalize();
+    // Demand that node be pointed outwards (+Z axis) towards the camera
+    const cameraDir = new THREE.Vector3(0, 0, 1);
+
+    // Calculate rotation via unit vectors
+    targetQuaternion.current.setFromUnitVectors(localPos, cameraDir);
+
+    // Calculate dynamic slerp speed to match the procession timescale without overshooting
+    const baseSlerpStep = 8;
+    groupRef.current.quaternion.slerp(targetQuaternion.current, delta * baseSlerpStep);
   });
 
   return (
@@ -188,10 +277,12 @@ function ConstellationScene({ data }: { data: ConstellationNode[] }) {
           key={node.skill_id}
           node={node}
           position={positions.get(node.skill_id)!}
+          isActive={node.skill_id === path[currentTargetIndex]}
         />
       ))}
       
-      <OrbitControls enableZoom={false} enablePan={false} autoRotate={true} autoRotateSpeed={0.5} />
+      {/* Removed autoRotate because useFrame handles smooth slerp to targets natively now! */}
+      <OrbitControls enableZoom={false} enablePan={false} />
     </group>
   );
 }
