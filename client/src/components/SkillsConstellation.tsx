@@ -40,7 +40,7 @@ function Star({ node, position, isActive }: StarProps) {
   );
 }
 
-function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[], onPathComplete: () => void }) {
+function ConstellationScene({ data, groupName, onPathComplete }: { data: ConstellationNode[], groupName: string, onPathComplete: () => void }) {
   const { gl } = useThree();
   
   // Generate static positions based on groupings
@@ -209,7 +209,11 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
   const MIN_TRAVERSAL_SECONDS = 2;
   const ELEMENTS_PER_SECOND = 2.0;
   const PAUSE_AFTER_ROTATION_MS = 80; // Milliseconds to pause on each element, independent of traversal speed
-  const TRAVERSAL_START_DELAY_MS = 1500; // Prolong initial page load to give user time to process the title change
+  const TRAVERSAL_START_DELAY_MS = 1000; // Delay animation tracing loop after box change
+
+  useEffect(() => {
+    setCurrentTargetIndex(0); // Reset targeting to head whenever the path chain physically updates!
+  }, [path]);
 
   // Cycle the targeted node based on dynamic traversal physics
   useEffect(() => {
@@ -244,7 +248,7 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
       clearTimeout(startTimeout);
       if (interval) clearInterval(interval);
     };
-  }, [path.length, onPathComplete]);
+  }, [path, onPathComplete]); // Key change: trace physical path recalculation!
 
   // Interpolate camera rotation to trace the MST chain
   useFrame((state, delta) => {
@@ -279,6 +283,7 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
         <Html center distanceFactor={15}>
           <div className="select-none pointer-events-none flex flex-col items-center justify-center mix-blend-screen">
             <motion.h1 
+              key={groupName} // Automatically resets the text glitch animations!
               initial={{ 
                 opacity: 0,
                 scale: 1.5,
@@ -304,7 +309,7 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
                 ease: "circOut",
                 times: [0, 0.2, 0.4, 0.6, 0.8, 1] 
               }}
-              className="text-4xl md:text-5xl lg:text-7xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]"
+              className="text-4xl md:text-5xl lg:text-5xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]"
               style={{
                 WebkitMaskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
                 WebkitMaskSize: '4px 4px',
@@ -312,7 +317,7 @@ function ConstellationScene({ data, onPathComplete }: { data: ConstellationNode[
                 maskSize: '4px 4px'
               }}
             >
-              {data[0]?.group_name || "Miscellaneous"}
+              {groupName}
             </motion.h1>
           </div>
         </Html>
@@ -371,7 +376,8 @@ export function SkillsConstellation() {
     queryKey: ["/api/skills-constellation"],
   });
 
-  const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
+  const [activeTextIndex, setActiveTextIndex] = useState(0);
+  const [activeDataIndex, setActiveDataIndex] = useState(0);
 
   // Derive groups from data
   const groups = useMemo(() => {
@@ -405,10 +411,21 @@ export function SkillsConstellation() {
 
   if (isLoading || !data || data.length === 0 || groups.length === 0) return null;
 
-  const currentGroup = groups[currentGroupIndex];
+  const currentTextGroup = groups[activeTextIndex];
+  const currentDataGroup = groups[activeDataIndex];
   
   const handlePathComplete = () => {
-    setCurrentGroupIndex((prev) => (prev < groups.length - 1 ? prev + 1 : 0));
+    setActiveTextIndex((prev) => {
+      const next = prev < groups.length - 1 ? prev + 1 : 0;
+      setTimeout(() => setActiveDataIndex(next), 500); // Wait 0.5s before flipping data
+      return next;
+    });
+  };
+
+  const handleNavClick = (index: number) => {
+    if (activeTextIndex === index) return;
+    setActiveTextIndex(index);
+    setTimeout(() => setActiveDataIndex(index), 500); // 0.5s glitch overlap wait!
   };
   
   return (
@@ -418,10 +435,10 @@ export function SkillsConstellation() {
         {groups.map((group, index) => (
           <button
             key={group.id}
-            onClick={() => setCurrentGroupIndex(index)}
+            onClick={() => handleNavClick(index)}
             aria-label={`Go to ${group.name} skills`}
             className={`w-3 h-3 rounded-full transition-all duration-300 ${
-              index === currentGroupIndex 
+              index === activeTextIndex 
                 ? "bg-cyan-400 scale-150 shadow-[0_0_12px_rgba(0,240,255,0.8)]" 
                 : "bg-white/30 hover:bg-white/70 hover:scale-125"
             }`}
@@ -431,10 +448,10 @@ export function SkillsConstellation() {
 
       <div className="absolute top-auto bottom-0 lg:top-0 h-[65vh] lg:h-full lg:inset-y-0 right-0 w-full lg:w-[65vw] xl:w-[55vw] z-10 pointer-events-auto">
         <Canvas camera={{ position: [0, 0, 22], fov: 60 }}>
-          {/* Pass ONLY the active group's nodes to the scene to render a unique constellation per page */}
+          {/* Note: Intentionally omitting key parameter so R3F recycles meshes instead of fully remounting the scene, preserving camera/orientation during the data swap */}
           <ConstellationScene 
-            data={currentGroup.nodes} 
-            key={currentGroup.id} 
+            data={currentDataGroup.nodes} 
+            groupName={currentTextGroup.name}
             onPathComplete={handlePathComplete} 
           />
         </Canvas>
