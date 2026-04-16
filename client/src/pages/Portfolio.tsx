@@ -247,7 +247,6 @@ export default function Portfolio() {
                     key={faceIndex}
                     className={`project-cube-face project-cube-face--${faceIndex + 1}`}
                   >
-                    <span className="project-cube-pulse" aria-hidden="true" />
                     <div className="project-face-grid grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 w-full h-full min-h-0 p-2 sm:p-4">
                       {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
                         const project = faceProjects[projectIndex];
