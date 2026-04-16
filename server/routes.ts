@@ -311,6 +311,27 @@ export async function registerRoutes(
   });
 
   // ========== PUBLIC DATA ==========
+  
+  app.get("/api/skills-constellation", async (_req, res) => {
+    try {
+      const skills = await db
+        .select({
+          portfolio_skill_id: portfolioSkills.id,
+          skill_id: allSkills.id,
+          skill_name: allSkills.name,
+          group_id: skillsGroup.id,
+          group_name: skillsGroup.name,
+        })
+        .from(portfolioSkills)
+        .innerJoin(allSkills, eq(portfolioSkills.allSkillId, allSkills.id))
+        .leftJoin(skillsGroup, eq(allSkills.groupingId, skillsGroup.id));
+
+      res.json(skills);
+    } catch (error) {
+      console.error("Error fetching skills constellation:", error);
+      res.status(500).json({ error: "Failed to fetch skills constellation" });
+    }
+  });
 
   app.get("/api/public/github/activity", async (_req, res) => {
     try {

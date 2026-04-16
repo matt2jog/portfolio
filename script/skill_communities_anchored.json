@@ -1,0 +1,518 @@
+[
+  {
+    "community_id": "languages",
+    "name": "Languages",
+    "skills": [
+      {
+        "id": "b45f77cc-86fe-4725-8984-82d8aac45d14",
+        "name": "VS Code",
+        "similarity": "0.640"
+      },
+      {
+        "id": "f7a24a86-6ce3-4feb-8082-bb716bcf2bc3",
+        "name": "C++",
+        "similarity": "0.635"
+      },
+      {
+        "id": "4302b3a0-8694-417a-adfd-6b20461c94aa",
+        "name": "Python",
+        "similarity": "0.609"
+      },
+      {
+        "id": "fb5e2b7c-85fe-4c82-91c1-1948ed5762a4",
+        "name": "JavaScript",
+        "similarity": "0.561"
+      },
+      {
+        "id": "e1be9539-666a-413b-8edb-2ad4e87e6698",
+        "name": "Pytest-asyncio",
+        "similarity": "0.550"
+      },
+      {
+        "id": "1c889ef6-1552-4bb9-b66c-93413e984fec",
+        "name": "Python.h",
+        "similarity": "0.538"
+      },
+      {
+        "id": "c8bf5413-1ee1-479f-9dea-4c38a3aae18b",
+        "name": "CSS",
+        "similarity": "0.531"
+      },
+      {
+        "id": "36b9be56-e14c-4778-9632-701c3a9393ba",
+        "name": "HTML",
+        "similarity": "0.518"
+      },
+      {
+        "id": "83fcf67d-c454-44c8-9b23-0a2c0591b6d1",
+        "name": "NumPy",
+        "similarity": "0.480"
+      },
+      {
+        "id": "ce7d4f70-3d82-40ca-b18b-c0858099696e",
+        "name": "Matplotlib",
+        "similarity": "0.464"
+      },
+      {
+        "id": "271d6590-925c-4992-8ff7-db5d807e5bc7",
+        "name": "Pyautogui",
+        "similarity": "0.435"
+      },
+      {
+        "id": "637fe6df-09a2-47d5-818b-7f01dff5d594",
+        "name": "SLERP",
+        "similarity": "0.360"
+      }
+    ]
+  },
+  {
+    "community_id": "frameworks",
+    "name": "Frameworks",
+    "skills": [
+      {
+        "id": "8310c2f7-4923-4c3a-9fa6-a70a9b72239f",
+        "name": "Flask",
+        "similarity": "0.573"
+      },
+      {
+        "id": "761ae105-1ef9-41cd-b9db-204b300a37c4",
+        "name": "Java",
+        "similarity": "0.564"
+      },
+      {
+        "id": "25825e8f-3852-4533-8ebe-af54c94cb42c",
+        "name": "React",
+        "similarity": "0.553"
+      },
+      {
+        "id": "49c65c4c-d577-4b32-8e5c-6d0c122c188f",
+        "name": "Gemini API",
+        "similarity": "0.534"
+      },
+      {
+        "id": "3e93f574-0335-46fa-b9b6-805c2ba32997",
+        "name": "Serp API",
+        "similarity": "0.521"
+      },
+      {
+        "id": "499f7cf1-f89e-4e1c-b86c-c8fd1c87a9fb",
+        "name": "FastAPI",
+        "similarity": "0.514"
+      },
+      {
+        "id": "f18621e2-1ecd-44db-bb4c-01a700154889",
+        "name": "Web Crawling",
+        "similarity": "0.486"
+      },
+      {
+        "id": "423b5284-b952-4d7b-bafc-8c6e4dc77bfb",
+        "name": "PHP",
+        "similarity": "0.470"
+      },
+      {
+        "id": "fcd2a466-4cfa-45b9-9ba8-a3ffcaeccbd3",
+        "name": "WebGL",
+        "similarity": "0.460"
+      },
+      {
+        "id": "8be6b8f3-0085-4802-a913-6e6746841e08",
+        "name": "RAG",
+        "similarity": "0.427"
+      },
+      {
+        "id": "b0258a84-e2c6-4111-b653-84b9b6391dc3",
+        "name": "MITMProxy",
+        "similarity": "0.377"
+      },
+      {
+        "id": "98837d17-a9f1-49e9-8ffa-c9ee84107f80",
+        "name": "MCP",
+        "similarity": "0.370"
+      }
+    ]
+  },
+  {
+    "community_id": "AI/ML",
+    "name": "AI/ML",
+    "skills": [
+      {
+        "id": "a381ac97-9a80-4806-9089-592952f7bfe9",
+        "name": "Recommendation Algorithms",
+        "similarity": "0.666"
+      },
+      {
+        "id": "74eea5ef-7091-4655-b504-e0112f2c6cd1",
+        "name": "LLM-as-a-judge",
+        "similarity": "0.608"
+      },
+      {
+        "id": "232dede1-5794-4dcb-8f94-55b6e43b45c7",
+        "name": "LangChain",
+        "similarity": "0.602"
+      },
+      {
+        "id": "885ee3e3-a69a-4555-a162-46706bfc9899",
+        "name": "LangGraph",
+        "similarity": "0.547"
+      },
+      {
+        "id": "0a32dd21-c893-40d3-afa5-9a91ed5f641f",
+        "name": "LLM In-loop Evaluation",
+        "similarity": "0.523"
+      },
+      {
+        "id": "4773700c-cf06-47d6-aa38-e4b612148cd8",
+        "name": "BERT",
+        "similarity": "0.518"
+      },
+      {
+        "id": "9b74c210-f4f3-4930-bc75-87c1d86cff30",
+        "name": "K-Means",
+        "similarity": "0.516"
+      },
+      {
+        "id": "888e9b11-f05c-4169-ac89-df0045bbc1d7",
+        "name": "Agentic Memory",
+        "similarity": "0.511"
+      },
+      {
+        "id": "c2f2fd52-bd47-43c2-ae57-5f4314ba4e97",
+        "name": "Monte Carlo Methods",
+        "similarity": "0.508"
+      },
+      {
+        "id": "ed52de1a-e8d7-4766-b6d5-259742ab15cc",
+        "name": "Sentiment Analysis",
+        "similarity": "0.498"
+      },
+      {
+        "id": "ba7de7c5-810c-4633-b538-1a1b208f3ae5",
+        "name": "A* Search",
+        "similarity": "0.490"
+      },
+      {
+        "id": "9623484d-d74b-49aa-9f39-1bd7f2b7290b",
+        "name": "AST-Indexing",
+        "similarity": "0.488"
+      },
+      {
+        "id": "7c5eead1-bd39-4ce3-99c8-e2e2db2e60ab",
+        "name": "Ontology Mapping",
+        "similarity": "0.480"
+      },
+      {
+        "id": "0da68f39-3e83-4f75-a986-ab732b795e97",
+        "name": "GraphRAG",
+        "similarity": "0.452"
+      },
+      {
+        "id": "2487e780-8f67-4120-b5c5-7cd67eb7f60b",
+        "name": "Brownian Motion Simulation",
+        "similarity": "0.449"
+      },
+      {
+        "id": "592c2351-2b1e-482d-92c8-baa5d19c6bd9",
+        "name": "Homomorphic Encryption",
+        "similarity": "0.403"
+      },
+      {
+        "id": "b4a63e95-9e81-466e-b5c7-24dfa95b31a8",
+        "name": "CKKS",
+        "similarity": "0.396"
+      }
+    ]
+  },
+  {
+    "community_id": "infrastructure",
+    "name": "Infrastructure",
+    "skills": [
+      {
+        "id": "625b445e-07be-4949-9a97-db5e077c428b",
+        "name": "GCP Cloud Run",
+        "similarity": "0.639"
+      },
+      {
+        "id": "c8f04179-7c4c-4739-a0c3-30e304470da3",
+        "name": "Distributed Systems",
+        "similarity": "0.620"
+      },
+      {
+        "id": "f027e76e-5b12-4941-90f1-b9c5438edada",
+        "name": "Embedded Systems",
+        "similarity": "0.612"
+      },
+      {
+        "id": "e17fa130-fb81-44af-a067-5203428e0da8",
+        "name": "Linux",
+        "similarity": "0.562"
+      },
+      {
+        "id": "f7bcad7d-dc5c-4785-b347-30c3f3cce006",
+        "name": "Multi-threaded Systems",
+        "similarity": "0.560"
+      },
+      {
+        "id": "67c54435-cfd7-4644-8802-b7aa0d6dda6b",
+        "name": "Mesh Networks",
+        "similarity": "0.536"
+      },
+      {
+        "id": "817c7a48-111c-40cd-b902-2381e9b815e3",
+        "name": "macOS",
+        "similarity": "0.530"
+      },
+      {
+        "id": "e1306662-c1bd-4974-b840-c5aa7bcf3f5e",
+        "name": "AWS EC2",
+        "similarity": "0.529"
+      },
+      {
+        "id": "ead63145-85b5-45ae-ba6c-9c2631819a4a",
+        "name": "Avionics",
+        "similarity": "0.523"
+      },
+      {
+        "id": "83f5d7a8-e001-4eb2-8afa-875e051cb4eb",
+        "name": "GKE",
+        "similarity": "0.504"
+      },
+      {
+        "id": "f545ae8f-33b3-4785-84a4-796019450b5d",
+        "name": "GCP PubSub",
+        "similarity": "0.489"
+      },
+      {
+        "id": "f2530a58-f0b1-4486-b021-7f88c186c91d",
+        "name": "AWS S3",
+        "similarity": "0.481"
+      },
+      {
+        "id": "68d241ac-ebde-43e9-8346-151eff02f8c9",
+        "name": "Wearable Tech",
+        "similarity": "0.463"
+      },
+      {
+        "id": "dfa48493-49be-4cda-91f5-1f5d0dc9c06b",
+        "name": "GCP Cron",
+        "similarity": "0.461"
+      },
+      {
+        "id": "ccf75105-2856-4ba7-b0ca-059a7fffb359",
+        "name": "Socket I/O",
+        "similarity": "0.461"
+      },
+      {
+        "id": "14fe9e24-2cbc-49ea-892b-c6e086c5b516",
+        "name": "Pydantic",
+        "similarity": "0.452"
+      },
+      {
+        "id": "5df54ada-70a6-4cb3-9f3c-19f0b04e1732",
+        "name": "HDFS",
+        "similarity": "0.430"
+      },
+      {
+        "id": "2f6c2fc2-e731-47eb-8c9e-9c547e657221",
+        "name": "Ardupilot",
+        "similarity": "0.421"
+      }
+    ]
+  },
+  {
+    "community_id": "data & messaging",
+    "name": "Data & Messaging",
+    "skills": [
+      {
+        "id": "88918be2-2b60-4248-9cb5-2d63dbfb90e1",
+        "name": "Data Processing",
+        "similarity": "0.620"
+      },
+      {
+        "id": "846cf8c3-2772-4a18-b437-a5d767e8e6b8",
+        "name": "SQL",
+        "similarity": "0.618"
+      },
+      {
+        "id": "d6e93fb4-2ae9-4a49-8025-11da329a4a16",
+        "name": "PostgreSQL",
+        "similarity": "0.604"
+      },
+      {
+        "id": "8d4afd64-0ba4-4b99-b43d-365b2e90ab35",
+        "name": "SQLModel",
+        "similarity": "0.562"
+      },
+      {
+        "id": "f74e77b1-58db-4662-ab7f-88b5c494315c",
+        "name": "SQLAlchemy",
+        "similarity": "0.560"
+      },
+      {
+        "id": "6e8d2ff6-4033-4791-866e-ff40a36d93c3",
+        "name": "Multi-agent Systems",
+        "similarity": "0.552"
+      },
+      {
+        "id": "effe1d1b-2f53-4ec5-bf13-ab57162521b1",
+        "name": "DBeaver",
+        "similarity": "0.551"
+      },
+      {
+        "id": "bcfcf329-0b84-483f-bfa0-983f3b89f7b4",
+        "name": "MySQL",
+        "similarity": "0.548"
+      },
+      {
+        "id": "36dcfa36-aa69-4db2-8fb2-dab0ac77a892",
+        "name": "Firestore",
+        "similarity": "0.541"
+      },
+      {
+        "id": "0f994a44-c06c-47ed-9f95-e333271ac4b9",
+        "name": "XGBoost",
+        "similarity": "0.480"
+      },
+      {
+        "id": "695d982c-8b9d-4556-b5d4-8aa72452fb3e",
+        "name": "TimeScaleDB",
+        "similarity": "0.479"
+      },
+      {
+        "id": "e89cca94-2ad7-4f71-a3ce-d273e0564c1a",
+        "name": "Census Data",
+        "similarity": "0.475"
+      },
+      {
+        "id": "698da624-8176-41c4-848e-d07ba0e15016",
+        "name": "Hadoop",
+        "similarity": "0.469"
+      },
+      {
+        "id": "eedc6ae1-244f-47fc-9b94-3e2e1ca83eb6",
+        "name": "Kafka",
+        "similarity": "0.466"
+      },
+      {
+        "id": "408028d8-7356-4e1d-9836-beb1bcc486c3",
+        "name": "Confluent Kafka",
+        "similarity": "0.462"
+      },
+      {
+        "id": "98f65d7d-cc83-4f04-a807-4ab7bc7cdf64",
+        "name": "TLS Decryption",
+        "similarity": "0.461"
+      },
+      {
+        "id": "419b0624-0012-4605-9c2c-5936f72ccf79",
+        "name": "LoRa Telemetry",
+        "similarity": "0.453"
+      },
+      {
+        "id": "3c5116dd-dfa3-40e8-b916-797a6e7cb0b1",
+        "name": "Kafkio",
+        "similarity": "0.429"
+      },
+      {
+        "id": "94c7783f-594e-4aa3-bf21-d72191be40e5",
+        "name": "Quart",
+        "similarity": "0.354"
+      }
+    ]
+  },
+  {
+    "community_id": "tools & devops",
+    "name": "Tools & DevOps",
+    "skills": [
+      {
+        "id": "80bc0da8-2e75-4a45-bf7d-bf8a251502b2",
+        "name": "GitHub Apps",
+        "similarity": "0.600"
+      },
+      {
+        "id": "cc7ab57a-6240-4e1c-a7b8-f1cc6464065e",
+        "name": "Docker Compose",
+        "similarity": "0.560"
+      },
+      {
+        "id": "4ce71f19-6550-432b-9701-092184502733",
+        "name": "CI/CD",
+        "similarity": "0.549"
+      },
+      {
+        "id": "a9655bd2-b9b8-4a74-b386-ef951e42364f",
+        "name": "Wireshark",
+        "similarity": "0.548"
+      },
+      {
+        "id": "253105f5-7eef-4343-b5d5-e394bc95cc24",
+        "name": "Git",
+        "similarity": "0.542"
+      },
+      {
+        "id": "c65798ee-9289-4404-87bb-eabc997e62a6",
+        "name": "Vim",
+        "similarity": "0.497"
+      },
+      {
+        "id": "ccaf384d-3596-4f0a-9921-33af17ce833e",
+        "name": "Selenium",
+        "similarity": "0.487"
+      },
+      {
+        "id": "f4435060-14b6-4846-b81b-8fcc29a6e805",
+        "name": "SciPy",
+        "similarity": "0.481"
+      },
+      {
+        "id": "915aca68-f2e8-41d1-b11d-6cf0ba1dc0bc",
+        "name": "Bash",
+        "similarity": "0.479"
+      },
+      {
+        "id": "bf7c5f40-f41f-48b2-b7b1-796ac9f10cbc",
+        "name": "Windows",
+        "similarity": "0.463"
+      },
+      {
+        "id": "e99cf408-493b-4319-9eac-4063e4ac2c84",
+        "name": "Chrome Extensions",
+        "similarity": "0.459"
+      },
+      {
+        "id": "9ed385b5-7200-4ad0-8a0e-9dee83a7b5ce",
+        "name": "Jupyter",
+        "similarity": "0.445"
+      },
+      {
+        "id": "79edf8a6-22a7-4626-ada8-b78ec6c5a78d",
+        "name": "C",
+        "similarity": "0.440"
+      },
+      {
+        "id": "3d3439c6-ebec-4f30-89cb-4660e0d4851a",
+        "name": "Dorking",
+        "similarity": "0.436"
+      },
+      {
+        "id": "bc7843f1-7786-494e-8dad-a097c1f2efc5",
+        "name": "Tkinter",
+        "similarity": "0.434"
+      },
+      {
+        "id": "2b18e8f9-cf0e-48e7-b2cd-7798ce6e3f63",
+        "name": "Pennylane",
+        "similarity": "0.421"
+      },
+      {
+        "id": "1776e746-537a-4448-ab81-50ab6a454e5e",
+        "name": "Scrum",
+        "similarity": "0.420"
+      },
+      {
+        "id": "1d702c27-0bab-4def-a9cb-5b89cb63cee5",
+        "name": "OSRM",
+        "similarity": "0.398"
+      }
+    ]
+  }
+]

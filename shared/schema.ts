@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, varchar, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -77,6 +77,8 @@ export const allSkills = pgTable("all_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   groupingId: varchar("grouping_id"),
+  embedding: vector("embedding", { dimensions: 768 }),
+  embeddingModel: text("embedding_model"),
 });
 
 export const portfolioSkills = pgTable("portfolio_skills", {
