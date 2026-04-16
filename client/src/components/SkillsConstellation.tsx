@@ -69,7 +69,7 @@ function ConstellationScene({
 
   const registerInteraction = () => {
     isInteracting.current = true;
-    interactionCooldown.current = 1.5; // Reset the 1.5s countdown every micro-tick
+    interactionCooldown.current = 1; // Reset the 1.2s countdown every micro-tick
   };
 
   // Configuration for visual element procession speed
@@ -209,7 +209,7 @@ function ConstellationScene({
                 x: [-20, 15, -10, 5, -2, 0]
               }}
               transition={{ 
-                duration: 0.9, 
+                duration: 1.5, 
                 ease: "circOut",
                 times: [0, 0.2, 0.4, 0.6, 0.8, 1] 
               }}
@@ -384,7 +384,7 @@ export function SkillsConstellation() {
   const handlePathComplete = () => {
     setActiveTextIndex((prev) => {
       const next = prev < groups.length - 1 ? prev + 1 : 0;
-      setTimeout(() => setActiveDataIndex(next), 750); // Wait earlier before flipping data (after bulk of glitch anim)
+      setTimeout(() => setActiveDataIndex(next), 1200); // Wait earlier before flipping data (after bulk of glitch anim)
       return next;
     });
   };
@@ -392,13 +392,13 @@ export function SkillsConstellation() {
   const handleNavClick = (index: number) => {
     if (activeTextIndex === index) return;
     setActiveTextIndex(index);
-    setTimeout(() => setActiveDataIndex(index), 750); // 0.75s glitch overlap wait to avoid GPU choke
+    setTimeout(() => setActiveDataIndex(index), 1200); // 1.2s glitch overlap wait to avoid GPU choke
   };
   
   return (
     <div className="absolute inset-0 w-full h-full pointer-events-none">
       {/* Navigation Dots */}
-      <div className="absolute top-auto bottom-12 md:top-1/2 md:bottom-auto left-0 right-0 md:left-auto md:right-10 flex flex-row md:flex-col justify-center items-center gap-4 md:-translate-y-1/2 pointer-events-auto z-40">
+      <div className="absolute top-auto bottom-12 lg:top-1/2 lg:bottom-auto left-0 right-0 lg:left-auto lg:right-10 flex flex-row lg:flex-col justify-center items-center gap-4 lg:-translate-y-1/2 pointer-events-auto z-40">
         {groups.map((group, index) => (
           <button
             key={group.id}

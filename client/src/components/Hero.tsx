@@ -1,9 +1,12 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { SkillsConstellation } from "./SkillsConstellation";
+import { usePersonalInformation } from "../hooks/use-personal-information";
 
 export function Hero() {
   const [, setLocation] = useLocation();
+  const { data: personalInfo } = usePersonalInformation();
+  const name = personalInfo?.name ? personalInfo.name : 'Matt';
 
   return (
     <section className="relative min-h-screen flex flex-col px-6 md:px-20 pt-24 lg:justify-center lg:pt-20 overflow-hidden">
@@ -30,29 +33,39 @@ export function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="space-y-4 lg:space-y-6"
+            className="space-y-6 lg:space-y-8"
           >
-            <h1 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter text-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
-              FULL STACK <br />
-              <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white drop-shadow-[0_4px_8px_rgba(255,255,255,0.2)]">
-                ENGINEER
-              </span>
-            </h1>
+            <div className="flex flex-col gap-1 sm:gap-2">
+              <h2 className="text-xs sm:text-sm md:text-lg lg:text-xl font-mono font-medium tracking-tight sm:tracking-wide text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pl-1 md:pl-2">
+                Hey! My name is {name}, and I'm a
+              </h2>
+              <h1 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter text-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
+                FULL STACK <br />
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white drop-shadow-[0_4px_8px_rgba(255,255,255,0.2)]">
+                  ENGINEER
+                </span>
+              </h1>
+            </div>
 
-            <p className="max-w-xl text-base sm:text-lg md:text-xl text-gray-200 font-medium leading-relaxed border-l-2 border-primary/40 pl-4 lg:pl-6 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/40 lg:bg-black/10 py-1">
-              Be the change you want to see in the world<br className="hidden sm:block" />
-              <span className="sm:hidden"> - </span>See a problem, commit a solution
-            </p>
+            <div className="flex flex-col gap-2 max-w-xl border-l-2 border-primary/40 pl-4 lg:pl-6 bg-black/40 lg:bg-black/10 py-2">
+              <span className="text-xs sm:text-sm font-mono tracking-widest uppercase text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                My Motto?
+              </span>
+              <p className="text-base sm:text-lg md:text-xl text-gray-200 font-medium leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                Be the change you want to see in the world<br className="hidden sm:block" />
+                <span className="sm:hidden"> </span>See a problem, commit the solution
+              </p>
+            </div>
           </motion.div>
         </div>
 
         {/* Actions Container: Foreground floating buttons */}
-        <div className="w-full max-w-lg pointer-events-auto pt-2 lg:pt-6">
+        <div className="w-full pointer-events-auto pt-2 pb-20 sm:pb-0 lg:pt-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 1 }}
-            className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-6"
+            className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 w-full lg:w-fit"
           >
             <button
               onClick={() => setLocation("/portfolio")}
