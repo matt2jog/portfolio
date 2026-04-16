@@ -9,17 +9,17 @@ export function Hero() {
   const name = personalInfo?.name ? personalInfo.name : 'Matt';
 
   return (
-    <section className="relative min-h-screen flex flex-col px-6 md:px-20 pt-24 lg:justify-center lg:pt-20 overflow-hidden">
+    <section className="relative min-h-[105vh] sm:min-h-screen flex flex-col px-6 md:px-20 pt-24 pb-12 sm:pb-0 lg:justify-center lg:pt-20 overflow-visible sm:overflow-hidden">
       
       {/* Background Constellation Container (Expanded full screen, sitting behind text) */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 sm:pt-0">
         {/* Subtle gradient overlay on mobile to improve text readability */}
         <div className="absolute inset-0 bg-linear-to-b from-black/90 via-black/50 to-transparent lg:hidden z-10 pointer-events-none" />
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1.5, delay: 0.5 }}
-          className="w-full h-full"
+          className="w-full h-full translate-y-[8vh] sm:translate-y-0"
         >
           <SkillsConstellation />
         </motion.div>
@@ -47,20 +47,27 @@ export function Hero() {
               </h1>
             </div>
 
-            <div className="flex flex-col gap-2 max-w-xl border-l-2 border-primary/40 pl-4 lg:pl-6 bg-black/40 lg:bg-black/10 py-2">
-              <span className="text-xs sm:text-sm font-mono tracking-widest uppercase text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                My Motto?
-              </span>
-              <p className="text-base sm:text-lg md:text-xl text-gray-200 font-medium leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                Be the change you want to see in the world<br className="hidden sm:block" />
-                <span className="sm:hidden"> </span>See a problem, commit the solution
-              </p>
+            <div className="flex flex-row items-center justify-start gap-2 sm:gap-6 max-w-2xl py-2 mb-2">
+              <img 
+                src="/assets/headshot.png" 
+                alt="Matthew Tujague" 
+                className="w-10 h-10 sm:w-24 sm:h-24 rounded-md object-cover shadow-lg border border-white/20 shrink-0"
+              />
+              <div className="flex flex-col gap-1 sm:gap-2 border-l-2 border-primary/40 pl-2 sm:pl-4 lg:pl-6 bg-black/40 lg:bg-black/10 py-1 sm:py-2">
+                <span className="text-[9px] sm:text-sm font-mono tracking-widest uppercase text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  My Motto?
+                </span>
+                <p className="text-xs sm:text-lg md:text-xl text-gray-200 font-medium leading-tight sm:leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                  Be the change you want to see in the world<br className="hidden sm:block" />
+                  <span className="sm:hidden"> </span>See a problem, commit the solution
+                </p>
+              </div>
             </div>
           </motion.div>
         </div>
 
         {/* Actions Container: Foreground floating buttons */}
-        <div className="w-full pointer-events-auto pt-2 pb-20 sm:pb-0 lg:pt-6">
+        <div className="w-full pointer-events-auto mt-4 mb-4 sm:mb-0 sm:mt-0 lg:pt-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
