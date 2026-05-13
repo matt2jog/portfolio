@@ -186,7 +186,8 @@
     justify-content: center;
     padding: 1.5rem;
     box-sizing: border-box;
-    border: 1px solid hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.8);
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.2), inset 0 0 15px hsl(var(--primary) / 0.2);
   }
 
   .project-cube-pulse {
@@ -289,10 +290,6 @@
 
   .project-cube-face {
     padding: 0.4rem;
-  }
-
-  .project-cube-pulse {
-    display: none;
   }
 }
 

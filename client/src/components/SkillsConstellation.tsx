@@ -4,6 +4,8 @@ import { OrbitControls, Html, Line } from "@react-three/drei";
 import * as THREE from "three";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { useIsMobile } from "../hooks/use-mobile";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
 interface ConstellationNode {
   portfolio_skill_id: string;
@@ -17,23 +19,34 @@ interface StarProps {
   node: ConstellationNode;
   position: [number, number, number];
   isActive?: boolean;
+  isMobile: boolean;
 }
 
-function Star({ node, position, isActive }: StarProps) {
+function Star({ node, position, isActive, isMobile }: StarProps) {
   // Use solid background instead of backdrop-blur to prevent WebKit edge-clipping shine
   const boxClass = isActive
-    ? "border-cyan-400 bg-cyan-950 shadow-[0_0_20px_rgba(0,240,255,0.8)] scale-110 z-50"
-    : "border-gray-700 bg-[#0a0a0a] shadow-sm scale-100";
+    ? isMobile
+      ? "border-cyan-400 bg-cyan-950 shadow-[0_0_16px_rgba(0,240,255,0.75)] scale-105 z-50"
+      : "border-cyan-400 bg-cyan-950 shadow-[0_0_20px_rgba(0,240,255,0.8)] scale-110 z-50"
+    : isMobile
+      ? "border-gray-700 bg-[#0a0a0a] shadow-sm scale-95"
+      : "border-gray-700 bg-[#0a0a0a] shadow-sm scale-100";
       
-  const textClass = isActive ? "text-cyan-300 font-bold" : "text-gray-400";
+  const textClass = isActive
+    ? isMobile
+      ? "text-cyan-300 font-semibold"
+      : "text-cyan-300 font-bold"
+    : "text-gray-400";
+  const boxPaddingClass = isMobile ? "border px-2 py-1 rounded-sm" : "border px-4 py-2 rounded-md";
+  const textSizeClass = isMobile ? "text-[0.72rem] tracking-wide" : "text-xl tracking-wide";
 
   return (
     <group position={position}>
-      <Html center distanceFactor={15}>
+      <Html center distanceFactor={isMobile ? 18 : 15}>
         <div 
-          className={`border px-4 py-2 rounded-md whitespace-nowrap flex items-center justify-center select-none transition-all duration-500 ${boxClass}`}
+          className={`${boxPaddingClass} whitespace-nowrap flex items-center justify-center select-none transition-all duration-500 ${boxClass}`}
         >
-          <p className={`text-xl tracking-wide transition-colors duration-500 ${textClass}`}>{node.skill_name}</p>
+          <p className={`transition-colors duration-500 ${textSizeClass} ${textClass}`}>{node.skill_name}</p>
         </div>
       </Html>
     </group>
@@ -46,6 +59,7 @@ function ConstellationScene({
   edges,
   path,
   groupName, 
+  isMobile,
   onPathComplete 
 }: { 
   data: ConstellationNode[], 
@@ -53,6 +67,7 @@ function ConstellationScene({
   edges: { source: [number, number, number], target: [number, number, number], groupId: string | null }[],
   path: string[],
   groupName: string, 
+  isMobile: boolean,
   onPathComplete: () => void 
 }) {
   const { gl, camera } = useThree();
@@ -61,6 +76,41 @@ function ConstellationScene({
   const reusableLocalPos = useRef(new THREE.Vector3());
   const reusableCameraDir = useRef(new THREE.Vector3());
   const [currentTargetIndex, setCurrentTargetIndex] = useState(0);
+  const titleInitial = isMobile
+    ? { opacity: 0, scale: 1.15, filter: "blur(8px)", skewX: -18 }
+    : { opacity: 0, scale: 1.5, filter: "blur(10px)", skewX: -30 };
+  const titleAnimate = isMobile
+    ? {
+        opacity: [0, 0.45, 0, 0.75, 0.25, 0.9],
+        scale: [1.05, 1, 1.08, 0.97, 1.01, 1],
+        filter: [
+          "blur(6px)",
+          "blur(0px)",
+          "blur(3px)",
+          "blur(0px)",
+          "blur(2px)",
+          "blur(0px)"
+        ],
+        skewX: [-18, 8, -6, 3, -1, 0],
+        x: [-8, 5, -4, 2, -1, 0]
+      }
+    : {
+        opacity: [0, 0.4, 0, 0.8, 0.2, 0.9],
+        scale: [1.2, 1.1, 1.3, 0.9, 1.05, 1],
+        filter: [
+          "blur(8px)",
+          "blur(0px)",
+          "blur(4px)",
+          "blur(0px)",
+          "blur(2px)",
+          "blur(0px)"
+        ],
+        skewX: [-40, 20, -10, 5, -2, 0],
+        x: [-20, 15, -10, 5, -2, 0]
+      };
+  const titleClassName = isMobile
+    ? "w-[66vw] max-w-[280px] text-center text-[clamp(1.4rem,9vw,2rem)] font-black uppercase tracking-normal text-cyan-500 leading-[0.92] whitespace-normal break-normal overflow-visible drop-shadow-[0_0_20px_rgba(0,240,255,0.8)]"
+    : "text-4xl md:text-5xl lg:text-5xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]";
 
   const isInteracting = useRef(false);
   const isPointerDown = useRef(false);
@@ -188,38 +238,24 @@ function ConstellationScene({
           <div className="select-none pointer-events-none flex flex-col items-center justify-center mix-blend-screen">
             <motion.h1 
               key={groupName} // Automatically resets the text glitch animations!
-              initial={{ 
-                opacity: 0,
-                scale: 1.5,
-                filter: "blur(10px)",
-                skewX: -30,
-              }}
-              animate={{ 
-                opacity: [0, 0.4, 0, 0.8, 0.2, 0.9],
-                scale: [1.2, 1.1, 1.3, 0.9, 1.05, 1],
-                filter: [
-                  "blur(8px)",
-                  "blur(0px)",
-                  "blur(4px)",
-                  "blur(0px)",
-                  "blur(2px)",
-                  "blur(0px)"
-                ],
-                skewX: [-40, 20, -10, 5, -2, 0],
-                x: [-20, 15, -10, 5, -2, 0]
-              }}
+              initial={titleInitial}
+              animate={titleAnimate}
               transition={{ 
                 duration: 1.5, 
                 ease: "circOut",
                 times: [0, 0.2, 0.4, 0.6, 0.8, 1] 
               }}
-              className="text-4xl md:text-5xl lg:text-5xl font-black uppercase tracking-[0.2em] text-cyan-500 whitespace-nowrap drop-shadow-[0_0_30px_rgba(0,240,255,0.8)]"
+              className={titleClassName}
               style={{
                 willChange: "transform, filter, opacity",
-                WebkitMaskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
-                WebkitMaskSize: '4px 4px',
-                maskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
-                maskSize: '4px 4px'
+                ...(isMobile
+                  ? {}
+                  : {
+                      WebkitMaskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
+                      WebkitMaskSize: '4px 4px',
+                      maskImage: 'conic-gradient(black 25%, transparent 25% 50%, black 50% 75%, transparent 75%)',
+                      maskSize: '4px 4px'
+                    })
               }}
             >
               {groupName}
@@ -249,27 +285,29 @@ function ConstellationScene({
           key={node.skill_id}
           node={node}
           position={positions.get(node.skill_id)!}
+          isMobile={isMobile}
           isActive={node.skill_id === path[currentTargetIndex]}
         />
       ))}
       
-      {/* Removed autoRotate because useFrame handles smooth slerp to targets natively now! */}
-      <OrbitControls 
-        enableZoom={false} 
-        enablePan={false}
-        onChange={() => {
-          // Track 1.5s target resets entirely in memory via useFrame
-          registerInteraction();
-        }}
-        onStart={() => {
-          isPointerDown.current = true;
-          registerInteraction();
-        }}
-        onEnd={() => {
-          isPointerDown.current = false;
-          registerInteraction();
-        }}
-      />
+      {!isMobile && (
+        <OrbitControls 
+          enableZoom={false} 
+          enablePan={false}
+          onChange={() => {
+            // Track 1.5s target resets entirely in memory via useFrame
+            registerInteraction();
+          }}
+          onStart={() => {
+            isPointerDown.current = true;
+            registerInteraction();
+          }}
+          onEnd={() => {
+            isPointerDown.current = false;
+            registerInteraction();
+          }}
+        />
+      )}
     </group>
   );
 }
@@ -279,8 +317,12 @@ export function SkillsConstellation() {
     queryKey: ["/api/skills-constellation"],
   });
 
+  const isMobile = useIsMobile();
   const [activeTextIndex, setActiveTextIndex] = useState(0);
   const [activeDataIndex, setActiveDataIndex] = useState(0);
+  const constellationRadius = isMobile ? 11 : 8.5;
+  const cameraFov = isMobile ? 50 : 60;
+  const cameraPosition: [number, number, number] = isMobile ? [0, 0, 26] : [0, 0, 22];
 
   // Derive groups from data
   const groups = useMemo(() => {
@@ -314,7 +356,7 @@ export function SkillsConstellation() {
         const phi = Math.acos(1 - 2 * (index + 0.5) / totalNodes);
         
         // Multiplier controls radius of the entire constellation
-        const r = 8.5; 
+        const r = constellationRadius;
         
         const x = r * Math.sin(phi) * Math.cos(theta);
         const y = r * Math.sin(phi) * Math.sin(theta);
@@ -341,7 +383,7 @@ export function SkillsConstellation() {
           let bestNode = "";
           const p1 = posMap.get(curr)!;
           
-          for (const candidate of unvisited) {
+          for (const candidate of Array.from(unvisited)) {
             const p2 = posMap.get(candidate)!;
             const dist = Math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2);
             if (dist < bestDist) {
@@ -374,7 +416,7 @@ export function SkillsConstellation() {
 
     // Sort by largest group first, or just alphabetically by name
     return result.sort((a, b) => b.nodes.length - a.nodes.length);
-  }, [data]);
+  }, [data, constellationRadius]);
 
   if (isLoading || !data || data.length === 0 || groups.length === 0) return null;
 
@@ -394,27 +436,55 @@ export function SkillsConstellation() {
     setActiveTextIndex(index);
     setTimeout(() => setActiveDataIndex(index), 1200); // 1.2s glitch overlap wait to avoid GPU choke
   };
+
+  const handleStep = (direction: 1 | -1) => {
+    const next = (activeTextIndex + direction + groups.length) % groups.length;
+    handleNavClick(next);
+  };
   
   return (
-    <div className="absolute inset-0 w-full h-full pointer-events-none">
-      {/* Navigation Dots */}
-      <div className="absolute top-auto bottom-12 lg:top-1/2 lg:bottom-auto left-0 right-0 lg:left-auto lg:right-10 flex flex-row lg:flex-col justify-center items-center gap-4 lg:-translate-y-1/2 pointer-events-auto z-40">
-        {groups.map((group, index) => (
-          <button
-            key={group.id}
-            onClick={() => handleNavClick(index)}
-            aria-label={`Go to ${group.name} skills`}
-            className={`w-3 h-3 rounded-full transition-all duration-300 ${
-              index === activeTextIndex 
-                ? "bg-cyan-400 scale-150 shadow-[0_0_12px_rgba(0,240,255,0.8)]" 
-                : "bg-white/30 hover:bg-white/70 hover:scale-125"
-            }`}
-          />
-        ))}
+    <div className="relative w-full h-full pointer-events-none flex flex-col items-center justify-center md:block">
+      {/* Desktop Navigation Dots */}
+      <div className="hidden md:flex absolute top-1/2 right-8 xl:right-12 -translate-y-1/2 flex-col justify-center items-center gap-3 pointer-events-auto z-40">
+        <button
+          type="button"
+          onClick={() => handleStep(-1)}
+          aria-label="Previous skills group"
+          className="grid h-8 w-8 place-items-center text-white/55 transition-colors hover:text-cyan-300"
+        >
+          <ChevronUp className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div className="flex flex-col justify-center items-center gap-4 py-1">
+          {groups.map((group, index) => (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => handleNavClick(index)}
+              aria-label={`Go to ${group.name} skills`}
+              className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                index === activeTextIndex 
+                  ? "bg-cyan-400 scale-150 shadow-[0_0_12px_rgba(0,240,255,0.8)]" 
+                  : "bg-white/30 hover:bg-white/70 hover:scale-125"
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => handleStep(1)}
+          aria-label="Next skills group"
+          className="grid h-8 w-8 place-items-center text-white/55 transition-colors hover:text-cyan-300"
+        >
+          <ChevronDown className="h-5 w-5" aria-hidden="true" />
+        </button>
       </div>
 
-      <div className="absolute top-auto bottom-0 lg:top-0 h-[65vh] lg:h-full lg:inset-y-0 right-0 w-full lg:w-[65vw] xl:w-[55vw] z-10 pointer-events-auto">
-        <Canvas camera={{ position: [0, 0, 22], fov: 60 }}>
+      {/* Canvas */}
+      <div className="relative w-[80vw] max-w-[420px] aspect-square shrink-0 z-10 pointer-events-none md:pointer-events-auto md:absolute md:top-0 md:inset-y-0 md:right-0 md:h-full md:w-[65vw] md:max-w-none md:aspect-auto xl:w-[55vw]">
+        <Canvas
+          camera={{ position: cameraPosition, fov: cameraFov }}
+          style={{ pointerEvents: isMobile ? "none" : "auto" }}
+        >
           {/* Note: Intentionally omitting key parameter so R3F recycles meshes instead of fully remounting the scene, preserving camera/orientation during the data swap */}
           <ConstellationScene 
             data={currentDataGroup.nodes}
@@ -422,9 +492,45 @@ export function SkillsConstellation() {
             edges={currentDataGroup.edges}
             path={currentDataGroup.path}
             groupName={currentTextGroup.name}
+            isMobile={isMobile}
             onPathComplete={handlePathComplete} 
           />
         </Canvas>
+      </div>
+
+      {/* Mobile Navigation Dots */}
+      <div className="mt-3 flex md:hidden w-[80vw] max-w-[420px] items-center justify-center gap-3 pointer-events-auto z-40">
+        <button
+          type="button"
+          onClick={() => handleStep(-1)}
+          aria-label="Previous skills group"
+          className="grid h-8 w-8 shrink-0 place-items-center text-white/55 transition-colors active:text-cyan-300"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div className="flex min-w-0 flex-wrap justify-center items-center gap-3">
+          {groups.map((group, index) => (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => handleNavClick(index)}
+              aria-label={`Go to ${group.name} skills`}
+              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                index === activeTextIndex 
+                  ? "bg-cyan-400 scale-150 shadow-[0_0_12px_rgba(0,240,255,0.8)]" 
+                  : "bg-white/30 active:bg-white/70"
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => handleStep(1)}
+          aria-label="Next skills group"
+          className="grid h-8 w-8 shrink-0 place-items-center text-white/55 transition-colors active:text-cyan-300"
+        >
+          <ChevronRight className="h-5 w-5" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
