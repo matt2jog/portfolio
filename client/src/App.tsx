@@ -8,6 +8,7 @@ import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConsentBanner } from "@/components/ConsentBanner";
+import { FirstVisitIntro, shouldShowFirstVisitIntro } from "@/components/FirstVisitIntro";
 import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
 import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
@@ -65,13 +66,18 @@ function LogRocketBridge() {
   return null;
 }
 
-function ConsentManager() {
+function ConsentManager({ disabled = false }: { disabled?: boolean }) {
   const [showBanner, setShowBanner] = useState(false);
   const [jurisdiction, setJurisdiction] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [location] = useLocation();
 
   useEffect(() => {
+    if (disabled) {
+      setShowBanner(false);
+      return;
+    }
+
     (async () => {
       const jurisdiction = await detectJurisdiction();
       setJurisdiction(jurisdiction);
@@ -94,7 +100,7 @@ function ConsentManager() {
       setShowBanner(shouldShow);
       setIsLoaded(true);
     })();
-  }, [location]);
+  }, [disabled, location]);
 
 
 
@@ -128,13 +134,28 @@ function Router() {
 }
 
 function App() {
+  const [location] = useLocation();
+  const [showIntro, setShowIntro] = useState(() => location === "/" && shouldShowFirstVisitIntro());
+  const consentDisabled = showIntro && location === "/";
+
+  useEffect(() => {
+    if (location === "/" && shouldShowFirstVisitIntro()) {
+      setShowIntro(true);
+    } else {
+      setShowIntro(false);
+    }
+  }, [location]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ConsentManager />
+        <ConsentManager disabled={consentDisabled} />
         <LogRocketBridge />
         <Toaster />
         <Router />
+        {showIntro && location === "/" && (
+          <FirstVisitIntro onComplete={() => setShowIntro(false)} />
+        )}
       </TooltipProvider>
     </QueryClientProvider>
   );
