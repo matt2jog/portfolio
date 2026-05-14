@@ -8,6 +8,7 @@ export default defineConfig({
   globalSetup: "./global-setup.ts",
   timeout: 180_000,
   fullyParallel: false,
+  workers: 1,
   reporter: [["list"]],
   use: {
     baseURL,
@@ -38,7 +39,7 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: "npm run dev:client -- --host 127.0.0.1",
+        command: "npx cross-env NODE_ENV=development PORT=5000 tsx src/backend/index.ts",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

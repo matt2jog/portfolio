@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { installMockApi, seedBrowserState } from "../support/mock-api";
-import { saveViewportScreenshot } from "../support/screenshot";
+import { savePaginatedScreenshots, saveViewportScreenshot } from "../support/screenshot";
 
 async function preparePage(
   page: Page,
@@ -133,7 +133,10 @@ test("legal document pages", async ({ page }, testInfo) => {
     await page.goto(route);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await settle(page);
-    await saveViewportScreenshot(page, testInfo, shotName);
+    await savePaginatedScreenshots(page, testInfo, shotName, {
+      maxPages: 5,
+      maxScrollDistance: 3_200,
+    });
   }
 });
 
@@ -167,7 +170,10 @@ test("project chat mocked welcome response", async ({ page }, testInfo) => {
   await expect(page.getByText("Portfolio Agent")).toBeVisible();
   await expect(page.getByText("Mocked 20B welcome response")).toBeVisible({ timeout: 15_000 });
   await settle(page);
-  await saveViewportScreenshot(page, testInfo, "project-chat-page");
+  await savePaginatedScreenshots(page, testInfo, "project-chat-page", {
+    maxPages: 4,
+    maxScrollDistance: 2_400,
+  });
 });
 
 test("tree carousel cards", async ({ page }, testInfo) => {
@@ -199,7 +205,11 @@ test("about card and timeline", async ({ page }, testInfo) => {
 
   await page.getByTestId("about-timeline").scrollIntoViewIfNeeded();
   await settle(page, 700);
-  await saveViewportScreenshot(page, testInfo, "about/timeline");
+  await savePaginatedScreenshots(page, testInfo, "about/timeline", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+    startFromCurrentScroll: true,
+  });
 });
 
 test("activity monitor tabs", async ({ page }, testInfo) => {
@@ -208,13 +218,19 @@ test("activity monitor tabs", async ({ page }, testInfo) => {
   await expect(page.getByTestId("activity-toggle")).toHaveAttribute("data-active-tab", "github", { timeout: 15_000 });
   await expect(page.getByText("Yearly Commits")).toBeVisible({ timeout: 15_000 });
   await settle(page, 1_000);
-  await saveViewportScreenshot(page, testInfo, "activity/github");
+  await savePaginatedScreenshots(page, testInfo, "activity/github", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
 
   await page.getByTestId("activity-tab-linkedin").click();
   await expect(page.getByTestId("activity-toggle")).toHaveAttribute("data-active-tab", "linkedin");
   await expect(page.getByText("LinkedIn Timeline")).toBeVisible({ timeout: 15_000 });
   await settle(page, 700);
-  await saveViewportScreenshot(page, testInfo, "activity/linkedin");
+  await savePaginatedScreenshots(page, testInfo, "activity/linkedin", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
 });
 
 test("admin dashboard tabs", async ({ page }, testInfo) => {
@@ -223,15 +239,24 @@ test("admin dashboard tabs", async ({ page }, testInfo) => {
   await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Bio CRUD")).toBeVisible();
   await settle(page, 700);
-  await saveViewportScreenshot(page, testInfo, "admin-dashboard/bio");
+  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/bio", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
 
   await page.getByTestId("admin-tab-projects").click();
   await expect(page.getByText("Projects CRUD")).toBeVisible();
   await settle(page, 700);
-  await saveViewportScreenshot(page, testInfo, "admin-dashboard/projects");
+  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/projects", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
 
   await page.getByTestId("admin-tab-skills").click();
   await expect(page.getByText("Skills CRUD")).toBeVisible();
   await settle(page, 700);
-  await saveViewportScreenshot(page, testInfo, "admin-dashboard/skills");
+  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/skills", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
 });
