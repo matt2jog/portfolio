@@ -1,103 +1,149 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { SkillsConstellation } from "./SkillsConstellation";
-import { usePersonalInformation } from "../hooks/use-personal-information";
 
 export function Hero() {
   const [, setLocation] = useLocation();
-  const { data: personalInfo } = usePersonalInformation();
-  const name = personalInfo?.name ? personalInfo.name : 'Matt';
+  const navButtons = [
+    { label: "Explore work", href: "/portfolio" },
+    { label: "Reach out", href: "/tree" },
+    { label: "What I'm doing", href: "/activity" },
+    { label: "About me", href: "/about" },
+  ];
 
   return (
-    <section className="relative min-h-[105vh] sm:min-h-screen flex flex-col px-6 md:px-20 pt-24 pb-12 sm:pb-0 lg:justify-center lg:pt-20 overflow-visible sm:overflow-hidden">
+    <section className="relative min-h-screen overflow-visible md:overflow-hidden">
       
-      {/* Background Constellation Container (Expanded full screen, sitting behind text) */}
-      <div className="absolute inset-0 z-0 sm:pt-0">
-        {/* Subtle gradient overlay on mobile to improve text readability */}
-        <div className="absolute inset-0 bg-linear-to-b from-black/90 via-black/50 to-transparent lg:hidden z-10 pointer-events-none" />
+      {/* Desktop background constellation */}
+      <div className="absolute inset-0 z-0 hidden md:block">
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1.5, delay: 0.5 }}
-          className="w-full h-full translate-y-[8vh] sm:translate-y-0"
+          className="w-full h-full"
         >
           <SkillsConstellation />
         </motion.div>
       </div>
 
-      <div className="relative z-20 w-full max-w-screen-2xl mx-auto flex flex-col h-full pointer-events-none gap-6 mt-4 lg:mt-0 lg:justify-center lg:gap-12">
-        
-        {/* Text Container: Foreground over background constellation */}
-        <div className="max-w-4xl w-full pointer-events-auto pr-8 lg:pr-8">
+      {/* Desktop foreground */}
+      <div className="relative z-20 hidden min-h-screen w-full px-6 md:px-10 xl:px-12 pt-24 pb-8 md:flex flex-col pointer-events-none lg:justify-center lg:pt-20 lg:gap-12">
+        <div className="max-w-4xl w-full pointer-events-auto pr-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="space-y-6 lg:space-y-8"
+            className="flex flex-col gap-6 lg:gap-8 mt-4 lg:mt-8"
           >
-            <div className="flex flex-col gap-1 sm:gap-2">
-              <h2 className="text-xs sm:text-sm md:text-lg lg:text-xl font-mono font-medium tracking-tight sm:tracking-wide text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pl-1 md:pl-2">
-                Hey! My name is {name}, and I'm a
-              </h2>
-              <h1 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter text-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
-                FULL STACK <br />
-                <span className="text-transparent bg-clip-text bg-linear-to-r from-gray-500 via-gray-200 to-white drop-shadow-[0_4px_8px_rgba(255,255,255,0.2)]">
+            <div className="flex flex-col gap-0 lg:gap-1">
+              <div className="flex flex-col justify-center flex-1 w-full max-w-5xl pl-2">
+                <h1 className="text-6xl md:text-[5.5rem] lg:text-[7.5rem] font-black tracking-tighter text-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] w-full">
+                  FULL STACK
+                </h1>
+                <h1 className="text-6xl md:text-[5.5rem] lg:text-[7.5rem] font-black tracking-tighter text-transparent bg-clip-text bg-linear-to-r from-gray-400 via-gray-200 to-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(255,255,255,0.1)] w-full">
                   ENGINEER
-                </span>
-              </h1>
+                </h1>
+              </div>
             </div>
 
-            <div className="flex flex-row items-center justify-start gap-2 sm:gap-6 max-w-2xl py-2 mb-2">
+            <div className="flex flex-row items-stretch justify-start gap-4 md:gap-6 lg:gap-8 mx-2 pl-2 w-full max-w-4xl py-2">
               <img 
                 src="/assets/headshot.png" 
                 alt="Matthew Tujague" 
-                className="w-10 h-10 sm:w-24 sm:h-24 rounded-md object-cover shadow-lg border border-white/20 shrink-0"
+                className="w-24 h-24 md:w-32 md:h-32 lg:w-40 lg:h-40 aspect-square object-cover shadow-2xl shrink-0 border border-white/10"
               />
-              <div className="flex flex-col gap-1 sm:gap-2 border-l-2 border-primary/40 pl-2 sm:pl-4 lg:pl-6 bg-black/40 lg:bg-black/10 py-1 sm:py-2">
-                <span className="text-[9px] sm:text-sm font-mono tracking-widest uppercase text-gray-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                  My Motto?
+              <div className="flex flex-col justify-center gap-2 pl-4 md:pl-6 py-2 border-l-2 border-cyan-400">
+                <span className="text-[10px] md:text-xs font-mono tracking-widest uppercase text-cyan-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                  My Motto
                 </span>
-                <p className="text-xs sm:text-lg md:text-xl text-gray-200 font-medium leading-tight sm:leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                  Be the change you want to see in the world<br className="hidden sm:block" />
-                  <span className="sm:hidden"> </span>See a problem, commit the solution
-                </p>
+                <blockquote className="text-sm md:text-base lg:text-lg font-medium leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] italic flex flex-col">
+                  <span className="text-gray-200">"Be the change you want to see in the world,</span>
+                  <span className="text-gray-200">see a problem, commit the solution."</span>
+                </blockquote>
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* Actions Container: Foreground floating buttons */}
-        <div className="w-full pointer-events-auto mt-4 mb-4 sm:mb-0 sm:mt-0 lg:pt-6">
+        <div className="w-full pointer-events-auto mt-4 mb-4 lg:pt-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 1 }}
             className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6 w-full lg:w-fit"
           >
-            <button
-              onClick={() => setLocation("/portfolio")}
-              className="px-4 py-2 sm:px-6 sm:py-3 bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-sm sm:text-base text-center rounded-sm"
-            >
-              Explore work
-            </button>
-            <button
-              onClick={() => setLocation("/tree")}
-              className="px-4 py-2 sm:px-6 sm:py-3 bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-sm sm:text-base text-center rounded-sm"
-            >
-              Reach out
-            </button>
-            <button
-              onClick={() => setLocation("/activity")}
-              className="px-4 py-2 sm:px-6 sm:py-3 bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-sm sm:text-base text-center rounded-sm"
-            >
-              What I'm doing
-            </button>
-            <button
-              onClick={() => setLocation("/about")}
-              className="px-4 py-2 sm:px-6 sm:py-3 bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-sm sm:text-base text-center rounded-sm"
-            >
-              About me
-            </button>
+            {navButtons.map((button) => (
+              <button
+                key={button.href}
+                onClick={() => setLocation(button.href)}
+                className="px-4 py-2 sm:px-6 sm:py-3 bg-black/40 backdrop-blur-md border border-white/20 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-sm sm:text-base text-center rounded-sm"
+              >
+                {button.label}
+              </button>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Mobile foreground */}
+      <div className="relative z-10 flex md:hidden min-h-screen w-full flex-col px-5 pt-24 pb-6 overflow-x-hidden">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="flex flex-col gap-4"
+        >
+          <div className="grid grid-cols-[minmax(0,1fr)_clamp(3.9rem,21vw,5.25rem)] items-center gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[clamp(2.35rem,11.6vw,3.25rem)] font-black tracking-normal text-white leading-[0.9] whitespace-nowrap drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
+                FULL STACK
+              </h1>
+              <h1 className="text-[clamp(2.35rem,11.6vw,3.25rem)] font-black tracking-normal text-transparent bg-clip-text bg-linear-to-r from-gray-400 via-gray-200 to-white leading-[0.9] whitespace-nowrap">
+                ENGINEER
+              </h1>
+            </div>
+            <img 
+              src="/assets/headshot.png" 
+              alt="Matthew Tujague" 
+              className="w-full aspect-square object-cover shrink-0 shadow-[0_0_15px_rgba(0,0,0,0.3)] border border-white/10 self-center"
+            />
+          </div>
+
+          <div className="flex flex-col justify-center gap-1 border-l-2 border-cyan-400 pl-3 py-1">
+            <span className="text-[9px] font-mono tracking-widest uppercase text-cyan-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+              My Motto
+            </span>
+            <blockquote className="text-[0.78rem] font-medium leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] italic text-gray-200">
+              "Be the change you want to see in the world, see a problem, commit the solution."
+            </blockquote>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.5, delay: 0.5 }}
+          className="relative z-10 mt-5 w-full"
+        >
+          <SkillsConstellation />
+        </motion.div>
+
+        <div className="relative z-20 mt-5 w-full pointer-events-auto">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1, duration: 1 }}
+            className="grid grid-cols-2 gap-2.5 w-full max-w-sm mx-auto"
+          >
+            {navButtons.map((button) => (
+              <button
+                key={button.href}
+                onClick={() => setLocation(button.href)}
+                className="min-h-11 px-3 py-2 bg-black/60 backdrop-blur-md border border-cyan-400/30 text-white hover:bg-white/10 transition-colors font-bold tracking-wide text-[0.72rem] text-center rounded-sm shadow-xl"
+              >
+                {button.label}
+              </button>
+            ))}
           </motion.div>
         </div>
       </div>

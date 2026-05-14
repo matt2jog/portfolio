@@ -4,8 +4,26 @@ import { BlueprintCard } from "@/components/BlueprintCard";
 import ProjectChat from "@/components/ProjectChat";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { type TransitionEvent, useCallback, useMemo, useRef, useState } from "react";
+import { type TransitionEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+
+function ProjectCardClickHint({ isVisible }: { isVisible: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-chalk-hint="card"
+      className={`portfolio-card-click-hint pointer-events-none absolute z-50 drop-shadow-[0_0_9px_rgba(255,255,255,0.16)] transition-opacity duration-500 ${
+        isVisible ? "opacity-90" : "opacity-0"
+      }`}
+    >
+      <img
+        src="/assets/chalk-arrow-desktop.png"
+        alt=""
+        className="block h-auto w-full"
+      />
+    </div>
+  );
+}
 
 export default function Portfolio() {
   const [, setLocation] = useLocation();
@@ -99,6 +117,8 @@ export default function Portfolio() {
   });
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [animDuration, setAnimDuration] = useState(1200);
+  const [isClickHintMounted, setIsClickHintMounted] = useState(true);
+  const [isClickHintVisible, setIsClickHintVisible] = useState(true);
 
   const rotationIndex = ((rotationStep % facesCount) + facesCount) % facesCount;
   const groupIndex = ((rotationStep % totalGroups) + totalGroups) % totalGroups;
@@ -122,6 +142,15 @@ export default function Portfolio() {
 
   const pendingQueue = useRef<number[]>([]);
   const isAnimating = useRef(false);
+  const clickHintHideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (clickHintHideTimeout.current) {
+        clearTimeout(clickHintHideTimeout.current);
+      }
+    };
+  }, []);
 
   const consolidate = (queue: number[]): number[] => {
     const stack: number[] = [];
@@ -157,6 +186,17 @@ export default function Portfolio() {
 
   const enqueue = useCallback(
     (step: number) => {
+      if (isClickHintMounted) {
+        setIsClickHintVisible(false);
+        if (clickHintHideTimeout.current) {
+          clearTimeout(clickHintHideTimeout.current);
+        }
+        clickHintHideTimeout.current = setTimeout(() => {
+          setIsClickHintMounted(false);
+          clickHintHideTimeout.current = null;
+        }, 500);
+      }
+
       pendingQueue.current.push(step);
       pendingQueue.current = consolidate(pendingQueue.current);
 
@@ -167,7 +207,7 @@ export default function Portfolio() {
         setAnimDuration(calcDuration(pendingQueue.current.length));
       }
     },
-    [applyStep],
+    [applyStep, isClickHintMounted],
   );
 
   const handleTransitionEnd = useCallback(
@@ -251,23 +291,30 @@ export default function Portfolio() {
                       {Array.from({ length: projectsPerFace }, (_, projectIndex) => {
                         const project = faceProjects[projectIndex];
                         return project ? (
-                          <BlueprintCard
+                          <div
                             key={`${faceIndex}-${projectIndex}-${project.title}`}
-                            {...project}
-                            className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
-                            activeCardId={activeCardId}
-                            setActiveCardId={
-                              faceIndex === rotationIndex
-                                ? setActiveCardId
-                                : undefined
-                            }
-                            isActiveFace={faceIndex === rotationIndex}
-                            onChatOpen={
-                              faceIndex === rotationIndex
-                                ? () => setLocation(`/portfolio/${project.id}/chat?rotation=${rotationStep}`)
-                                : undefined
-                            }
-                          />
+                            className="relative min-h-0 overflow-visible"
+                          >
+                            {isClickHintMounted && faceIndex === rotationIndex && projectIndex === 0 && (
+                              <ProjectCardClickHint isVisible={isClickHintVisible} />
+                            )}
+                            <BlueprintCard
+                              {...project}
+                              className={`min-h-0 ${faceIndex === rotationIndex ? "" : "project-card--inactive"}`}
+                              activeCardId={activeCardId}
+                              setActiveCardId={
+                                faceIndex === rotationIndex
+                                  ? setActiveCardId
+                                  : undefined
+                              }
+                              isActiveFace={faceIndex === rotationIndex}
+                              onChatOpen={
+                                faceIndex === rotationIndex
+                                  ? () => setLocation(`/portfolio/${project.id}/chat?rotation=${rotationStep}`)
+                                  : undefined
+                              }
+                            />
+                          </div>
                         ) : (
                           <div
                             key={`${faceIndex}-${projectIndex}-placeholder`}
