@@ -16,20 +16,24 @@ The frontend renders the returned HTML in the `Privacy`, `Terms`, and
 Versioning works through git branching, not a manual workflow:
 
 1. Edit one of the `.md` files on a feature branch and open a PR.
-2. On merge to the main branch, the `Legal Audit` GitHub Action
+2. On merge to `prod`, the `Legal Audit` GitHub Action
    (`.github/workflows/legal-audit.yml`) fires if any `legal/**.md` changed.
-3. The action computes a sha256 of each doc and inserts a row into the
-   Supabase `legal_document_versions` table with the commit sha and the
-   commit's author timestamp.
+3. The action rewrites **Last Updated** (latest authoring commit date for the
+   file) and **Effective Date** (today, the date the change reaches prod),
+   commits that metadata update back to `prod` via a deploy key, then
+   computes a sha256 of each doc and inserts a row into the Supabase
+   `legal_document_versions` table with the commit sha and the commit's
+   author timestamp.
 
 The `unique(doc_type, content_hash)` constraint makes the insert idempotent:
 re-runs on unchanged content are no-ops, and re-running the workflow after a
 transient failure is safe.
 
 The action retries 3 times with exponential backoff. If all retries fail, the
-workflow fails. Because the workflow is a required status check on the main
-branch, that blocks future merges until the audit can be recorded — the
-tradeoff is deliberate (legal audit integrity > merge availability).
+workflow fails. The audit is post-merge (the workflow runs on push to `prod`,
+not as a PR gate) so a Supabase outage does not block merges, but a failed
+run will surface in the Actions tab and should be re-run manually before
+relying on the audit for that commit.
 
 ## Querying history
 
@@ -45,27 +49,20 @@ WHERE doc_type = 'privacy'
 ```
 
 Run that via the Supabase SQL editor with a service-role connection. The
-`anon` role can INSERT only — by design, so a leaked anon key cannot read
-prior versions.
+dedicated `legal_audit_writer` role used by the workflow has `INSERT`-only
+privilege on this one table and **no** `SELECT` — so a leaked workflow
+credential cannot read prior versions or touch any other table.
 
-## One-time backfill for pre-audit history
+## Starting state
 
-The audit log starts at the commit that introduces this workflow. When the
-restructuring branch merges to `prod`, the workflow fires on the merge commit
-and records the current content as the first audit row for each doc.
+The audit log starts empty. The first push to `prod` that merges this folder
+(or any later edit to a `legal/**.md` file) will fire the workflow and record
+the current content of each changed doc as its first audit row.
 
-If you want the audit log to also reflect the time these documents were
-binding *before* this workflow existed (when the `.md` files lived at the
-repo root), insert backfill rows once via the Supabase SQL editor. Find each
-file's earliest commit time with:
-
-```bash
-git log --diff-filter=A --follow --format=%cI -- legal/PRIVACY_POLICY.md | tail -1
-```
-
-then insert with the historical commit sha as `commit_sha` and that ISO
-timestamp as `committed_at`. The unique-hash constraint protects you from
-double-inserting if the historical content matches the current content.
+There is intentionally no historical backfill: prior to this workflow there
+was no authoritative public record of what was binding when, so seeding rows
+with reconstructed dates would manufacture a paper trail rather than reflect
+one. The log is forward-looking from the day it goes live.
 
 ## Rolling back
 
@@ -76,8 +73,8 @@ the rollback as another transition.
 
 ## Editing rules
 
-- **Never** edit these files directly on the main branch — go through a PR
-  so reviewers see the legal change.
+- **Never** edit these files directly on `prod` — go through a PR so
+  reviewers see the legal change.
 - **Never** rename or delete a file in this folder. The audit log keys on
   `doc_type`, which is derived from filename in `src/scripts/legal/record-versions.ts`.
   Adding a new doc type requires updating that script, the
