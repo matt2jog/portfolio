@@ -126,8 +126,8 @@ npm run dev:client   # Vite on port 5000 with /api + /auth proxied to :3000
 | `npm run check` | TypeScript type-check (no emit) |
 | `npm run lint` | ESLint over the repo |
 | `npm run test:ui` | Playwright assertions against the running dev server |
-| `npm run test:ui-pictures` | Generate viewport screenshots for visual review |
-| `npm run test:ui-pictures:verify` | Verify expected screenshots exist |
+| `npm run test:pictures` | Generate viewport screenshots for visual review |
+| `npm run test:pictures:verify` | Verify expected screenshots exist |
 | `npm run db:push` | Drizzle-kit push (schema → DB) |
 | `npm run skills:cluster` | Re-cluster skill embeddings and update groups |
 | `npm run legal:record` | Manually run the legal-audit recorder (normally run by CI) |
@@ -178,9 +178,12 @@ LinkedIn ingestion (`LINKEDIN_*`, `APIFY_*`), AI providers
 See `.env.example` for the full list.
 
 ### CI/CD
-- **`ui-tests.yml`** — runs lint + typecheck + Playwright assertions +
-  viewport screenshots on every PR and on push to `main`. Uploads
-  screenshots as an artifact.
+- **`ui-test.yml`** — lint + typecheck + functional Playwright assertions
+  on every PR and push to `main`.
+- **`ui-artifacts.yml`** — generates and uploads viewport screenshots
+  on every PR and push to `main`.
+- **`backend-unit.yml`** — DB connectivity + core backend action tests.
+  Requires `DATABASE_URL` secret.
 - **`legal-audit.yml`** — runs on push to `prod` when any `legal/**.md`
   changes. Computes the commit timestamp and inserts an audit row per doc
   (idempotent via `unique(doc_type, content_hash)`). Retries 3× with
@@ -191,14 +194,19 @@ See `.env.example` for the full list.
 
 ## Testing
 
-Playwright lives under `src/tests/`. Two configs:
-- `src/tests/github-actions/playwright.config.ts` — functional assertions
-  (consent recording, etc.). `npm run test:ui` runs these against a Vite
-  dev server it spawns on `127.0.0.1:5000`.
-- `src/tests/viewport-human-judge/playwright.config.ts` — viewport
-  screenshots at desktop (1440×900) and mobile (390×844). Output goes to
-  `src/tests/viewport-human-judge/{desktop,mobile}/`. Both folders are
-  gitignored except for `.gitkeep`.
+Tests live under `src/tests/`:
+
+- `src/tests/ui-test/` — Playwright functional assertions (consent
+  recording, etc.). `npm run test:ui` runs these against a Vite dev server
+  it spawns on `127.0.0.1:5000`. CI: `.github/workflows/ui-test.yml`.
+- `src/tests/ui-artifacts/` — Playwright viewport screenshots at desktop
+  (1440×900) and mobile (390×844). Output goes to
+  `src/tests/ui-artifacts/{desktop,mobile}/` (gitignored except
+  `.gitkeep`). `npm run test:pictures` to regenerate.
+  CI: `.github/workflows/ui-artifacts.yml`.
+- `src/tests/backend-unit/` — Node `node:test` suite covering DB
+  connectivity and core backend actions. `npm run test:backend-unit`.
+  CI: `.github/workflows/backend-unit.yml`.
 
 ## Database
 

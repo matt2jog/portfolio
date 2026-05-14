@@ -1,14 +1,17 @@
-name: UI Tests
+name: UI Test
+
+# Lint, type-check, and run functional Playwright assertions.
 
 on:
   pull_request:
   push:
     branches:
       - main
+      - prod
   workflow_dispatch:
 
 jobs:
-  ui:
+  ui-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,19 +38,3 @@ jobs:
 
       - name: Run UI assertions
         run: npm run test:ui
-
-      - name: Generate viewport screenshots
-        run: npm run test:ui-pictures
-
-      - name: Verify viewport screenshots
-        run: npm run test:ui-pictures:verify
-
-      - name: Upload viewport screenshots
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: viewport-human-judge
-          path: |
-            src/tests/viewport-human-judge/desktop
-            src/tests/viewport-human-judge/mobile
-          if-no-files-found: warn

@@ -1,13 +1,19 @@
 name: Legal Audit
 
-# Records the content of /legal/*.md to Supabase whenever legal docs change on
-# the main branch. This is an append-only audit log used to answer
-# "which version of the privacy policy was binding at time T?".
+# When a push to prod changes any legal/**.md, this workflow:
+#   1. Rewrites **Last Updated:** in each changed file with the author date
+#      of the latest commit that touched that file (when the content was
+#      authored).
+#   2. Rewrites **Effective Date:** in each changed file with today's date
+#      (when the change reached prod via CD).
+#   3. Commits the metadata update back to prod with [skip ci] so the
+#      workflow doesn't loop.
+#   4. Records each post-update file content to Supabase as an append-only
+#      audit row (idempotent via unique(doc_type, content_hash)).
 #
-# The workflow is a required status check on the main branch. If Supabase is
-# unavailable and all retries fail, this workflow fails, which blocks future
-# merges until the audit can be recorded. That tradeoff is intentional: legal
-# audit integrity > merge availability.
+# The workflow is a required status check on prod, so a Supabase outage
+# blocks future merges until the audit can be recorded. That tradeoff is
+# intentional: legal audit integrity > merge availability.
 
 on:
   push:
@@ -17,14 +23,21 @@ on:
       - "legal/**.md"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  record:
+  audit:
     runs-on: ubuntu-latest
+    # Skip if the previous run already committed the date update — prevents
+    # the bot's own commit from re-triggering the workflow.
+    if: github.event.head_commit.author.name != 'github-actions[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,7 +48,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Compute commit timestamp
+      - name: Determine changed legal docs
+        id: changed
+        run: |
+          # Files changed in the push that triggered this workflow.
+          files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'legal/*.md' | tr '\n' ' ')
+          echo "files=${files}" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite Last Updated and Effective Date
+        if: steps.changed.outputs.files != ''
+        id: rewrite
+        run: |
+          set -euo pipefail
+          effective_date=$(date -u +"%B %-d, %Y")
+          echo "effective_date=${effective_date}" >> "$GITHUB_OUTPUT"
+          for file in ${{ steps.changed.outputs.files }}; do
+            [ -f "$file" ] || continue
+            last_updated=$(git log -1 --format=%aI -- "$file")
+            last_updated_fmt=$(date -u -d "$last_updated" +"%B %-d, %Y")
+            echo "[$file] last_updated=$last_updated_fmt effective=$effective_date"
+            sed -i -E "s|^\*\*Last Updated:\*\*\s+.*$|**Last Updated:** ${last_updated_fmt}  |" "$file"
+            sed -i -E "s|^\*\*Effective Date:\*\*\s+.*$|**Effective Date:** ${effective_date}|" "$file"
+          done
+
+      - name: Commit metadata update
+        if: steps.changed.outputs.files != ''
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -z "$(git status --porcelain legal/)" ]; then
+            echo "No metadata changes to commit."
+            exit 0
+          fi
+          git add legal/
+          git commit -m "chore(legal): update Last Updated / Effective Date [skip ci]"
+          git push origin HEAD:prod
+
+      - name: Compute commit timestamp for audit row
         id: commit
         run: |
           echo "committed_at=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"

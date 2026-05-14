@@ -9,10 +9,10 @@
 coverage/
 playwright-report/
 test-results/
-src/tests/viewport-human-judge/desktop/**
-src/tests/viewport-human-judge/mobile/**
-!src/tests/viewport-human-judge/desktop/.gitkeep
-!src/tests/viewport-human-judge/mobile/.gitkeep
+src/tests/ui-artifacts/desktop/**
+src/tests/ui-artifacts/mobile/**
+!src/tests/ui-artifacts/desktop/.gitkeep
+!src/tests/ui-artifacts/mobile/.gitkeep
 .DS_Store
 
 .mcp.json

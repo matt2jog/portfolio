@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Page, TestInfo } from "@playwright/test";
 
-const outputRoot = path.resolve(process.cwd(), "src", "tests", "viewport-human-judge");
+const outputRoot = path.resolve(process.cwd(), "src", "tests", "ui-artifacts");
 
 function sanitizePathPart(value: string) {
   return value

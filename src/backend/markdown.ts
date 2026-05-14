@@ -45,20 +45,51 @@ export function markdownToHtml(markdown: string): string {
   return html;
 }
 
+export interface LegalDoc {
+  html: string;
+  lastUpdated: string | null;
+  effectiveDate: string | null;
+}
+
+const LAST_UPDATED_RE = /^\*\*Last Updated:\*\*\s+(.+?)\s*$/m;
+const EFFECTIVE_DATE_RE = /^\*\*Effective Date:\*\*\s+(.+?)\s*$/m;
+
 /**
- * Load and convert markdown file to HTML
+ * Parse and strip the **Last Updated** / **Effective Date** lines from the
+ * top of a legal markdown document, returning the rendered HTML plus the two
+ * date strings as written. The GitHub Actions `legal-audit` workflow keeps
+ * those two lines accurate on every push to prod; the server just surfaces
+ * them so the frontend can render them in the page header.
  */
-export function loadMarkdownAsHtml(filename: string): string | null {
+export function loadLegalDoc(filename: string): LegalDoc | null {
   try {
-    // Resolve from the process working directory so this works for both dev and CJS production builds.
     const projectRoot = process.cwd();
     const filePath = path.join(projectRoot, "legal", filename);
-    
     const markdown = fs.readFileSync(filePath, "utf-8");
-    const html = markdownToHtml(markdown);
-    return html;
+
+    const lastUpdated = markdown.match(LAST_UPDATED_RE)?.[1]?.trim() ?? null;
+    const effectiveDate = markdown.match(EFFECTIVE_DATE_RE)?.[1]?.trim() ?? null;
+
+    const body = markdown
+      .replace(LAST_UPDATED_RE, "")
+      .replace(EFFECTIVE_DATE_RE, "")
+      .replace(/\n{3,}/g, "\n\n");
+
+    return {
+      html: markdownToHtml(body),
+      lastUpdated,
+      effectiveDate,
+    };
   } catch (err) {
     console.error(`Failed to load ${filename}:`, err);
     return null;
   }
+}
+
+/**
+ * @deprecated Use loadLegalDoc — kept temporarily for any callers that still
+ * expect just the HTML string.
+ */
+export function loadMarkdownAsHtml(filename: string): string | null {
+  return loadLegalDoc(filename)?.html ?? null;
 }

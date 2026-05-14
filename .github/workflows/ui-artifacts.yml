@@ -1,0 +1,47 @@
+name: UI Artifacts
+
+# Generates viewport screenshots and uploads them as a build artifact.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - prod
+  workflow_dispatch:
+
+jobs:
+  artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate viewport screenshots
+        run: npm run test:pictures
+
+      - name: Verify viewport screenshots
+        run: npm run test:pictures:verify
+
+      - name: Upload viewport screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-artifacts
+          path: |
+            src/tests/ui-artifacts/desktop
+            src/tests/ui-artifacts/mobile
+          if-no-files-found: warn

@@ -5,7 +5,7 @@ import {
   experienceFixture,
   githubActivityFixture,
   githubTimelineFixture,
-  legalHtmlFixture,
+  legalDocFixture,
   linkedinActivityFixture,
   linkedinTimelineFixture,
   personalInformationFixture,
@@ -28,14 +28,6 @@ async function fulfillJson(route: Route, body: JsonValue, status = 200) {
   });
 }
 
-async function fulfillText(route: Route, body: string, contentType = "text/html; charset=utf-8") {
-  await route.fulfill({
-    status: 200,
-    contentType,
-    body,
-  });
-}
-
 async function mockDbRoute(page: Page, url: string, body: JsonValue) {
   if (!shouldMockDbBackedEndpoints()) return;
   await page.route(url, (route) => fulfillJson(route, body));
@@ -49,9 +41,9 @@ export async function installMockApi(page: Page) {
     fulfillJson(route, { ip: "127.0.0.1" }),
   );
 
-  await page.route("**/api/legal/privacy", (route) => fulfillText(route, legalHtmlFixture));
-  await page.route("**/api/legal/terms", (route) => fulfillText(route, legalHtmlFixture));
-  await page.route("**/api/legal/tracking", (route) => fulfillText(route, legalHtmlFixture));
+  await page.route("**/api/legal/privacy", (route) => fulfillJson(route, legalDocFixture));
+  await page.route("**/api/legal/terms", (route) => fulfillJson(route, legalDocFixture));
+  await page.route("**/api/legal/tracking", (route) => fulfillJson(route, legalDocFixture));
 
   await mockDbRoute(page, "**/api/public/personal-information", personalInformationFixture);
   await mockDbRoute(page, "**/api/public/experiences", experienceFixture);

@@ -191,6 +191,12 @@ export const legalHtmlFixture = `
   <p>Contact the site owner for questions about policy details.</p>
 `;
 
+export const legalDocFixture = {
+  html: legalHtmlFixture,
+  lastUpdated: "March 27, 2026",
+  effectiveDate: "March 27, 2026",
+};
+
 export const adminFixtures = {
   me: {
     id: "admin-test-user",

@@ -10,9 +10,10 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "lint": "eslint .",
     "check": "tsc",
-    "test:ui": "playwright test --config src/tests/github-actions/playwright.config.ts",
-    "test:ui-pictures": "playwright test --config src/tests/viewport-human-judge/playwright.config.ts",
-    "test:ui-pictures:verify": "tsx src/tests/viewport-human-judge/verify-screenshots.ts",
+    "test:ui": "playwright test --config src/tests/ui-test/playwright.config.ts",
+    "test:pictures": "playwright test --config src/tests/ui-artifacts/playwright.config.ts",
+    "test:pictures:verify": "tsx src/tests/ui-artifacts/verify-screenshots.ts",
+    "test:backend-unit": "tsx --env-file=.env --test src/tests/backend-unit/*.test.ts",
     "db:push": "drizzle-kit push",
     "skills:cluster": "tsx --env-file=.env src/scripts/cluster_anchors.ts && tsx --env-file=.env src/scripts/update_skill_groups.ts",
     "legal:record": "tsx --env-file=.env src/scripts/legal/record-versions.ts"

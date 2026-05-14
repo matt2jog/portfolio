@@ -29,6 +29,8 @@ function withHeadingIds(rawHtml: string): string {
 export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps) {
   const [, setLocation] = useLocation();
   const [html, setHtml] = useState<string>("");
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [effectiveDate, setEffectiveDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<string>("");
 
@@ -65,8 +67,14 @@ export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps
           throw new Error(`Failed to load ${fetchPath}: ${res.status}`);
         }
 
-        const text = await res.text();
-        setHtml(withHeadingIds(text));
+        const data = (await res.json()) as {
+          html: string;
+          lastUpdated: string | null;
+          effectiveDate: string | null;
+        };
+        setHtml(withHeadingIds(data.html));
+        setLastUpdated(data.lastUpdated);
+        setEffectiveDate(data.effectiveDate);
       } catch (error) {
         if (import.meta.env.DEV) {
           console.error(`[LegalDocLayout] Failed to load ${title}:`, error);
@@ -133,6 +141,22 @@ export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps
           <header className="mb-4 rounded-lg border border-slate-200 bg-white px-6 py-5 shadow-sm">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
             <p className="mt-2 text-sm text-slate-600">This document is provided for legal notice and policy transparency.</p>
+            {(lastUpdated || effectiveDate) && (
+              <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm text-slate-600 sm:grid-cols-2">
+                {lastUpdated && (
+                  <div className="flex gap-2">
+                    <dt className="font-medium text-slate-700">Last Updated:</dt>
+                    <dd>{lastUpdated}</dd>
+                  </div>
+                )}
+                {effectiveDate && (
+                  <div className="flex gap-2">
+                    <dt className="font-medium text-slate-700">Effective Date:</dt>
+                    <dd>{effectiveDate}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
           </header>
 
           <article className="rounded-lg border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">

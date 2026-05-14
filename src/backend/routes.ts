@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
-import { loadMarkdownAsHtml } from "./markdown";
+import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
 import {
@@ -214,28 +214,19 @@ export async function registerRoutes(
   });
 
   // ========== LEGAL DOCUMENTS ==========
-  // These endpoints return the rendered HTML for the legal docs.
-  // The SPA routes (/privacy, /terms, /tracking) are served by the client-side app.
-  app.get("/api/legal/privacy", (_req, res) => {
-    const html = loadMarkdownAsHtml("PRIVACY_POLICY.md");
-    if (!html) return res.status(404).send("Privacy Policy not found");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
-  });
+  // Returns { html, lastUpdated, effectiveDate }. The two date fields are
+  // maintained by the legal-audit GitHub Actions workflow (sed on push to
+  // prod); the server just surfaces them. The SPA routes
+  // (/privacy, /terms, /tracking) are served by the client-side app.
+  const sendLegalDoc = (filename: string, notFoundMsg: string) => (_req: Request, res: Response) => {
+    const doc = loadLegalDoc(filename);
+    if (!doc) return res.status(404).json({ message: notFoundMsg });
+    res.json(doc);
+  };
 
-  app.get("/api/legal/terms", (_req, res) => {
-    const html = loadMarkdownAsHtml("TERMS_OF_USE.md");
-    if (!html) return res.status(404).send("Terms of Use not found");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
-  });
-
-  app.get("/api/legal/tracking", (_req, res) => {
-    const html = loadMarkdownAsHtml("TRACKING_NOTICE_AND_CONSENT.md");
-    if (!html) return res.status(404).send("Tracking Notice not found");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
-  });
+  app.get("/api/legal/privacy", sendLegalDoc("PRIVACY_POLICY.md", "Privacy Policy not found"));
+  app.get("/api/legal/terms", sendLegalDoc("TERMS_OF_USE.md", "Terms of Use not found"));
+  app.get("/api/legal/tracking", sendLegalDoc("TRACKING_NOTICE_AND_CONSENT.md", "Tracking Notice not found"));
 
   // ========== GEOLOCATION ==========
   app.get("/api/public/geoip", async (req, res) => {
