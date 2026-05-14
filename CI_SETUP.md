@@ -12,7 +12,7 @@ in Supabase.
 | `ui-test.yml` | PR + push to `main`/`prod` | Nothing extra — pure code-only checks |
 | `ui-artifacts.yml` | PR + push to `main`/`prod` | Nothing extra — uploads screenshots as an artifact |
 | `backend-unit.yml` | PR + push to `main`/`prod` | `DATABASE_URL` (and `SUPABASE_CA_CERT` if Supabase) |
-| `legal-audit.yml` | Push to `prod` touching `legal/**.md` | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, repo **Contents: Read & write** for `GITHUB_TOKEN` |
+| `legal-audit.yml` | Push to `prod` touching `legal/**.md` | `DATABASE_URL`, `LEGAL_AUDIT_WRITE_ROLE_PASSWORD`, repo **Contents: Read & write** for `GITHUB_TOKEN` |
 
 ## 1. Repository secrets
 
@@ -20,22 +20,27 @@ GitHub → repo → **Settings → Secrets and variables → Actions → New
 repository secret**. Add each of the following. Names must match exactly.
 
 ### For `backend-unit.yml`
-- **`DATABASE_URL`** — Postgres connection string. Use a read-only test
-  user if possible; the suite is read-only today but plan defensively.
-  Example: `postgres://test_ro:<pwd>@<host>:5432/postgres?sslmode=require`
+- **`DATABASE_URL`** — Postgres connection string for the read-only test
+  user. Example: `postgres://test_ro:<pwd>@<host>:5432/postgres?sslmode=require`
 - **`SUPABASE_CA_CERT`** *(optional)* — the Supabase root CA, with literal
   `\n` in place of newlines so it fits in a single-line secret. Only
   required if your DB rejects connections without verified TLS.
 
 ### For `legal-audit.yml`
-- **`SUPABASE_URL`** — `https://<project-ref>.supabase.co` (no trailing
-  slash; the recorder strips one anyway).
-- **`SUPABASE_ANON_KEY`** — the anon JWT from Supabase → Project Settings
-  → API. The recorder inserts via PostgREST under the anon role; RLS
-  policy `legal_document_versions_anon_insert` permits INSERT only.
+- **`DATABASE_URL`** — reused from above. The recorder parses out the
+  host/port/db and swaps in the writer role's credentials, so we don't
+  need a second URL.
+- **`LEGAL_AUDIT_WRITE_ROLE_PASSWORD`** — password for the
+  `legal_audit_writer` Postgres role (see §3). The role has
+  `INSERT`-only privilege on `legal_document_versions` and **no** SELECT,
+  so a leaked password cannot read past versions or touch any other
+  table. Rotate with `ALTER ROLE legal_audit_writer PASSWORD '...';`.
 
-> The service-role key is **not** used by any workflow — keep it off
-> GitHub.
+> **Anon key is intentionally not used.** Supabase anon JWTs are designed
+> to be public (they ship in client apps), so they're a weak boundary even
+> behind RLS. A dedicated DB role with one verb on one table is a real
+> least-privilege credential and can be revoked instantly with
+> `DROP ROLE legal_audit_writer` without touching anything else.
 
 ## 2. Workflow permissions
 
@@ -59,24 +64,41 @@ Open Supabase → **SQL Editor** → paste the contents of
 
 That creates the `legal_document_versions` table, the
 `legal_document_active_ranges` view, the unique-hash + `doc_type` CHECK
-constraints, and the anon-INSERT RLS policy.
+constraints, and enables RLS.
 
-### b. Verify RLS
-
-Still in Supabase, run:
+### b. Create the dedicated writer role
 
 ```sql
-SELECT polname, polcmd, polroles::regrole[]
-FROM pg_policy
-WHERE polrelid = 'legal_document_versions'::regclass;
+CREATE ROLE legal_audit_writer LOGIN PASSWORD '<strong-random>' NOINHERIT;
+GRANT USAGE ON SCHEMA public TO legal_audit_writer;
+GRANT INSERT ON legal_document_versions TO legal_audit_writer;
+
+DROP POLICY IF EXISTS legal_document_versions_anon_insert ON legal_document_versions;
+CREATE POLICY legal_audit_writer_insert
+  ON legal_document_versions
+  FOR INSERT
+  TO legal_audit_writer
+  WITH CHECK (true);
 ```
 
-You should see one row: `legal_document_versions_anon_insert` / `INSERT` /
-`{anon}`. The anon role must **not** appear on SELECT/UPDATE/DELETE.
+Stash the password in your password manager and as the
+`LEGAL_AUDIT_WRITE_ROLE_PASSWORD` GitHub secret. **This has been done
+for this project — skip if already in place.**
 
-### c. Optional: a separate read-only role for `backend-unit.yml`
+### c. Verify the role has nothing else
 
-If you don't want CI tests pointed at your prod DB, provision a separate
+```sql
+SELECT table_name, privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee = 'legal_audit_writer';
+```
+
+Should return exactly one row: `legal_document_versions / INSERT`. If you
+see SELECT/UPDATE/DELETE or any other table, revoke them.
+
+### d. Optional: a separate read-only role for `backend-unit.yml`
+
+If you don't want CI tests pointed at your prod DB, provision another
 Postgres user with `CONNECT` + `USAGE` + `SELECT` on the public schema
 only, and use its connection string for the `DATABASE_URL` secret.
 
@@ -99,9 +121,9 @@ Create / edit the rule for `prod` and tick:
 - Leave **Allow force pushes** disabled
 
 The `github-actions[bot]` commit on `prod` (legal date update with
-`[skip ci]`) is exempt because it's a direct push from the workflow's
-`GITHUB_TOKEN`; branch protection allows it as long as bypass isn't
-explicitly blocked for Actions.
+`[skip ci]`) is a direct push from the workflow's `GITHUB_TOKEN`; branch
+protection allows it as long as bypass isn't explicitly blocked for
+Actions.
 
 ### `main` (working branch, if you use one)
 Same as `prod` minus the Legal Audit check (since `legal-audit.yml` only
@@ -116,15 +138,16 @@ The workflows read everything from secrets. To run the equivalent locally:
 DATABASE_URL=postgres://...
 
 # legal-audit (npm run legal:record — rarely needed locally)
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_ANON_KEY=eyJhbGc...
+DATABASE_URL=postgres://...                  # same as above
+LEGAL_AUDIT_WRITE_ROLE_PASSWORD=...          # already in .env
 GITHUB_SHA=$(git rev-parse HEAD)
 GIT_COMMITTED_AT=$(git show -s --format=%cI HEAD)
 ```
 
-`record-versions.ts` requires `GITHUB_SHA` and `GIT_COMMITTED_AT` as env
-vars — the workflow sets them automatically, but a local run needs them
-on the command line.
+`record-versions.ts` builds the writer connection string by reusing the
+host/port/db from `DATABASE_URL` and swapping in `legal_audit_writer` +
+the password. `GITHUB_SHA` and `GIT_COMMITTED_AT` are set automatically
+by the workflow; a local run needs them on the command line.
 
 ## 6. Artifact storage
 
@@ -155,26 +178,33 @@ Once secrets and protections are in place:
 4. Watch `Legal Audit` run: it should rewrite the dates, push a follow-up
    `chore(legal): update Last Updated / Effective Date [skip ci]` commit,
    then insert one row into `legal_document_versions`.
-5. In Supabase SQL Editor:
+5. In Supabase SQL Editor (using your normal owner/service-role
+   connection — not the writer role, which has no SELECT):
    ```sql
    SELECT doc_type, committed_at, left(content_hash, 12) AS hash
    FROM legal_document_versions
    ORDER BY recorded_at DESC LIMIT 5;
    ```
-   You should see exactly one new row for `privacy` (the other two docs
-   weren't touched, so the unique-hash constraint makes their inserts
-   no-ops if you tried, and the workflow only sed-rewrites changed
-   files anyway).
+   You should see one new row for `privacy`. The other docs weren't
+   touched, so even if the recorder tried, the unique-hash constraint
+   would make them no-ops — and the workflow only sed-rewrites changed
+   files anyway.
 
 ## 8. If `legal-audit` keeps failing
 
-- **HTTP 401 from PostgREST**: anon key is wrong or revoked. Regenerate
-  in Supabase → API.
-- **HTTP 403 / 42501**: RLS policy missing or wrong. Re-run the migration
-  from §3a.
-- **HTTP 409 / 23505**: not a failure — duplicate hash means the content
-  is unchanged from the last recorded version. The recorder logs this as
-  `unchanged` and exits 0.
+- **`28P01` / authentication failed**: wrong
+  `LEGAL_AUDIT_WRITE_ROLE_PASSWORD`. Rotate with
+  `ALTER ROLE legal_audit_writer PASSWORD '...'` and update the secret.
+- **`42501` / permission denied for table legal_document_versions**:
+  GRANT or POLICY missing. Re-run §3b.
+- **`23505` / duplicate key value violates unique constraint**: not a
+  failure — duplicate hash means the content is unchanged from the last
+  recorded version. The recorder logs this as `unchanged` and exits 0.
+- **`ENOTFOUND` / host unreachable**: `DATABASE_URL` host is wrong, or
+  the network blocks egress from GitHub runners. Supabase pooler hosts
+  are usually `<project>.pooler.supabase.com` — make sure you're using
+  the direct-connection host, not the pooler, since the writer role logs
+  in directly.
 - **Push step fails with 403**: workflow `contents: write` permission
   isn't granted. Check §2.
 - **Loop: the bot's commit re-triggers the workflow**: the `if:` guard

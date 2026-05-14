@@ -33,5 +33,4 @@ jobs:
       - name: Run backend unit tests
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
         run: npx tsx --test src/tests/backend-unit/*.test.ts

@@ -92,7 +92,7 @@ jobs:
 
       - name: Record legal doc versions to Supabase
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LEGAL_AUDIT_WRITE_ROLE_PASSWORD: ${{ secrets.LEGAL_AUDIT_WRITE_ROLE_PASSWORD }}
           GIT_COMMITTED_AT: ${{ steps.commit.outputs.committed_at }}
         run: npx tsx src/scripts/legal/record-versions.ts
