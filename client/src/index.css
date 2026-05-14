@@ -265,6 +265,14 @@
     background: hsl(var(--background) / 0.15);
   }
 
+  .portfolio-card-click-hint {
+    right: calc(100% + 6px);
+    top: 30%;
+    width: clamp(4.4rem, 9vw, 8.25rem);
+    transform-origin: right center;
+    animation: chalk-arrow-point 1.45s ease-in-out infinite;
+  }
+
   .project-cube-face--1 {
     transform: rotateY(0deg) translateZ(calc(var(--cube-size) / 2));
   }
@@ -290,6 +298,12 @@
 
   .project-cube-face {
     padding: 0.4rem;
+  }
+
+  .portfolio-card-click-hint {
+    right: calc(100% + 6px);
+    top: 32%;
+    width: clamp(2.8rem, 12.5vw, 3.2rem);
   }
 }
 
@@ -405,6 +419,15 @@
   }
   100% {
     transform: translateY(0);
+  }
+}
+
+@keyframes chalk-arrow-point {
+  0%, 100% {
+    transform: translateX(-6px) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(0) rotate(0deg);
   }
 }
 

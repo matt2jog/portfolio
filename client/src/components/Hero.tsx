@@ -1,12 +1,9 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { SkillsConstellation } from "./SkillsConstellation";
-import { usePersonalInformation } from "../hooks/use-personal-information";
 
 export function Hero() {
   const [, setLocation] = useLocation();
-  const { data: personalInfo } = usePersonalInformation();
-  const name = personalInfo?.name ? personalInfo.name : 'Matt';
   const navButtons = [
     { label: "Explore work", href: "/portfolio" },
     { label: "Reach out", href: "/tree" },
@@ -30,7 +27,7 @@ export function Hero() {
       </div>
 
       {/* Desktop foreground */}
-      <div className="relative z-20 hidden min-h-screen w-full max-w-screen-2xl mx-auto px-6 md:px-20 pt-24 pb-8 md:flex flex-col pointer-events-none lg:justify-center lg:pt-20 lg:gap-12">
+      <div className="relative z-20 hidden min-h-screen w-full px-6 md:px-10 xl:px-12 pt-24 pb-8 md:flex flex-col pointer-events-none lg:justify-center lg:pt-20 lg:gap-12">
         <div className="max-w-4xl w-full pointer-events-auto pr-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -39,12 +36,6 @@ export function Hero() {
             className="flex flex-col gap-6 lg:gap-8 mt-4 lg:mt-8"
           >
             <div className="flex flex-col gap-0 lg:gap-1">
-              <div className="flex flex-col justify-center pl-2 w-full max-w-4xl">
-                <h2 className="text-xs md:text-sm lg:text-base font-mono font-medium tracking-wide text-gray-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] mb-1">
-                  Hey! My name is {name}, and I am an
-                </h2>
-              </div>
-
               <div className="flex flex-col justify-center flex-1 w-full max-w-5xl pl-2">
                 <h1 className="text-6xl md:text-[5.5rem] lg:text-[7.5rem] font-black tracking-tighter text-white leading-[0.9] drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] w-full">
                   FULL STACK
@@ -102,10 +93,6 @@ export function Hero() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="flex flex-col gap-4"
         >
-          <h2 className="text-[0.78rem] font-mono font-medium tracking-wide text-gray-200 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-            Hey! I'm {name}, and I am an
-          </h2>
-
           <div className="grid grid-cols-[minmax(0,1fr)_clamp(3.9rem,21vw,5.25rem)] items-center gap-3">
             <div className="min-w-0">
               <h1 className="text-[clamp(2.35rem,11.6vw,3.25rem)] font-black tracking-normal text-white leading-[0.9] whitespace-nowrap drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
