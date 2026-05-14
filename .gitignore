@@ -9,7 +9,13 @@
 coverage/
 playwright-report/
 test-results/
+src/tests/ui-artifacts/desktop/**
+src/tests/ui-artifacts/mobile/**
+!src/tests/ui-artifacts/desktop/.gitkeep
+!src/tests/ui-artifacts/mobile/.gitkeep
 .DS_Store
+
+.mcp.json
 
 LEGAL_COMPLIANCE_EXECUTION_CHECKLIST.md
 legal_plan.md
