@@ -1,5 +1,5 @@
 import { Tool, type ToolDefinition } from "../tool";
-import { db } from "../../db";
+import { db } from "../../data/db";
 import { projects, xyzBullets } from "../../../shared/schema";
 import { eq, inArray } from "drizzle-orm";
 

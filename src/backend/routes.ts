@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
-import { db } from "./db";
+import { db } from "./data/db";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadMarkdownAsHtml } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";

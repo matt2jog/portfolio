@@ -30,8 +30,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@": path.resolve(import.meta.dirname, "src", "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "src", "shared"),
+      "@backend": path.resolve(import.meta.dirname, "src", "backend"),
     },
   },
   css: {
@@ -39,7 +40,7 @@ export default defineConfig({
       plugins: [],
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  root: path.resolve(import.meta.dirname, "src", "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

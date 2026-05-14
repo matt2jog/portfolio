@@ -1,4 +1,4 @@
-import { db } from "../server/db";
+import { db } from "../backend/data/db";
 import { experiences } from "../shared/schema";
 
 const mockExperiences = [

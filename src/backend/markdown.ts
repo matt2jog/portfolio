@@ -52,7 +52,7 @@ export function loadMarkdownAsHtml(filename: string): string | null {
   try {
     // Resolve from the process working directory so this works for both dev and CJS production builds.
     const projectRoot = process.cwd();
-    const filePath = path.join(projectRoot, filename);
+    const filePath = path.join(projectRoot, "legal", filename);
     
     const markdown = fs.readFileSync(filePath, "utf-8");
     const html = markdownToHtml(markdown);

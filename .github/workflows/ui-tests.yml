@@ -48,6 +48,6 @@ jobs:
         with:
           name: viewport-human-judge
           path: |
-            tests/viewport-human-judge/desktop
-            tests/viewport-human-judge/mobile
+            src/tests/viewport-human-judge/desktop
+            src/tests/viewport-human-judge/mobile
           if-no-files-found: warn

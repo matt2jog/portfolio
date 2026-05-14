@@ -1,0 +1,48 @@
+name: Legal Audit
+
+# Records the content of /legal/*.md to Supabase whenever legal docs change on
+# the main branch. This is an append-only audit log used to answer
+# "which version of the privacy policy was binding at time T?".
+#
+# The workflow is a required status check on the main branch. If Supabase is
+# unavailable and all retries fail, this workflow fails, which blocks future
+# merges until the audit can be recorded. That tradeoff is intentional: legal
+# audit integrity > merge availability.
+
+on:
+  push:
+    branches:
+      - prod
+    paths:
+      - "legal/**.md"
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute commit timestamp
+        id: commit
+        run: |
+          echo "committed_at=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record legal doc versions to Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GIT_COMMITTED_AT: ${{ steps.commit.outputs.committed_at }}
+        run: npx tsx src/scripts/legal/record-versions.ts

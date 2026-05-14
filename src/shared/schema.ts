@@ -274,3 +274,24 @@ export const insertExperienceSchema = createInsertSchema(experiences).pick({
 
 export const updateExperienceSchema = insertExperienceSchema.partial();
 export type DbExperience = typeof experiences.$inferSelect;
+
+export const legalDocumentVersions = pgTable(
+  "legal_document_versions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    docType: text("doc_type").notNull(),
+    content: text("content").notNull(),
+    contentHash: text("content_hash").notNull(),
+    commitSha: text("commit_sha").notNull(),
+    committedAt: timestamp("committed_at", { withTimezone: true }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    uniqueDocHash: uniqueIndex("legal_document_versions_doc_type_content_hash_key").on(
+      t.docType,
+      t.contentHash,
+    ),
+  }),
+);
+
+export type DbLegalDocumentVersion = typeof legalDocumentVersions.$inferSelect;

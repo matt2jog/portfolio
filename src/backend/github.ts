@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./data/db";
 import { githubTimelineEvents } from "../shared/schema";
 import { desc, eq, sql } from "drizzle-orm";
 

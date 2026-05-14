@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { expectedScreenshotItems, viewportNames } from "../support/expected-screenshots";
 
-const root = path.resolve(process.cwd(), "tests", "viewport-human-judge");
+const root = path.resolve(process.cwd(), "src", "tests", "viewport-human-judge");
 const missing: string[] = [];
 
 for (const viewport of viewportNames) {

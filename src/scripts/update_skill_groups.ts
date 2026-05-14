@@ -1,6 +1,6 @@
 import fs from "fs";
 import dotenv from "dotenv";
-import { db } from "../server/db.js";
+import { db } from "../backend/data/db.js";
 import { skillsGroup, allSkills, portfolioSkills } from "../shared/schema.js";
 import { eq } from "drizzle-orm";
 

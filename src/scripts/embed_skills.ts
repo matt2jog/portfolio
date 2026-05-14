@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { db } from "../server/db.js";
+import { db } from "../backend/data/db.js";
 import { allSkills } from "../shared/schema.js";
 import { isNull, eq } from "drizzle-orm";
 

@@ -1,5 +1,5 @@
 import { desc, sql } from "drizzle-orm";
-import { db } from "./db";
+import { db } from "./data/db";
 import { linkedinTimelineEvents, personalInformation } from "../shared/schema";
 
 type LinkedinEventType = "post" | "repost" | "article";

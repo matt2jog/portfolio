@@ -9,11 +9,13 @@
 coverage/
 playwright-report/
 test-results/
-tests/viewport-human-judge/desktop/**
-tests/viewport-human-judge/mobile/**
-!tests/viewport-human-judge/desktop/.gitkeep
-!tests/viewport-human-judge/mobile/.gitkeep
+src/tests/viewport-human-judge/desktop/**
+src/tests/viewport-human-judge/mobile/**
+!src/tests/viewport-human-judge/desktop/.gitkeep
+!src/tests/viewport-human-judge/mobile/.gitkeep
 .DS_Store
+
+.mcp.json
 
 LEGAL_COMPLIANCE_EXECUTION_CHECKLIST.md
 legal_plan.md

@@ -3,7 +3,7 @@ import path from "node:path";
 import { viewportNames } from "../support/expected-screenshots";
 
 export default async function globalSetup() {
-  const root = path.resolve(process.cwd(), "tests", "viewport-human-judge");
+  const root = path.resolve(process.cwd(), "src", "tests", "viewport-human-judge");
 
   for (const viewport of viewportNames) {
     const dir = path.join(root, viewport);
