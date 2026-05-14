@@ -54,7 +54,15 @@ function buildWriterConnectionString(): string {
   const base = required("DATABASE_URL");
   const password = required("LEGAL_AUDIT_WRITE_ROLE_PASSWORD");
   const url = new URL(base);
-  url.username = WRITER_ROLE;
+  // Supavisor pooler hosts (`*.pooler.supabase.com`) require the tenant
+  // identifier baked into the username as `<role>.<project_ref>`. The
+  // original username is `postgres.<project_ref>`, so preserve that suffix
+  // when swapping in the writer role. Direct-connection hosts don't use
+  // this convention, so only apply it when the username actually has a dot.
+  const originalUser = decodeURIComponent(url.username);
+  const dotIndex = originalUser.indexOf(".");
+  const tenantSuffix = dotIndex >= 0 ? originalUser.slice(dotIndex) : "";
+  url.username = `${WRITER_ROLE}${tenantSuffix}`;
   url.password = encodeURIComponent(password);
   return url.toString();
 }
