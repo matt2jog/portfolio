@@ -146,7 +146,12 @@ function NicheCarousel({ links }: { links: LinkItem[] }) {
   if (links.length === 0) return null;
 
   return (
-    <div data-testid="niche-carousel" className="relative flex h-[400px] w-full items-center justify-center py-10" style={{ perspective: "1000px" }}>
+    <div
+      data-testid="niche-carousel"
+      data-active-card={links[index]?.id ?? ""}
+      className="relative flex h-[400px] w-full items-center justify-center py-10"
+      style={{ perspective: "1000px" }}
+    >
       <div className="relative h-full w-full max-w-[320px] overflow-visible">
         <AnimatePresence mode="popLayout">
           {links.map((item, i) => {

@@ -44,7 +44,7 @@ export function ConsentBanner({ isOpen, onClose, jurisdiction }: ConsentBannerPr
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent data-testid="consent-banner" className="sm:max-w-md">
         {!showManage ? (
           <>
             <DialogHeader>

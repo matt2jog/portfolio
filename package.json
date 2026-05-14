@@ -8,7 +8,11 @@
     "dev": "cross-env NODE_ENV=development tsx watch server/index.ts",
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
+    "lint": "eslint .",
     "check": "tsc",
+    "test:ui": "playwright test --config tests/github-actions/playwright.config.ts",
+    "test:ui-pictures": "playwright test --config tests/viewport-human-judge/playwright.config.ts",
+    "test:ui-pictures:verify": "tsx tests/viewport-human-judge/verify-screenshots.ts",
     "db:push": "drizzle-kit push",
     "skills:cluster": "tsx --env-file=.env script/cluster_anchors.ts && tsx --env-file=.env script/update_skill_groups.ts"
   },
@@ -94,6 +98,8 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.60.0",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.4",
@@ -115,12 +121,17 @@
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.4",
     "esbuild": "^0.25.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
     "jimp": "^1.6.0",
     "playwright": "^1.59.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
+    "typescript-eslint": "^8.59.3",
     "vite": "^7.1.9"
   },
   "optionalDependencies": {

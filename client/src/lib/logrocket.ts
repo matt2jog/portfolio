@@ -17,6 +17,22 @@ let ipAttached = false;
 
 const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/google/callback"];
 
+declare global {
+  interface Window {
+    __LOGROCKET_TEST_MODE?: boolean;
+    __LOGROCKET_TEST_EVENTS?: Array<{
+      event: string;
+      payload?: Record<string, unknown>;
+    }>;
+  }
+}
+
+function recordLogRocketTestEvent(event: string, payload?: Record<string, unknown>) {
+  if (typeof window === "undefined" || !window.__LOGROCKET_TEST_MODE) return;
+  window.__LOGROCKET_TEST_EVENTS ??= [];
+  window.__LOGROCKET_TEST_EVENTS.push({ event, payload });
+}
+
 function getAnonymousId() {
   if (typeof window === "undefined") return "";
 
@@ -36,6 +52,13 @@ export function initLogRocket() {
 
   // Check consent before initializing LogRocket
   if (!isTrackingAllowed()) {
+    recordLogRocketTestEvent("blocked", { reason: "consent" });
+    return;
+  }
+
+  if (window.__LOGROCKET_TEST_MODE) {
+    recordLogRocketTestEvent("init");
+    initialized = true;
     return;
   }
 

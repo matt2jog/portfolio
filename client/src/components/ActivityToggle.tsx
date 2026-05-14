@@ -13,7 +13,11 @@ export function ActivityToggle({ activeTab, onChange }: ActivityToggleProps) {
   ] as const;
 
   return (
-    <div className="flex space-x-1 bg-background/60 p-1.5 rounded-full mx-auto w-fit mb-12 shadow-inner border border-border/50 backdrop-blur-sm">
+    <div
+      data-testid="activity-toggle"
+      data-active-tab={activeTab}
+      className="flex space-x-1 bg-background/60 p-1.5 rounded-full mx-auto w-fit mb-12 shadow-inner border border-border/50 backdrop-blur-sm"
+    >
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
@@ -21,6 +25,7 @@ export function ActivityToggle({ activeTab, onChange }: ActivityToggleProps) {
         return (
           <button
             key={tab.id}
+            data-testid={`activity-tab-${tab.id}`}
             onClick={() => onChange(tab.id as "github" | "linkedin")}
             className={`relative flex items-center space-x-2 px-6 py-2.5 text-sm font-medium transition-colors outline-none rounded-full
               ${isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"}

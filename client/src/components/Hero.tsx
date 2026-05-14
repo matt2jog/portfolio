@@ -12,7 +12,7 @@ export function Hero() {
   ];
 
   return (
-    <section className="relative min-h-screen overflow-visible md:overflow-hidden">
+    <section data-testid="hero" className="relative min-h-screen overflow-visible md:overflow-hidden">
       
       {/* Desktop background constellation */}
       <div className="absolute inset-0 z-0 hidden md:block">

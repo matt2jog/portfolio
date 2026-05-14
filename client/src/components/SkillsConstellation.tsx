@@ -443,7 +443,11 @@ export function SkillsConstellation() {
   };
   
   return (
-    <div className="relative w-full h-full pointer-events-none flex flex-col items-center justify-center md:block">
+    <div
+      data-testid="skills-constellation"
+      data-active-group={currentTextGroup.name}
+      className="relative w-full h-full pointer-events-none flex flex-col items-center justify-center md:block"
+    >
       {/* Desktop Navigation Dots */}
       <div className="hidden md:flex absolute top-1/2 right-8 xl:right-12 -translate-y-1/2 flex-col justify-center items-center gap-3 pointer-events-auto z-40">
         <button

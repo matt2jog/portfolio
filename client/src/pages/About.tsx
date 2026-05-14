@@ -77,6 +77,8 @@ export default function About() {
         {/* Hero: Flippable Business Card */}
         <div className="flex flex-col items-center w-full relative z-20">
           <div
+            data-testid="business-card-toggle"
+            data-card-open={isOpen}
             className={`
               relative flex-shrink-0 cursor-pointer select-none
               transition-all ease-[cubic-bezier(0.23,1,0.32,1)]
@@ -106,7 +108,9 @@ export default function About() {
 
         {/* Experience Timeline */}
         <div className="w-full">
-          <ExperienceTimeline experiences={safeExperiences} />
+          <div data-testid="about-timeline">
+            <ExperienceTimeline experiences={safeExperiences} />
+          </div>
         </div>
 
       </main>

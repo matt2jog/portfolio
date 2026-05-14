@@ -253,6 +253,7 @@ export default function Portfolio() {
               </div>
               <div className="hidden md:flex gap-4">
                 <button
+                  aria-label="Previous project page"
                   onClick={prevFace}
                   className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
                 >
@@ -262,6 +263,7 @@ export default function Portfolio() {
                   />
                 </button>
                 <button
+                  aria-label="Next project page"
                   onClick={nextFace}
                   className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
                 >
@@ -273,8 +275,10 @@ export default function Portfolio() {
               </div>
             </div>
 
-            <div className="project-cube-scene mx-auto">
+            <div data-testid="portfolio-cube-scene" className="project-cube-scene mx-auto">
               <div
+                data-testid="portfolio-cube"
+                data-project-page={currentProjectPage}
                 className="project-cube"
                 style={{
                   transform: `rotateX(5deg) rotateY(${12 + rotationStep * -90}deg)`,
@@ -330,6 +334,7 @@ export default function Portfolio() {
 
             <div className="flex md:hidden justify-center gap-4 mt-8 mb-20">
               <button
+                aria-label="Previous project page"
                 onClick={prevFace}
                 className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
               >
@@ -339,6 +344,7 @@ export default function Portfolio() {
                 />
               </button>
               <button
+                aria-label="Next project page"
                 onClick={nextFace}
                 className="p-4 border border-white/10 hover:border-primary/50 text-white/50 hover:text-primary transition-all bg-black/60 group"
               >

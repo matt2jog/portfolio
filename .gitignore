@@ -9,6 +9,10 @@
 coverage/
 playwright-report/
 test-results/
+tests/viewport-human-judge/desktop/**
+tests/viewport-human-judge/mobile/**
+!tests/viewport-human-judge/desktop/.gitkeep
+!tests/viewport-human-judge/mobile/.gitkeep
 .DS_Store
 
 LEGAL_COMPLIANCE_EXECUTION_CHECKLIST.md

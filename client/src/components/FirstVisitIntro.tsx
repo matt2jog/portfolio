@@ -52,16 +52,34 @@ const PROMPT_TEXT = "Let me show you around";
 const TYPE_DELAY_MS = 92;
 const SECTION_PAUSE_MS = 750;
 
+declare global {
+  interface Window {
+    __FIRST_VISIT_INTRO_TEST_STATE?: {
+      stage: IntroStage;
+      typingPhase: TypingPhase;
+      phrase?: string;
+      showPrompt?: boolean;
+      typedIntro?: string;
+      typedName?: string;
+      typedPrompt?: string;
+    };
+  }
+}
+
 export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
-  const phrase = useMemo(() => getTimePhrase(), []);
-  const [stage, setStage] = useState<IntroStage>("phrase");
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [typedIntro, setTypedIntro] = useState("");
-  const [typedName, setTypedName] = useState("");
-  const [typedPrompt, setTypedPrompt] = useState("");
-  const [typingPhase, setTypingPhase] = useState<TypingPhase>("introPause");
+  const testState =
+    typeof window !== "undefined" ? window.__FIRST_VISIT_INTRO_TEST_STATE : undefined;
+  const phrase = useMemo(() => testState?.phrase ?? getTimePhrase(), [testState?.phrase]);
+  const [stage, setStage] = useState<IntroStage>(testState?.stage ?? "phrase");
+  const [showPrompt, setShowPrompt] = useState(testState?.showPrompt ?? false);
+  const [typedIntro, setTypedIntro] = useState(testState?.typedIntro ?? "");
+  const [typedName, setTypedName] = useState(testState?.typedName ?? "");
+  const [typedPrompt, setTypedPrompt] = useState(testState?.typedPrompt ?? "");
+  const [typingPhase, setTypingPhase] = useState<TypingPhase>(testState?.typingPhase ?? "introPause");
 
   useEffect(() => {
+    if (testState) return;
+
     const gapTimer = window.setTimeout(() => setStage("gap"), 4000);
     const nameTimer = window.setTimeout(() => setStage("name"), 8000);
 
@@ -69,9 +87,10 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
       window.clearTimeout(gapTimer);
       window.clearTimeout(nameTimer);
     };
-  }, []);
+  }, [testState]);
 
   useEffect(() => {
+    if (testState) return;
     if (stage !== "name") return;
 
     setTypedIntro("");
@@ -82,9 +101,10 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
 
     const introStartTimer = window.setTimeout(() => setTypingPhase("intro"), SECTION_PAUSE_MS);
     return () => window.clearTimeout(introStartTimer);
-  }, [stage]);
+  }, [stage, testState]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "intro") return;
 
     let index = 0;
@@ -99,16 +119,18 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     }, TYPE_DELAY_MS);
 
     return () => window.clearInterval(introTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "namePause") return;
 
     const nameStartTimer = window.setTimeout(() => setTypingPhase("name"), SECTION_PAUSE_MS);
     return () => window.clearTimeout(nameStartTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "name") return;
 
     let index = 0;
@@ -124,16 +146,18 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     }, TYPE_DELAY_MS);
 
     return () => window.clearInterval(nameTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "promptPause") return;
 
     const promptStartTimer = window.setTimeout(() => setTypingPhase("prompt"), SECTION_PAUSE_MS);
     return () => window.clearTimeout(promptStartTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "prompt") return;
 
     let index = 0;
@@ -148,14 +172,15 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     }, TYPE_DELAY_MS);
 
     return () => window.clearInterval(promptTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   useEffect(() => {
+    if (testState) return;
     if (typingPhase !== "buttonPause") return;
 
     const buttonTimer = window.setTimeout(() => setTypingPhase("button"), SECTION_PAUSE_MS);
     return () => window.clearTimeout(buttonTimer);
-  }, [typingPhase]);
+  }, [testState, typingPhase]);
 
   const speakName = () => {
     if (!("speechSynthesis" in window)) return;
@@ -179,7 +204,12 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
   const showPhonetic = !["introPause", "intro", "namePause", "name"].includes(typingPhase);
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white">
+    <div
+      data-testid="first-visit-intro"
+      data-intro-stage={stage}
+      data-typing-phase={typingPhase}
+      className="fixed inset-0 z-[100] overflow-hidden bg-black text-white"
+    >
       <div className="absolute inset-0 opacity-80">
         <IntroDither
           waveColor={[0.36, 0.74, 0.78]}
