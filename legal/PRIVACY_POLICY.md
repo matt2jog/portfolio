@@ -44,7 +44,7 @@ If you sign in to the admin panel using Google OAuth, we collect and store:
 
 When authenticated admin users create, edit, or delete portfolio content, we log:
 
-- **Audit Logs:** User ID, action type (create/update/delete), timestamp, and the data payload (portfolio/bio/skills content, changes made).
+- **Audit Logs:** User-ID, action type (create/update/delete), timestamp, and the data payload (portfolio/bio/skills content, changes made).
 
 ### 3.4 Cookies We Use
 
