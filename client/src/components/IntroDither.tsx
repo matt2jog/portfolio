@@ -164,11 +164,47 @@ function DitherPlane({
 
   useEffect(() => {
     const dpr = gl.getPixelRatio();
-    uniformsRef.current.resolution.value.set(
-      Math.floor(size.width * dpr),
-      Math.floor(size.height * dpr),
-    );
+    const width = Math.floor(size.width * dpr);
+    const height = Math.floor(size.height * dpr);
+    uniformsRef.current.resolution.value.set(width, height);
+
+    if (mouseRef.current.lengthSq() === 0) {
+      mouseRef.current.set(width * 0.5, height * 0.5);
+    }
   }, [gl, size]);
+
+  useEffect(() => {
+    if (!enableMouseInteraction) return;
+
+    const setPointerPosition = (clientX: number, clientY: number) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const dpr = gl.getPixelRatio();
+      mouseRef.current.set(
+        THREE.MathUtils.clamp((clientX - rect.left) * dpr, 0, rect.width * dpr),
+        THREE.MathUtils.clamp((clientY - rect.top) * dpr, 0, rect.height * dpr),
+      );
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      setPointerPosition(event.clientX, event.clientY);
+    };
+
+    const handleTouch = (event: TouchEvent) => {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (!touch) return;
+      setPointerPosition(touch.clientX, touch.clientY);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("touchstart", handleTouch, { passive: true });
+    window.addEventListener("touchmove", handleTouch, { passive: true });
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("touchstart", handleTouch);
+      window.removeEventListener("touchmove", handleTouch);
+    };
+  }, [enableMouseInteraction, gl]);
 
   useFrame(({ clock }) => {
     const uniforms = uniformsRef.current;
@@ -184,19 +220,8 @@ function DitherPlane({
     uniforms.mousePos.value.copy(mouseRef.current);
   });
 
-  const handlePointerMove = (event: THREE.Event) => {
-    if (!enableMouseInteraction || !("clientX" in event)) return;
-    const pointerEvent = event as PointerEvent;
-    const rect = gl.domElement.getBoundingClientRect();
-    const dpr = gl.getPixelRatio();
-    mouseRef.current.set(
-      (pointerEvent.clientX - rect.left) * dpr,
-      (pointerEvent.clientY - rect.top) * dpr,
-    );
-  };
-
   return (
-    <mesh onPointerMove={handlePointerMove} scale={[viewport.width, viewport.height, 1]}>
+    <mesh scale={[viewport.width, viewport.height, 1]}>
       <planeGeometry args={[1, 1]} />
       <shaderMaterial vertexShader={vertexShader} fragmentShader={fragmentShader} uniforms={uniformsRef.current} />
     </mesh>

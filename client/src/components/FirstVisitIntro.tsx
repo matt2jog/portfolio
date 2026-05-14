@@ -229,13 +229,13 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
                 </h1>
 
                 {showPhonetic && (
-                  <div className="mt-2 flex items-center gap-2 font-mono text-[clamp(0.8rem,2.8vw,1rem)] text-cyan-200/90">
-                    <span aria-label="phonetic pronunciation">(too-zhawg)</span>
+                  <div className="relative mt-2 w-screen text-center font-mono text-[clamp(0.8rem,2.8vw,1rem)] text-cyan-200/90">
+                    <span aria-label="phonetic pronunciation">(too-zsaawg)</span>
                     <button
                       type="button"
                       onClick={speakName}
                       aria-label="Play pronunciation"
-                      className="grid h-8 w-8 shrink-0 place-items-center text-cyan-100 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+                      className="absolute left-[calc(50%+3.8rem)] top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center text-cyan-100 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 sm:left-[calc(50%+4.25rem)]"
                     >
                       <Speech className="h-5 w-5" aria-hidden="true" />
                     </button>
