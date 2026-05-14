@@ -1,7 +1,7 @@
 # Privacy Policy
 
-**Last Updated:** March 27, 2026  
-**Effective Date:** March 27, 2026
+**Last Updated:** May 14, 2026  
+**Effective Date:** May 14, 2026
 
 ## 1. Introduction
 
