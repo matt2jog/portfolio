@@ -40,6 +40,7 @@ export default defineConfig({
     ? undefined
     : {
         command: "npx cross-env NODE_ENV=development PORT=5000 tsx src/backend/index.ts",
+        cwd: "../../..",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
