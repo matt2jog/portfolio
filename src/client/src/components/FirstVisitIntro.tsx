@@ -78,6 +78,13 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
   const [typingPhase, setTypingPhase] = useState<TypingPhase>(testState?.typingPhase ?? "introPause");
 
   useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, []);
+
+  useEffect(() => {
     if (testState) return;
 
     const gapTimer = window.setTimeout(() => setStage("gap"), 4000);
@@ -186,7 +193,16 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     if (!("speechSynthesis" in window)) return;
 
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance("Matthew too zsaawg");
+    
+    // Different TTS engines process phonetic spellings differently.
+    // "zs" works perfectly for the Windows TTS engine but often breaks on others.
+    // "zh" is a much more universally understood phonetic for Apple, Android, and Linux engines.
+    const isWindows = typeof navigator !== "undefined" && 
+      (/Win/.test(navigator.platform) || /Windows/.test(navigator.userAgent));
+    
+    const phoneticName = isWindows ? "Matthew too zsaawg" : "Matthew too zhawg";
+
+    const utterance = new SpeechSynthesisUtterance(phoneticName);
     utterance.rate = 0.78;
     utterance.pitch = 0.96;
     window.speechSynthesis.speak(utterance);
@@ -208,7 +224,7 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
       data-testid="first-visit-intro"
       data-intro-stage={stage}
       data-typing-phase={typingPhase}
-      className="fixed inset-0 z-[100] overflow-hidden bg-black text-white"
+      className="fixed inset-0 z-[100] overflow-hidden bg-black text-white touch-none"
     >
       <div className="absolute inset-0 opacity-80">
         <IntroDither
