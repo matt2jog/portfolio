@@ -166,6 +166,20 @@ test("portfolio cube pagination", async ({ page }, testInfo) => {
 
 test("project chat mocked welcome response", async ({ page }, testInfo) => {
   await preparePage(page);
+  
+  await page.route("**/api/public/projects/project-1", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "project-1",
+        title: "Test Project",
+        description: "A project for testing the chat interface.",
+        tech: ["Playwright", "Mock"],
+      }),
+    });
+  });
+
   await page.goto("/portfolio/project-1/chat");
   await expect(page.getByText("Portfolio Agent")).toBeVisible();
   await expect(page.getByText("Mocked 20B welcome response")).toBeVisible({ timeout: 15_000 });
