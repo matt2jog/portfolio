@@ -21,6 +21,7 @@ export default defineConfig({
     ? undefined
     : {
         command: "npm run dev:client -- --host 127.0.0.1",
+        cwd: "../../..",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

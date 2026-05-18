@@ -11,13 +11,9 @@ export const expectedScreenshotItems = [
   "consent-clickwrap/regular",
   "consent-clickwrap/manage",
   "consent-clickwrap/manage-analytics-off",
-  "privacy-policy",
-  "tracking-notice",
-  "terms-of-use",
   "hero",
   "portfolio/page-1",
   "portfolio/page-2",
-  "project-chat-page",
   "tree/linkedin",
   "tree/github",
   "tree/phone",
@@ -26,6 +22,13 @@ export const expectedScreenshotItems = [
   "tree/portfolio",
   "about/business-card-front",
   "about/business-card-back",
+] as const;
+
+export const expectedPaginatedScreenshotItems = [
+  "privacy-policy",
+  "tracking-notice",
+  "terms-of-use",
+  "project-chat-page",
   "about/timeline",
   "activity/github",
   "activity/linkedin",
