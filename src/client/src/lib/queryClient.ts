@@ -18,7 +18,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const baseHeaders = data ? { "Content-Type": "application/json" } : {};
+  const baseHeaders: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
   const headers = await buildHeaders(baseHeaders);
 
   const res = await fetch(url, {
