@@ -1,5 +1,6 @@
 import LogRocket from "logrocket";
 import { isTrackingAllowed } from "./consent";
+import { getTrackerUuid, getClientIp } from "./tracking";
 
 type MaybeUser = {
   id?: string;
@@ -10,10 +11,10 @@ type MaybeUser = {
 
 let initialized = false;
 let lastRoute = "";
-let lastSearch = "";
 let lastIdentity = "";
 let currentLogRocketUserId = "";
 let ipAttached = false;
+let uuidEmitted = false;
 
 const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/google/callback"];
 
@@ -33,24 +34,9 @@ function recordLogRocketTestEvent(event: string, payload?: Record<string, unknow
   window.__LOGROCKET_TEST_EVENTS.push({ event, payload });
 }
 
-function getAnonymousId() {
-  if (typeof window === "undefined") return "";
-
-  const key = "__lr_anon_id";
-  const existing = window.localStorage.getItem(key);
-  if (existing) return existing;
-
-  const generated = `anon_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-  window.localStorage.setItem(key, generated);
-  return generated;
-}
-
 export function initLogRocket() {
-  if (initialized || typeof window === "undefined") {
-    return;
-  }
+  if (initialized || typeof window === "undefined") return;
 
-  // Check consent before initializing LogRocket
   if (!isTrackingAllowed()) {
     recordLogRocketTestEvent("blocked", { reason: "consent" });
     return;
@@ -63,9 +49,7 @@ export function initLogRocket() {
   }
 
   LogRocket.init("ltznbv/portfolio");
-  
   console.log("interest logging started");
-  
   LogRocket.getSessionURL((url) => {
     (window as any).__logrocketSessionURL = url;
   });
@@ -75,12 +59,8 @@ export function initLogRocket() {
 
 export function identifyLogRocketUser(user: MaybeUser) {
   if (typeof window === "undefined") return;
-  
-  // Skip if tracking not allowed
-  if (!isTrackingAllowed()) {
-    return;
-  }
-  
+  if (!isTrackingAllowed()) return;
+
   initLogRocket();
 
   if (user?.id) {
@@ -95,103 +75,87 @@ export function identifyLogRocketUser(user: MaybeUser) {
     LogRocket.identify(user.id, traits);
     lastIdentity = identity;
     currentLogRocketUserId = user.id;
+    emitLogRocketUuidEvent();
     return;
   }
 
-  const anonId = getAnonymousId();
+  const uuid = getTrackerUuid();
+  const anonId = uuid ?? `anon_${Date.now().toString(36)}`;
   const identity = `anon:${anonId}`;
   if (identity === lastIdentity) return;
 
-  LogRocket.identify(identity, {
-    role: "guest",
-  });
+  LogRocket.identify(identity, { role: "guest" });
   lastIdentity = identity;
   currentLogRocketUserId = identity;
+  emitLogRocketUuidEvent();
 }
 
-function parseQuery(search: string) {
-  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
-  const out: Record<string, string> = {};
-  params.forEach((value, key) => {
-    out[key] = value;
-  });
-  return out;
-}
-
-export function trackLogRocketRoute(path: string, search = "") {
+export function emitLogRocketUuidEvent() {
   if (typeof window === "undefined") return;
+  if (!isTrackingAllowed()) return;
+  if (uuidEmitted) return;
 
-  // Skip if tracking not allowed
-  if (!isTrackingAllowed()) {
+  const uuid = getTrackerUuid();
+  if (!uuid) return;
+
+  uuidEmitted = true;
+
+  if (window.__LOGROCKET_TEST_MODE) {
+    recordLogRocketTestEvent("user_uuid", { uuid });
     return;
   }
+
+  if (initialized) {
+    LogRocket.track("user_uuid", { uuid });
+  }
+}
+
+export function trackLogRocketRoute(path: string) {
+  if (typeof window === "undefined") return;
+  if (!isTrackingAllowed()) return;
 
   initLogRocket();
 
   if (!path) return;
-  if (SENSITIVE_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+  if (SENSITIVE_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
+  if (path === lastRoute) return;
+
+  lastRoute = path;
+
+  if (window.__LOGROCKET_TEST_MODE) {
+    recordLogRocketTestEvent("route_change", { path });
     return;
   }
 
-  const normalizedSearch = search || "";
-
-  if (path === lastRoute && normalizedSearch === lastSearch) return;
-  lastRoute = path;
-  lastSearch = normalizedSearch;
-
-  const query = parseQuery(normalizedSearch);
-  const hasQuery = Object.keys(query).length > 0;
-  const queryJson = JSON.stringify(query);
-
   LogRocket.track("route_change", {
     path,
-    query: queryJson,
-    rawQuery: normalizedSearch,
     at: new Date().toISOString(),
   });
-
-  if (hasQuery) {
-    LogRocket.track("query_params", {
-      endpoint: path,
-      query: queryJson,
-      rawQuery: normalizedSearch,
-      at: new Date().toISOString(),
-    });
-  }
 }
 
 export async function attachLogRocketIp() {
   if (typeof window === "undefined" || ipAttached) return;
-
-  // Skip if tracking not allowed
-  if (!isTrackingAllowed()) {
-    return;
-  }
+  if (!isTrackingAllowed()) return;
 
   initLogRocket();
 
   try {
-    const res = await fetch("/api/public/ip", { credentials: "include" });
-    if (!res.ok) return;
-
-    const data = await res.json();
-    const ip = typeof data?.ip === "string" ? data.ip : "";
+    const ip = await getClientIp();
     if (!ip) return;
 
     ipAttached = true;
     (window as any).__logrocketClientIp = ip;
 
-    if (currentLogRocketUserId) {
-      LogRocket.identify(currentLogRocketUserId, {
-        ip_address: ip,
-      });
+    if (window.__LOGROCKET_TEST_MODE) {
+      recordLogRocketTestEvent("client_ip", { ip });
+      return;
     }
 
-    LogRocket.track("client_ip", {
-      ip,
-      at: new Date().toISOString(),
-    });
-  } catch (_err) {
-    // no-op for local/dev telemetry setup
+    if (currentLogRocketUserId) {
+      LogRocket.identify(currentLogRocketUserId, { ip_address: ip });
+    }
+    LogRocket.track("client_ip", { ip, at: new Date().toISOString() });
+  } catch {
+    // telemetry is non-critical
   }
 }
