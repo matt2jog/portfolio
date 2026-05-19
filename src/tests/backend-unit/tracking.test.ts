@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateHashedUuid, getRequestTrackerUuid, TRACKER_COOKIE_NAME } from "../../backend/tracking-utils";
+import { generateHashedUuid, getRequestTrackerUuid, TRACKER_COOKIE_NAME, makeTrackingIpCacheKey } from "../../backend/tracking-utils";
 
 // ── generateHashedUuid ────────────────────────────────────────────────────────
 
@@ -55,4 +55,26 @@ test("getRequestTrackerUuid handles URL-encoded cookie values", () => {
 
 test("TRACKER_COOKIE_NAME is tr_uuid", () => {
   assert.equal(TRACKER_COOKIE_NAME, "tr_uuid");
+});
+
+// ── makeTrackingIpCacheKey ────────────────────────────────────────────────────
+
+test("makeTrackingIpCacheKey returns uuid::ip format", () => {
+  const key = makeTrackingIpCacheKey("abc123", "1.2.3.4");
+  assert.equal(key, "abc123::1.2.3.4");
+});
+
+test("makeTrackingIpCacheKey produces distinct keys for different uuid/ip combos", () => {
+  const a = makeTrackingIpCacheKey("uuid-A", "1.2.3.4");
+  const b = makeTrackingIpCacheKey("uuid-B", "1.2.3.4");
+  const c = makeTrackingIpCacheKey("uuid-A", "5.6.7.8");
+  assert.notEqual(a, b);
+  assert.notEqual(a, c);
+  assert.notEqual(b, c);
+});
+
+test("makeTrackingIpCacheKey does not collide when uuid and ip are swapped", () => {
+  const forward = makeTrackingIpCacheKey("aaa", "bbb");
+  const reversed = makeTrackingIpCacheKey("bbb", "aaa");
+  assert.notEqual(forward, reversed);
 });

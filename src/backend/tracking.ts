@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./data/db";
-import { browserTracking, browserTrackingIps, browserRequestLogs } from "@shared/schema";
+import { browserTracking, browserTrackingIps, browserRequestLogs, ipRateLogs } from "@shared/schema";
 import { extractClientIp } from "./geoip";
 import { eq } from "drizzle-orm";
 import {
@@ -8,9 +8,14 @@ import {
   parseCookies,
   generateHashedUuid,
   getRequestTrackerUuid,
+  makeTrackingIpCacheKey,
 } from "./tracking-utils";
 
 export { TRACKER_COOKIE_NAME, generateHashedUuid, getRequestTrackerUuid } from "./tracking-utils";
+
+// Keyed by makeTrackingIpCacheKey(uuid, ip) → browser_tracking_ips.id
+// Populated by registerTrackedUuid; no expiry (the mapping is permanent once consented).
+const trackingIpIdCache = new Map<string, string>();
 
 const COOKIE_MAX_AGE_MS = 10 * 365 * 24 * 60 * 60 * 1000; // 10 years
 
@@ -104,13 +109,18 @@ export async function registerTrackedUuid(uuid: string, ip: string | undefined):
   trackedUuidsCache.set(uuid, { tracked: true, expires: Date.now() + CACHE_TTL_MS });
 
   if (ip) {
-    await db
+    const [tipRow] = await db
       .insert(browserTrackingIps)
       .values({ hashedUuid: uuid, ip, firstSeenAt: now, lastSeenAt: now })
       .onConflictDoUpdate({
         target: [browserTrackingIps.hashedUuid, browserTrackingIps.ip],
         set: { lastSeenAt: now },
-      });
+      })
+      .returning({ id: browserTrackingIps.id });
+
+    if (tipRow?.id) {
+      trackingIpIdCache.set(makeTrackingIpCacheKey(uuid, ip), tipRow.id);
+    }
   }
 }
 
@@ -123,4 +133,33 @@ export async function upsertTrEn(uuid: string, trEn: string): Promise<void> {
       target: [browserTracking.hashedUuid],
       set: { trEn, updatedAt: now },
     });
+}
+
+// Logs every API request by IP regardless of consent, with an optional FK to
+// browser_tracking_ips when the UUID is known and consented (for rate-limit queries
+// that can optionally join into the full UUID graph for consented users).
+export function ipRateLogMiddleware(req: Request, res: Response, next: NextFunction) {
+  if (!req.path.startsWith("/api")) return next();
+
+  const ip =
+    (req.headers["x-client-ip"] as string | undefined) ||
+    extractClientIp(req) ||
+    undefined;
+
+  if (!ip) return next();
+
+  const uuid = (req as any).trackerUuid as string | undefined;
+  const method = req.method;
+  const path = req.path;
+
+  res.on("finish", () => {
+    const trackingIpId =
+      uuid && ip ? (trackingIpIdCache.get(makeTrackingIpCacheKey(uuid, ip)) ?? null) : null;
+
+    db.insert(ipRateLogs)
+      .values({ ip, method, path, statusCode: res.statusCode, trackingIpId })
+      .catch(() => {});
+  });
+
+  next();
 }

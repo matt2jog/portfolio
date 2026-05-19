@@ -331,6 +331,18 @@ export const browserRequestLogs = pgTable("browser_request_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const ipRateLogs = pgTable("ip_rate_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ip: text("ip").notNull(),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: integer("status_code"),
+  // NULL for opted-out users; set to browser_tracking_ips.id for consented users
+  trackingIpId: varchar("tracking_ip_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type BrowserTracking = typeof browserTracking.$inferSelect;
 export type BrowserTrackingIp = typeof browserTrackingIps.$inferSelect;
 export type BrowserRequestLog = typeof browserRequestLogs.$inferSelect;
+export type IpRateLog = typeof ipRateLogs.$inferSelect;
