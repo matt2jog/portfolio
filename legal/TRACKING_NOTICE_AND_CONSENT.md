@@ -1,7 +1,7 @@
 # Tracking Notice & Consent Policy
 
-**Last Updated:** March 27, 2026  
-**Effective Date:** March 27, 2026
+**Last Updated:** May 19, 2026  
+**Effective Date:** May 19, 2026
 
 ## 1. What We Track
 
@@ -26,16 +26,23 @@ We have configured LogRocket to **not** record:
 - Password fields, credit card data, or other explicitly masked input fields.
 - Audio or video content.
 - Content from third-party embedded iframes (with limited exceptions).
-
-However, **general URL paths and query parameters may be recorded even if they could contain sensitive data.** Users should avoid placing sensitive information in URLs.
+- **URL query parameters** — query strings are stripped before events are sent to LogRocket.
 
 ### 1.3 Cookie & Storage
 
 We use browser storage technologies to track your activity:
 
-- **localStorage:** We store a unique anonymous identifier (`__lr_anon_id`) to associate your session with LogRocket data.
+- **Persistent Identifier Cookie (`tr_uuid`):** A randomly generated, anonymized identifier cookie is set on every visit. It never expires and is used to associate your sessions across visits. This cookie is set regardless of consent; however, it is only used for analytics or linked to your activity in our systems when you have granted consent. Without consent it serves only as a structural anchor for security logging (see Section 1.4).
 - **Cookies:** We store a `sidebar_state` cookie to remember your UI preferences (sidebar open/closed).
 - **Session Cookies:** For authenticated admin users, we store session cookies for authentication.
+
+### 1.4 Security & Rate-Limit Logging
+
+Regardless of your consent choice, we log your IP address and the time of each request to the Site's API for security and rate-limiting purposes. This log is minimal (IP, request path, timestamp) and is not used for behavioral analytics. When you have granted analytics consent, these log entries are linked to your persistent identifier (`tr_uuid`); otherwise they are stored anonymously.
+
+### 1.5 Campaign Source Tracking
+
+If you arrive at the Site via a link containing a campaign reference parameter, and you have granted analytics consent, we may record that campaign source in our systems to understand how visitors discover the Site. No personally identifiable information is collected through this mechanism. If you have not granted consent, the parameter is discarded without being recorded.
 
 ## 2. Categories of Tracking
 
