@@ -36,6 +36,33 @@ test("first-visit-intro animation steps", async ({ page }, testInfo) => {
       state: { stage: "gap", typingPhase: "introPause" },
     },
     {
+      name: "welcome-cursor",
+      state: {
+        stage: "welcome",
+        typingPhase: "welcomePause",
+        welcomeMessage: "Hi from the team!\nWe're glad you stopped by.",
+        typedWelcomeText: "",
+      },
+    },
+    {
+      name: "welcome-typing",
+      state: {
+        stage: "welcome",
+        typingPhase: "welcomeTyping",
+        welcomeMessage: "Hi from the team!\nWe're glad you stopped by.",
+        typedWelcomeText: "Hi from the team!\nWe're glad",
+      },
+    },
+    {
+      name: "welcome-done",
+      state: {
+        stage: "welcome",
+        typingPhase: "welcomeDone",
+        welcomeMessage: "Hi from the team!\nWe're glad you stopped by.",
+        typedWelcomeText: "Hi from the team!\nWe're glad you stopped by.",
+      },
+    },
+    {
       name: "intro-cursor",
       state: { stage: "name", typingPhase: "introPause" },
     },
@@ -270,6 +297,15 @@ test("admin dashboard tabs", async ({ page }, testInfo) => {
   await expect(page.getByText("Skills CRUD")).toBeVisible();
   await settle(page, 700);
   await savePaginatedScreenshots(page, testInfo, "admin-dashboard/skills", {
+    maxPages: 4,
+    maxScrollDistance: 2_800,
+  });
+
+  await page.getByTestId("admin-tab-personalization").click();
+  await expect(page.getByRole("heading", { name: "Welcome Messages" })).toBeVisible();
+  await expect(page.getByTestId("admin-personalization-panel")).toBeVisible();
+  await settle(page, 700);
+  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/personalization", {
     maxPages: 4,
     maxScrollDistance: 2_800,
   });

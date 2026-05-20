@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Speech } from "lucide-react";
 import { IntroDither } from "./IntroDither";
 
 export const INTRO_STORAGE_KEY = "__root_intro_seen_until";
 export const INTRO_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+export const INTRO_FORCE_SHOW_KEY = "__intro_force_show";
+export const INTRO_WELCOME_SLUG_KEY = "__intro_welcome_slug";
 
-type IntroStage = "phrase" | "gap" | "name";
+type IntroStage = "phrase" | "gap" | "welcome" | "name";
 type TypingPhase =
   | "introPause"
   | "intro"
@@ -15,7 +17,10 @@ type TypingPhase =
   | "promptPause"
   | "prompt"
   | "buttonPause"
-  | "button";
+  | "button"
+  | "welcomePause"
+  | "welcomeTyping"
+  | "welcomeDone";
 
 function getTimePhrase() {
   const hour = new Date().getHours();
@@ -33,17 +38,20 @@ function getTimePhrase() {
 
 export function shouldShowFirstVisitIntro() {
   if (typeof window === "undefined") return false;
-
+  if (window.localStorage.getItem(INTRO_FORCE_SHOW_KEY) === "1") return true;
   const expiresAt = Number(window.localStorage.getItem(INTRO_STORAGE_KEY));
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
 function storeIntroVisit() {
   window.localStorage.setItem(INTRO_STORAGE_KEY, String(Date.now() + INTRO_TTL_MS));
+  window.localStorage.removeItem(INTRO_FORCE_SHOW_KEY);
+  window.localStorage.removeItem(INTRO_WELCOME_SLUG_KEY);
 }
 
 interface FirstVisitIntroProps {
   onComplete: () => void;
+  welcomeMessage?: string | null;
 }
 
 const INTRO_TEXT = "My name is";
@@ -62,20 +70,31 @@ declare global {
       typedIntro?: string;
       typedName?: string;
       typedPrompt?: string;
+      welcomeMessage?: string;
+      typedWelcomeText?: string;
     };
   }
 }
 
-export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
+export function FirstVisitIntro({ onComplete, welcomeMessage }: FirstVisitIntroProps) {
   const testState =
     typeof window !== "undefined" ? window.__FIRST_VISIT_INTRO_TEST_STATE : undefined;
+
+  // Allow test state to inject a welcome message
+  const effectiveWelcome = testState?.welcomeMessage ?? welcomeMessage ?? null;
+
   const phrase = useMemo(() => testState?.phrase ?? getTimePhrase(), [testState?.phrase]);
   const [stage, setStage] = useState<IntroStage>(testState?.stage ?? "phrase");
   const [showPrompt, setShowPrompt] = useState(testState?.showPrompt ?? false);
   const [typedIntro, setTypedIntro] = useState(testState?.typedIntro ?? "");
   const [typedName, setTypedName] = useState(testState?.typedName ?? "");
   const [typedPrompt, setTypedPrompt] = useState(testState?.typedPrompt ?? "");
+  const [typedWelcomeText, setTypedWelcomeText] = useState(testState?.typedWelcomeText ?? "");
   const [typingPhase, setTypingPhase] = useState<TypingPhase>(testState?.typingPhase ?? "introPause");
+
+  // Ref so gap-exit timer can read the latest welcome message without re-running
+  const effectiveWelcomeRef = useRef(effectiveWelcome);
+  effectiveWelcomeRef.current = effectiveWelcome;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -84,18 +103,81 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     };
   }, []);
 
+  // phrase → gap at 4000ms (fixed, regardless of welcome)
   useEffect(() => {
     if (testState) return;
-
     const gapTimer = window.setTimeout(() => setStage("gap"), 4000);
-    const nameTimer = window.setTimeout(() => setStage("name"), 8000);
-
-    return () => {
-      window.clearTimeout(gapTimer);
-      window.clearTimeout(nameTimer);
-    };
+    return () => window.clearTimeout(gapTimer);
   }, [testState]);
 
+  // gap → welcome (if message) or name (no message), always 4000ms gap
+  useEffect(() => {
+    if (testState) return;
+    if (stage !== "gap") return;
+
+    const timer = window.setTimeout(() => {
+      if (effectiveWelcomeRef.current) {
+        setStage("welcome");
+      } else {
+        setStage("name");
+      }
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [testState, stage]);
+
+  // welcome stage init
+  useEffect(() => {
+    if (testState) return;
+    if (stage !== "welcome") return;
+
+    setTypedWelcomeText("");
+    setTypingPhase("welcomePause");
+
+    const timer = window.setTimeout(() => setTypingPhase("welcomeTyping"), SECTION_PAUSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [stage, testState]);
+
+  // welcome typing: char-by-char, extra pause on newlines
+  useEffect(() => {
+    if (testState) return;
+    if (typingPhase !== "welcomeTyping") return;
+    if (!effectiveWelcome) return;
+
+    let cancelled = false;
+    let index = 0;
+
+    function scheduleNext(delay: number) {
+      window.setTimeout(() => {
+        if (cancelled) return;
+        index += 1;
+        setTypedWelcomeText(effectiveWelcome!.slice(0, index));
+
+        if (index >= effectiveWelcome!.length) {
+          window.setTimeout(() => {
+            if (!cancelled) setTypingPhase("welcomeDone");
+          }, SECTION_PAUSE_MS);
+          return;
+        }
+
+        const lastTyped = effectiveWelcome![index - 1];
+        scheduleNext(lastTyped === "\n" ? SECTION_PAUSE_MS : TYPE_DELAY_MS);
+      }, delay);
+    }
+
+    scheduleNext(TYPE_DELAY_MS);
+    return () => { cancelled = true; };
+  }, [testState, typingPhase, effectiveWelcome]);
+
+  // welcome done → name
+  useEffect(() => {
+    if (testState) return;
+    if (typingPhase !== "welcomeDone") return;
+
+    const timer = window.setTimeout(() => setStage("name"), SECTION_PAUSE_MS * 2);
+    return () => window.clearTimeout(timer);
+  }, [testState, typingPhase]);
+
+  // name stage init
   useEffect(() => {
     if (testState) return;
     if (stage !== "name") return;
@@ -193,13 +275,13 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
     if (!("speechSynthesis" in window)) return;
 
     window.speechSynthesis.cancel();
-    
+
     // Different TTS engines process phonetic spellings differently.
     // "zs" works perfectly for the Windows TTS engine but often breaks on others.
     // "zh" is a much more universally understood phonetic for Apple, Android, and Linux engines.
-    const isWindows = typeof navigator !== "undefined" && 
+    const isWindows = typeof navigator !== "undefined" &&
       (/Win/.test(navigator.platform) || /Windows/.test(navigator.userAgent));
-    
+
     const phoneticName = isWindows ? "Matthew too zsaawg" : "Matthew too zhawg";
 
     const utterance = new SpeechSynthesisUtterance(phoneticName);
@@ -218,6 +300,10 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
   const showPromptCursor = typingPhase === "promptPause" || typingPhase === "prompt";
   const showButtonCursor = typingPhase === "buttonPause";
   const showPhonetic = !["introPause", "intro", "namePause", "name"].includes(typingPhase);
+  const showWelcomeCursor = typingPhase === "welcomePause" || typingPhase === "welcomeTyping";
+
+  // Split typed welcome text into lines for rendering
+  const welcomeDisplayLines = typedWelcomeText.split("\n");
 
   return (
     <div
@@ -254,6 +340,27 @@ export function FirstVisitIntro({ onComplete }: FirstVisitIntroProps) {
             >
               {phrase}
             </motion.h1>
+          ) : stage === "welcome" ? (
+            <motion.div
+              key="welcome"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="flex max-w-3xl flex-col items-center gap-1"
+            >
+              {welcomeDisplayLines.map((line, i, arr) => (
+                <p
+                  key={i}
+                  className="text-balance text-3xl font-black leading-tight tracking-normal text-white sm:text-5xl"
+                >
+                  {line || " "}
+                  {i === arr.length - 1 && showWelcomeCursor && (
+                    <span className="ml-1 inline-block h-[0.9em] w-[0.08em] translate-y-[0.1em] animate-pulse bg-cyan-200" />
+                  )}
+                </p>
+              ))}
+            </motion.div>
           ) : stage === "name" ? (
             <motion.div
               key="name"

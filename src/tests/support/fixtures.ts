@@ -197,6 +197,27 @@ export const legalDocFixture = {
   effectiveDate: "March 27, 2026",
 };
 
+export const welcomeMessagesFixture = [
+  {
+    id: "wm-1",
+    slug: "test-org",
+    label: "Test Org Visit",
+    message: "Welcome, Test Org!\nWe're glad you stopped by.",
+    archivedAt: null,
+    createdAt: "2026-05-01T12:00:00.000Z",
+    updatedAt: "2026-05-01T12:00:00.000Z",
+  },
+  {
+    id: "wm-2",
+    slug: "acme-corp",
+    label: "Acme Corp Visit",
+    message: "Hi from Acme Corp!\nCheck out what we've built.",
+    archivedAt: null,
+    createdAt: "2026-05-10T08:00:00.000Z",
+    updatedAt: "2026-05-10T08:00:00.000Z",
+  },
+];
+
 export const adminFixtures = {
   me: {
     id: "admin-test-user",

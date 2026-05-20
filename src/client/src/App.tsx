@@ -8,7 +8,12 @@ import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConsentBanner } from "@/components/ConsentBanner";
-import { FirstVisitIntro, shouldShowFirstVisitIntro } from "@/components/FirstVisitIntro";
+import {
+  FirstVisitIntro,
+  shouldShowFirstVisitIntro,
+  INTRO_FORCE_SHOW_KEY,
+  INTRO_WELCOME_SLUG_KEY,
+} from "@/components/FirstVisitIntro";
 import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
 import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
@@ -113,6 +118,31 @@ function TrEnProcessor() {
   return null;
 }
 
+// Detects ?welcome=<slug>, stores the slug and a force-show flag in localStorage,
+// then strips the param and reloads so the intro plays even if the TTL is active.
+function WelcomeProcessor() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const welcomeSlug = params.get("welcome");
+    if (!welcomeSlug) return;
+
+    params.delete("welcome");
+    const newSearch = params.toString();
+    const cleanUrl =
+      window.location.pathname +
+      (newSearch ? `?${newSearch}` : "") +
+      window.location.hash;
+
+    window.localStorage.setItem(INTRO_WELCOME_SLUG_KEY, welcomeSlug);
+    window.localStorage.setItem(INTRO_FORCE_SHOW_KEY, "1");
+    window.location.replace(cleanUrl);
+  }, [location]);
+
+  return null;
+}
+
 function ConsentManager({ disabled = false }: { disabled?: boolean }) {
   const [showBanner, setShowBanner] = useState(false);
   const [jurisdiction, setJurisdiction] = useState<string | null>(null);
@@ -178,6 +208,7 @@ function Router() {
 function App() {
   const [location] = useLocation();
   const [showIntro, setShowIntro] = useState(() => location === "/" && shouldShowFirstVisitIntro());
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const consentDisabled = showIntro && location === "/";
 
   useEffect(() => {
@@ -188,17 +219,36 @@ function App() {
     }
   }, [location]);
 
+  // Fetch the personalized welcome message for the intro animation, if a slug is stored.
+  useEffect(() => {
+    const slug = typeof window !== "undefined"
+      ? window.localStorage.getItem(INTRO_WELCOME_SLUG_KEY)
+      : null;
+    if (!slug) return;
+
+    fetch(`/api/public/welcome-message?welcome=${encodeURIComponent(slug)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.message) setWelcomeMessage(data.message);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <TrEnProcessor />
+        <WelcomeProcessor />
         <ConsentManager disabled={consentDisabled} />
         <LogRocketBridge />
         <TrackingBridge />
         <Toaster />
         <Router />
         {showIntro && location === "/" && (
-          <FirstVisitIntro onComplete={() => setShowIntro(false)} />
+          <FirstVisitIntro
+            onComplete={() => setShowIntro(false)}
+            welcomeMessage={welcomeMessage}
+          />
         )}
       </TooltipProvider>
     </QueryClientProvider>
