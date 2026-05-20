@@ -346,3 +346,25 @@ export type BrowserTracking = typeof browserTracking.$inferSelect;
 export type BrowserTrackingIp = typeof browserTrackingIps.$inferSelect;
 export type BrowserRequestLog = typeof browserRequestLogs.$inferSelect;
 export type IpRateLog = typeof ipRateLogs.$inferSelect;
+
+// ─── Welcome Messages (Personalization) ──────────────────────────────────────
+
+export const welcomeMessages = pgTable("welcome_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  message: text("message").notNull(),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertWelcomeMessageSchema = createInsertSchema(welcomeMessages).pick({
+  slug: true,
+  label: true,
+  message: true,
+});
+
+export const updateWelcomeMessageSchema = insertWelcomeMessageSchema.partial();
+
+export type WelcomeMessage = typeof welcomeMessages.$inferSelect;

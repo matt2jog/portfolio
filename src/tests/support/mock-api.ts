@@ -12,6 +12,7 @@ import {
   projectsFixture,
   promptSuggestionsFixture,
   skillsConstellationFixture,
+  welcomeMessagesFixture,
 } from "./fixtures";
 
 type JsonValue = unknown;
@@ -90,6 +91,23 @@ export async function installMockApi(page: Page) {
   );
   await page.route("**/api/public/linkedin/timeline?**", (route) =>
     fulfillJson(route, linkedinTimelineFixture),
+  );
+
+  await page.route("**/api/public/welcome-message?**", (route) => {
+    const url = new URL(route.request().url());
+    const slug = url.searchParams.get("welcome");
+    const match = welcomeMessagesFixture.find((m) => m.slug === slug);
+    if (match) {
+      return fulfillJson(route, { message: match.message });
+    }
+    return fulfillJson(route, { error: "Welcome message not found" }, 404);
+  });
+
+  await page.route("**/api/admin/welcome-messages/archived", (route) =>
+    fulfillJson(route, []),
+  );
+  await page.route("**/api/admin/welcome-messages", (route) =>
+    fulfillJson(route, welcomeMessagesFixture),
   );
 
   await page.route("**/api/auth/me", (route) => fulfillJson(route, adminFixtures.me));

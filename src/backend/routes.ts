@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
 import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn } from "./tracking";
+import { isValidWelcomeSlug } from "./welcome-message-utils";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
@@ -33,9 +34,12 @@ import {
   insertExperienceSchema,
   updateExperienceSchema,
   aiModels,
+  welcomeMessages,
+  insertWelcomeMessageSchema,
+  updateWelcomeMessageSchema,
 } from "@shared/schema";
 import { adminPolicyAcceptance } from "@shared/schema_policy";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./agent";
 import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
@@ -1507,6 +1511,120 @@ export async function registerRoutes(
     invalidateProjectsCache();
     await logAudit(req, "project.restore", { id: projectId });
     res.json(restored);
+  });
+
+  // ========== WELCOME MESSAGES (PERSONALIZATION) ==========
+
+  // Public: look up a welcome message by slug (archived messages are still active)
+  app.get("/api/public/welcome-message", async (req, res) => {
+    const slug = req.query.welcome;
+    if (!isValidWelcomeSlug(slug)) {
+      return res.status(400).json({ error: "Invalid or missing welcome slug" });
+    }
+
+    const [row] = await db
+      .select({ message: welcomeMessages.message })
+      .from(welcomeMessages)
+      .where(eq(welcomeMessages.slug, slug))
+      .limit(1);
+
+    if (!row) return res.status(404).json({ error: "Welcome message not found" });
+    res.json({ message: row.message });
+  });
+
+  // Admin: list active (non-archived) welcome messages
+  app.get("/api/admin/welcome-messages", requireAdmin, async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(welcomeMessages)
+      .where(isNull(welcomeMessages.archivedAt))
+      .orderBy(desc(welcomeMessages.createdAt));
+    res.json(rows);
+  });
+
+  // Admin: list archived welcome messages
+  app.get("/api/admin/welcome-messages/archived", requireAdmin, async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(welcomeMessages)
+      .where(isNotNull(welcomeMessages.archivedAt))
+      .orderBy(desc(welcomeMessages.archivedAt));
+    res.json(rows);
+  });
+
+  // Admin: create welcome message
+  app.post("/api/admin/welcome-messages", requireAdmin, async (req, res) => {
+    const parsed = insertWelcomeMessageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    }
+    if (!isValidWelcomeSlug(parsed.data.slug)) {
+      return res.status(400).json({ error: "Slug must be lowercase alphanumeric with hyphens (no leading/trailing hyphens), max 63 chars" });
+    }
+    const [row] = await db
+      .insert(welcomeMessages)
+      .values(parsed.data)
+      .returning();
+    await logAudit(req, "welcome_message.create", { id: row.id, slug: row.slug });
+    res.status(201).json(row);
+  });
+
+  // Admin: update welcome message
+  app.put("/api/admin/welcome-messages/:id", requireAdmin, async (req, res) => {
+    const id = routeId(req.params.id);
+    const parsed = updateWelcomeMessageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+    }
+    if (parsed.data.slug !== undefined && !isValidWelcomeSlug(parsed.data.slug)) {
+      return res.status(400).json({ error: "Slug must be lowercase alphanumeric with hyphens (no leading/trailing hyphens), max 63 chars" });
+    }
+    const [row] = await db
+      .update(welcomeMessages)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(welcomeMessages.id, id))
+      .returning();
+    if (!row) return res.status(404).json({ error: "Welcome message not found" });
+    await logAudit(req, "welcome_message.update", { id, changes: parsed.data });
+    res.json(row);
+  });
+
+  // Admin: archive welcome message (hides from admin list, stays active for URL lookup)
+  app.post("/api/admin/welcome-messages/:id/archive", requireAdmin, async (req, res) => {
+    const id = routeId(req.params.id);
+    const [row] = await db
+      .update(welcomeMessages)
+      .set({ archivedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(welcomeMessages.id, id), isNull(welcomeMessages.archivedAt)))
+      .returning();
+    if (!row) return res.status(404).json({ error: "Welcome message not found or already archived" });
+    await logAudit(req, "welcome_message.archive", { id });
+    res.json(row);
+  });
+
+  // Admin: unarchive welcome message
+  app.post("/api/admin/welcome-messages/:id/unarchive", requireAdmin, async (req, res) => {
+    const id = routeId(req.params.id);
+    const [row] = await db
+      .update(welcomeMessages)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(and(eq(welcomeMessages.id, id), isNotNull(welcomeMessages.archivedAt)))
+      .returning();
+    if (!row) return res.status(404).json({ error: "Welcome message not found or not archived" });
+    await logAudit(req, "welcome_message.unarchive", { id });
+    res.json(row);
+  });
+
+  // Admin: hard delete welcome message
+  app.delete("/api/admin/welcome-messages/:id", requireAdmin, async (req, res) => {
+    const id = routeId(req.params.id);
+    const [deleted] = await db
+      .delete(welcomeMessages)
+      .where(eq(welcomeMessages.id, id))
+      .returning();
+    if (!deleted) return res.status(404).json({ error: "Welcome message not found" });
+    await logAudit(req, "welcome_message.delete", { id, slug: deleted.slug });
+    res.json({ ok: true });
   });
 
   return httpServer;
