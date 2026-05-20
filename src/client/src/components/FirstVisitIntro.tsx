@@ -143,25 +143,29 @@ export function FirstVisitIntro({ onComplete, welcomeMessage }: FirstVisitIntroP
     if (typingPhase !== "welcomeTyping") return;
     if (!effectiveWelcome) return;
 
-    let timeoutId: ReturnType<typeof window.setTimeout>;
+    let cancelled = false;
     let index = 0;
 
-    function typeNext() {
-      index += 1;
-      setTypedWelcomeText(effectiveWelcome!.slice(0, index));
+    function scheduleNext(delay: number) {
+      window.setTimeout(() => {
+        if (cancelled) return;
+        index += 1;
+        setTypedWelcomeText(effectiveWelcome!.slice(0, index));
 
-      if (index >= effectiveWelcome!.length) {
-        timeoutId = window.setTimeout(() => setTypingPhase("welcomeDone"), SECTION_PAUSE_MS);
-        return;
-      }
+        if (index >= effectiveWelcome!.length) {
+          window.setTimeout(() => {
+            if (!cancelled) setTypingPhase("welcomeDone");
+          }, SECTION_PAUSE_MS);
+          return;
+        }
 
-      const lastTyped = effectiveWelcome![index - 1];
-      const delay = lastTyped === "\n" ? SECTION_PAUSE_MS : TYPE_DELAY_MS;
-      timeoutId = window.setTimeout(typeNext, delay);
+        const lastTyped = effectiveWelcome![index - 1];
+        scheduleNext(lastTyped === "\n" ? SECTION_PAUSE_MS : TYPE_DELAY_MS);
+      }, delay);
     }
 
-    timeoutId = window.setTimeout(typeNext, TYPE_DELAY_MS);
-    return () => window.clearTimeout(timeoutId);
+    scheduleNext(TYPE_DELAY_MS);
+    return () => { cancelled = true; };
   }, [testState, typingPhase, effectiveWelcome]);
 
   // welcome done → name
