@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getClientIp } from "./tracking";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -7,14 +8,22 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+async function buildHeaders(base: Record<string, string> = {}): Promise<Record<string, string>> {
+  const ip = await getClientIp();
+  return ip ? { ...base, "X-Client-IP": ip } : base;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const baseHeaders: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  const headers = await buildHeaders(baseHeaders);
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });

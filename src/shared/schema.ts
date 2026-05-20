@@ -295,3 +295,54 @@ export const legalDocumentVersions = pgTable(
 );
 
 export type DbLegalDocumentVersion = typeof legalDocumentVersions.$inferSelect;
+
+// ─── Browser Tracking ────────────────────────────────────────────────────────
+
+export const browserTracking = pgTable("browser_tracking", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hashedUuid: text("hashed_uuid").notNull().unique(),
+  trEn: text("tr_en"),
+  consentedAt: timestamp("consented_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const browserTrackingIps = pgTable(
+  "browser_tracking_ips",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    hashedUuid: text("hashed_uuid").notNull(),
+    ip: text("ip").notNull(),
+    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("browser_tracking_ips_uuid_ip_idx").on(t.hashedUuid, t.ip)],
+);
+
+export const browserRequestLogs = pgTable("browser_request_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hashedUuid: text("hashed_uuid").notNull(),
+  ip: text("ip"),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: integer("status_code"),
+  durationMs: integer("duration_ms"),
+  meta: jsonb("meta").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ipRateLogs = pgTable("ip_rate_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ip: text("ip").notNull(),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: integer("status_code"),
+  // NULL for opted-out users; set to browser_tracking_ips.id for consented users
+  trackingIpId: varchar("tracking_ip_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type BrowserTracking = typeof browserTracking.$inferSelect;
+export type BrowserTrackingIp = typeof browserTrackingIps.$inferSelect;
+export type BrowserRequestLog = typeof browserRequestLogs.$inferSelect;
+export type IpRateLog = typeof ipRateLogs.$inferSelect;

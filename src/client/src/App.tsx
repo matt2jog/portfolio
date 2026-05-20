@@ -22,7 +22,8 @@ import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import Tracking from "@/pages/Tracking";
-import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
+import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute, emitLogRocketUuidEvent } from "@/lib/logrocket";
+import { initBrowserTracking, storeTrEn } from "@/lib/tracking";
 
 function LogRocketBridge() {
   const [location] = useLocation();
@@ -32,7 +33,6 @@ function LogRocketBridge() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  // Listen for consent changes via ConsentManager callback
   useEffect(() => {
     const handleConsentChange = () => {
       setConsentGranted(true);
@@ -42,11 +42,11 @@ function LogRocketBridge() {
   }, []);
 
   useEffect(() => {
-    trackLogRocketRoute(location, window.location.search);
+    trackLogRocketRoute(location);
   }, [location, consentGranted]);
 
   useEffect(() => {
-    const emit = () => trackLogRocketRoute(window.location.pathname, window.location.search);
+    const emit = () => trackLogRocketRoute(window.location.pathname);
     window.addEventListener("popstate", emit);
     window.addEventListener("hashchange", emit);
     return () => {
@@ -62,6 +62,53 @@ function LogRocketBridge() {
   useEffect(() => {
     attachLogRocketIp();
   }, [consentGranted]);
+
+  return null;
+}
+
+// Initializes browser-side UUID tracking (DB + LogRocket) after consent is established.
+function TrackingBridge() {
+  const [consentGranted, setConsentGranted] = useState(() => {
+    const c = getStoredConsent();
+    return c !== null && c.user_action !== "reject_all";
+  });
+
+  useEffect(() => {
+    const handle = () => setConsentGranted(true);
+    window.addEventListener("consent-granted", handle);
+    return () => window.removeEventListener("consent-granted", handle);
+  }, []);
+
+  useEffect(() => {
+    if (!consentGranted) return;
+    initBrowserTracking();
+    emitLogRocketUuidEvent();
+  }, [consentGranted]);
+
+  return null;
+}
+
+// Detects tr_en= on any page, stores (if consented), then strips param and reloads.
+function TrEnProcessor() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trEn = params.get("tr_en");
+    if (!trEn) return;
+
+    params.delete("tr_en");
+    const newSearch = params.toString();
+    const cleanUrl =
+      window.location.pathname +
+      (newSearch ? `?${newSearch}` : "") +
+      window.location.hash;
+
+    // storeTrEn is a no-op if user hasn't consented
+    storeTrEn(trEn).finally(() => {
+      window.location.replace(cleanUrl);
+    });
+  }, [location]);
 
   return null;
 }
@@ -85,10 +132,8 @@ function ConsentManager({ disabled = false }: { disabled?: boolean }) {
       const hasConsent = getStoredConsent() !== null;
       const globalOptOut = isGlobalOptOutEnabled();
 
-      // Don't show banner on legal doc pages
       const isLegalPage = ["/privacy", "/terms", "/tracking"].includes(location);
 
-      // Respect browser-level privacy controls.
       if (globalOptOut) {
         setShowBanner(false);
         setIsLoaded(true);
@@ -96,13 +141,10 @@ function ConsentManager({ disabled = false }: { disabled?: boolean }) {
       }
 
       const shouldShow = !hasConsent && !isLegalPage;
-      
       setShowBanner(shouldShow);
       setIsLoaded(true);
     })();
   }, [disabled, location]);
-
-
 
   if (!isLoaded) return null;
 
@@ -149,8 +191,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <TrEnProcessor />
         <ConsentManager disabled={consentDisabled} />
         <LogRocketBridge />
+        <TrackingBridge />
         <Toaster />
         <Router />
         {showIntro && location === "/" && (

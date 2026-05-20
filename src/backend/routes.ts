@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
+import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn } from "./tracking";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
@@ -642,12 +643,19 @@ export async function registerRoutes(
         content: String(m.content).slice(0, 4000),
       }));
 
+    const trackerUuid = getRequestTrackerUuid(req);
     const chatRun = createRun({
       name: welcome ? "welcome-summary" : "project-chat",
       runType: "chain",
       inputs: { messages: userMessages },
       tags: ["project-chat", modelId, provider.constructor.name, project.title],
-      metadata: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name, modelId },
+      metadata: {
+        projectId: project.id,
+        projectTitle: project.title,
+        provider: provider.constructor.name,
+        modelId,
+        ...(trackerUuid ? { trackerUuid } : {}),
+      },
     });
     if (chatRun) await chatRun.postRun().catch(() => {});
 
@@ -972,6 +980,31 @@ export async function registerRoutes(
       ? forwarded[0]
       : forwarded?.split(",")[0]?.trim() || req.ip;
     res.json({ ip });
+  });
+
+  // ========== BROWSER TRACKING ==========
+  app.post("/api/public/tracking/init", async (req, res) => {
+    const uuid = getRequestTrackerUuid(req);
+    if (!uuid) return res.status(400).json({ error: "No tracking cookie present" });
+
+    const ip =
+      (req.headers["x-client-ip"] as string | undefined) ||
+      extractClientIp(req) ||
+      undefined;
+
+    await registerTrackedUuid(uuid, ip);
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/public/tracking/tr-en", async (req, res) => {
+    const uuid = getRequestTrackerUuid(req);
+    if (!uuid) return res.status(400).json({ error: "No tracking cookie present" });
+
+    const trEn = typeof req.body?.trEn === "string" ? req.body.trEn.slice(0, 256) : null;
+    if (!trEn) return res.status(400).json({ error: "trEn value required" });
+
+    await upsertTrEn(uuid, trEn);
+    return res.json({ ok: true });
   });
 
   app.get("/api/admin/projects", requireAdmin, async (_req, res) => {
