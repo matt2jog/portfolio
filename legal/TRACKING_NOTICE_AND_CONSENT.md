@@ -1,7 +1,7 @@
 # Tracking Notice & Consent Policy
 
 **Last Updated:** May 19, 2026  
-**Effective Date:** May 19, 2026
+**Effective Date:** May 20, 2026
 
 ## 1. What We Track
 
