@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
-import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn } from "./tracking";
+import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn, augmentRequestTracking } from "./tracking";
+import { checkOutputTokenCapacity, recordOutputTokens, estimateTokensFromText } from "./token-rate-limiter";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
 import { detectCountryFromIP, extractClientIp } from "./geoip";
 import { loadLegalDoc } from "./markdown";
@@ -559,6 +560,16 @@ export async function registerRoutes(
   });
 
   app.post("/api/public/chat", async (req, res) => {
+    // Output-token rate limit: 1M tokens / hour across all project-chat requests.
+    const tokenBucket = checkOutputTokenCapacity();
+    if (!tokenBucket.ok) {
+      return res.status(429).json({
+        error: "Output token limit reached. Please try again later.",
+        resetsAt: tokenBucket.resetsAt.toISOString(),
+        remainingTokens: 0,
+      });
+    }
+
     const provider = await getAiProvider();
     if (!provider) {
       return res.status(503).json({ error: "AI chat is not configured" });
@@ -568,6 +579,8 @@ export async function registerRoutes(
     if (!projectId || !modelId || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "projectId, modelId, and messages[] are required" });
     }
+
+    augmentRequestTracking(req, { projectId, modelId, welcome: !!welcome });
 
     // Validate model is allowed
     const [model] = await db.select().from(aiModels)
@@ -713,14 +726,15 @@ export async function registerRoutes(
           ownerPortfolio,
         });
         writeSseAssistantMessages(res, welcomeMessages);
-        
+
         if (chatRun) {
           try {
             await chatRun.end({ output: welcomeMessages.join("\n\n") });
             await chatRun.patchRun();
           } catch { /* silent */ }
         }
-        
+
+        recordOutputTokens(estimateTokensFromText(welcomeMessages.join("\n\n")));
         res.end();
         return;
       }
@@ -874,6 +888,7 @@ export async function registerRoutes(
       }
 
       writeSseAssistantMessage(res, responseContent);
+      recordOutputTokens(estimateTokensFromText(responseContent));
       res.end();
 
       // Patch the top-level chatRun with the final output + eval result

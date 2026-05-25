@@ -6,7 +6,7 @@ import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { detectCountryFromIP, extractClientIp, isLocalIp } from "./geoip";
 import { warmLinkedinActivityCache } from "./linkedin";
-import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
+import { uuidCookieMiddleware, requestTrackingMiddleware } from "./tracking";
 
 const app = express();
 const httpServer = createServer(app);
@@ -28,8 +28,7 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
 app.use(uuidCookieMiddleware);
-app.use(requestLogMiddleware);
-app.use(ipRateLogMiddleware);
+app.use(requestTrackingMiddleware);
 
 const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
 

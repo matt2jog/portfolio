@@ -333,12 +333,13 @@ export const browserRequestLogs = pgTable("browser_request_logs", {
 
 export const ipRateLogs = pgTable("ip_rate_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  ip: text("ip").notNull(),
+  ip: text("ip"),
+  hashedUuid: text("hashed_uuid"),
   method: text("method").notNull(),
   path: text("path").notNull(),
   statusCode: integer("status_code"),
-  // NULL for opted-out users; set to browser_tracking_ips.id for consented users
-  trackingIpId: varchar("tracking_ip_id"),
+  durationMs: integer("duration_ms"),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
