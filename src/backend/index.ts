@@ -7,6 +7,7 @@ import { setupAuth } from "./auth";
 import { detectCountryFromIP, extractClientIp, isLocalIp } from "./geoip";
 import { warmLinkedinActivityCache } from "./linkedin";
 import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
+import { startCareerEventsConsumer } from "./consumers/career-events";
 
 const app = express();
 const httpServer = createServer(app);
@@ -137,6 +138,7 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
       log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
       warmLinkedinActivityCache();
+      startCareerEventsConsumer();
     });
   } else {
     httpServer.listen(
@@ -149,6 +151,7 @@ app.use((req, res, next) => {
         log(`serving on port ${port}`);
         log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
         warmLinkedinActivityCache();
+        startCareerEventsConsumer();
       },
     );
   }

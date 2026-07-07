@@ -249,6 +249,26 @@ export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 export type AiModel = typeof aiModels.$inferSelect;
 
+// Career-content projection table (DECOUPLING.md §1/§6). This table already exists in
+// the shared DB (created by resume_vcs_cloud's SQLModel, table name "education") but was
+// never declared in drizzle here. Declaring it is NOT a schema/DDL change — no migration
+// is added, no columns are created — it only lets the career-events Kafka consumer write
+// to the pre-existing table through drizzle instead of raw SQL. Verified live against the
+// shared DB on 2026-07-07: id/school/location/degree/dates/position/created_at/updated_at,
+// matching this declaration exactly.
+export const education = pgTable("education", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  school: text("school").notNull(),
+  location: text("location").notNull(),
+  degree: text("degree").notNull(),
+  dates: text("dates").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Education = typeof education.$inferSelect;
+
 export const experiences = pgTable("experiences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   role: text("role").notNull(),
