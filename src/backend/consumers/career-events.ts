@@ -130,8 +130,21 @@ export async function startCareerEventsConsumer(): Promise<void> {
         try {
           await handleMessage(payload);
         } catch (err) {
-          // Crash-safe: malformed/unexpected messages are logged and skipped, never
-          // allowed to take the web server (or the consumer loop) down.
+          // Crash-safe: never allowed to take the web server (or the consumer loop)
+          // down. Malformed messages are already handled without throwing (parseEnvelope
+          // returns null and handleMessage logs+returns) — anything that reaches this
+          // catch is an unexpected failure (e.g. a transient DB/pool error) from inside a
+          // projection call.
+          //
+          // Known v1 limitation: with kafkajs's default autoCommit, swallowing the error
+          // here still advances the consumer offset, so a transient DB failure silently
+          // drops that one projection update (self-heals only if a later event for the
+          // same key arrives). The alternative — rethrowing so kafkajs holds the offset
+          // and retries — was deliberately not taken for v1 to avoid redesigning around
+          // manual offset commits; kafkajs's own crash/retry handling on a thrown
+          // eachMessage error does not exit the process either way (no CRASH-event
+          // process.exit hook is registered), so "never take the web server down" holds
+          // regardless of this choice.
           console.error("[career-events] failed to process message; skipping", {
             topic: payload.topic,
             partition: payload.partition,
