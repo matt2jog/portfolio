@@ -1,4 +1,4 @@
-import type { Express, RequestHandler } from "express";
+import type { Express, NextFunction, Request, RequestHandler, Response } from "express";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -6,6 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import { db, pool } from "./data/db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { parseCookies } from "./tracking-utils";
 
 const PgSession = connectPgSimple(session);
 
@@ -23,6 +24,9 @@ const sessionSecret = process.env.SESSION_SECRET;
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const callbackUrl = process.env.CALLBACK_URL || process.env.CALLBACK_URL_FALLBACK;
+const sessionCookieDomain = process.env.SESSION_COOKIE_DOMAIN || (isProd ? ".2jog.dev" : undefined);
+const RESUME_RETURN_COOKIE = "resume_return";
+const RESUME_RETURN_ORIGIN = "https://resume.2jog.dev";
 
 if (isProd) {
   if (!sessionSecret) {
@@ -54,6 +58,7 @@ export function setupAuth(app: Express) {
       }),
       cookie: {
         httpOnly: true,
+        domain: sessionCookieDomain,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       },
@@ -149,12 +154,44 @@ export const requireAdmin: RequestHandler = (req, res, next) => {
   return res.status(403).json({ message: "Forbidden" });
 };
 
+const getResumeReturnFromCookie = (headersCookie: string | undefined): string | undefined => {
+  const candidate = parseCookies(headersCookie)[RESUME_RETURN_COOKIE];
+  if (!candidate) return undefined;
+
+  try {
+    const parsed = new URL(candidate);
+    return parsed.origin === RESUME_RETURN_ORIGIN ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const authRoutes = {
   start: passport.authenticate("google", { scope: ["profile", "email"] }),
-  callback: passport.authenticate("google", {
-    failureRedirect: "/?auth=denied",
-    successRedirect: "/admin",
-  }),
+  callback: (req: Request, res: Response, next: NextFunction) => {
+    return passport.authenticate("google", (error: unknown, user: Express.User | false | null, _info: unknown) => {
+      if (error) return next(error);
+      if (!user) return res.redirect("/?auth=denied");
+
+      req.login(user, (loginError: unknown) => {
+        if (loginError) return next(loginError);
+
+        const resumeReturn = getResumeReturnFromCookie(req.headers.cookie);
+        if (resumeReturn) {
+          res.clearCookie(RESUME_RETURN_COOKIE, {
+            path: "/",
+            httpOnly: false,
+            sameSite: "lax",
+            secure: isProd,
+            domain: sessionCookieDomain,
+          });
+          return res.redirect(resumeReturn);
+        }
+
+        return res.status(404).json({ error: "Missing resume return target" });
+      });
+    })(req, res, next);
+  },
 };
 
 declare global {

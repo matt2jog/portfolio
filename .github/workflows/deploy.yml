@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: personal-brand-501801
+  GCP_REGION: us-east4
+  GCP_AR_HOSTNAME: us-east4-docker.pkg.dev
+  GCP_AR_REPOSITORY: cloud-run-source-deploy
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions-provider
+  DEPLOY_SERVICE_ACCOUNT: github-deployer@personal-brand-501801.iam.gserviceaccount.com
+  RUNTIME_SERVICE_ACCOUNT: 601853536613-compute@developer.gserviceaccount.com
+  INFISICAL_PROJECT_ID: 1f9888f4-e70c-42fd-8581-9fec31b907b7
+  INFISICAL_ENV: prod
+  SERVICE_NAME: portfolio--prod
+  IMAGE_NAME: portfolio--prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run check
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - run: gcloud auth configure-docker ${{ env.GCP_AR_HOSTNAME }} --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE_URI: ${{ env.GCP_AR_HOSTNAME }}/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_AR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE_URI: ${{ env.GCP_AR_HOSTNAME }}/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_AR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          gcloud run deploy "$SERVICE_NAME" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --image "$IMAGE_URI" \
+            --port 8080 \
+            --allow-unauthenticated \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --min-instances 0 \
+            --max-instances 1 \
+            --cpu 1 \
+            --memory 512Mi \
+            --clear-env-vars \
+            --clear-secrets \
+            --set-env-vars "INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID,INFISICAL_ENV=$INFISICAL_ENV" \
+            --set-secrets "INFISICAL_TOKEN=infisical-runtime-token:latest"

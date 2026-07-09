@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev:client": "vite dev --port 5000",
-    "dev": "cross-env NODE_ENV=development tsx watch src/backend/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx watch src/backend/bootstrap.ts",
     "build": "tsx src/scripts/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "lint": "eslint .",
@@ -19,6 +19,7 @@
     "legal:record": "tsx --env-file=.env src/scripts/legal/record-versions.ts"
   },
   "dependencies": {
+    "@infisical/sdk": "^5.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.12",

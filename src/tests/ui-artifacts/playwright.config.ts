@@ -39,7 +39,7 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: "npx cross-env NODE_ENV=development PORT=5000 tsx src/backend/index.ts",
+        command: "npx cross-env NODE_ENV=development PORT=5000 tsx src/backend/bootstrap.ts",
         cwd: "../../..",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
