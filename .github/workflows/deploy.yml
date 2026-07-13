@@ -72,7 +72,5 @@ jobs:
             --max-instances 1 \
             --cpu 1 \
             --memory 512Mi \
-            --clear-env-vars \
-            --clear-secrets \
             --set-env-vars "INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID,INFISICAL_ENV=$INFISICAL_ENV" \
             --set-secrets "INFISICAL_TOKEN=infisical-runtime-token:latest"
