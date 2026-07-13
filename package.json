@@ -19,8 +19,8 @@
     "legal:record": "tsx --env-file=.env src/scripts/legal/record-versions.ts"
   },
   "dependencies": {
-    "@infisical/sdk": "^5.0.2",
     "@hookform/resolvers": "^3.10.0",
+    "@infisical/sdk": "^5.0.2",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -68,6 +68,7 @@
     "geoip-lite": "^1.4.10",
     "gsap": "^3.14.2",
     "input-otp": "^1.4.2",
+    "jose": "^6.2.3",
     "jsdom": "^29.0.1",
     "kafkajs": "^2.2.4",
     "katex": "^0.16.44",
