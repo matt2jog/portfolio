@@ -136,7 +136,10 @@ export default function Admin() {
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
         <button
-          onClick={() => apiRequest("POST", "/api/auth/logout").then(() => window.location.reload())}
+          onClick={() => apiRequest("POST", "/api/auth/logout").then(async (response) => {
+            const body = await response.json() as { logout_url?: string };
+            window.location.assign(body.logout_url || "/");
+          })}
           className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
         >
           Log out

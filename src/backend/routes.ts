@@ -213,9 +213,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    req.logout(() => {
-      res.json({ ok: true });
-    });
+    return authRoutes.logout(req, res);
   });
 
   // ========== LEGAL DOCUMENTS ==========
