@@ -72,5 +72,5 @@ jobs:
             --max-instances 1 \
             --cpu 1 \
             --memory 512Mi \
-            --set-env-vars "INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID,INFISICAL_ENV=$INFISICAL_ENV" \
+            --set-env-vars "PUBLIC_BASE_URL=https://2jog.dev,INFISICAL_PROJECT_ID=$INFISICAL_PROJECT_ID,INFISICAL_ENV=$INFISICAL_ENV" \
             --set-secrets "INFISICAL_TOKEN=infisical-runtime-token:latest"
