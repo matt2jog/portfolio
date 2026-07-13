@@ -4,6 +4,21 @@ import { getClientIp } from "./tracking";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    if (res.status === 401) {
+      try {
+        const loginUrl = (JSON.parse(text) as { login_url?: unknown }).login_url;
+        if (typeof loginUrl === "string") {
+          const parsed = new URL(loginUrl);
+          const safeScheme = parsed.protocol === "https:" || (parsed.protocol === "http:" && parsed.hostname === "localhost");
+          if (safeScheme && parsed.pathname === "/auth/google" && parsed.searchParams.has("returnTo")) {
+            window.location.assign(parsed.toString());
+            throw new Error("Redirecting to sign in");
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message === "Redirecting to sign in") throw error;
+      }
+    }
     throw new Error(`${res.status}: ${text}`);
   }
 }
