@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { readFileSync } from "node:fs";
+import { postgresConnectionConfig } from "../../shared/postgres-tls";
 
 const databaseUrl = process.env.DATABASE_URL;
 const caCertPath = process.env.SUPABASE_CA_CERT_PATH;
@@ -14,12 +15,7 @@ if (!databaseUrl) {
 }
 
 export const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: databaseUrl.includes("supabase.com")
-    ? caCert
-      ? { rejectUnauthorized: true, ca: caCert }
-      : { rejectUnauthorized: false }
-    : undefined,
+  ...postgresConnectionConfig(databaseUrl, caCert),
 });
 
 export const db = drizzle(pool);

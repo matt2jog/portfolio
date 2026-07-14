@@ -150,6 +150,36 @@ test("projectExperience: ExperienceDeleted deletes the row by id (no bullets tou
   assert.equal(calls[0].table, experiences);
 });
 
+test("projectExperience: missing optional fields map to stable projection defaults", async () => {
+  const { db, calls } = createMockDb();
+
+  await projectExperience(
+    db,
+    {
+      event_id: "e-defaults",
+      event_type: "ExperienceUpserted",
+      aggregate_id: "exp-defaults",
+      occurred_at: "2026-01-01T00:00:00Z",
+      actor: "human",
+      sequence: 1,
+      data: { id: "exp-defaults", role: "Engineer", company: "Acme" },
+    },
+    silentLogger(),
+  );
+
+  assert.deepEqual(calls[0].values, {
+    id: "exp-defaults",
+    role: "Engineer",
+    company: "Acme",
+    location: "Remote",
+    duration: "",
+    description: "",
+    technologies: [],
+    isActive: false,
+    position: 0,
+  });
+});
+
 test("projectExperience: tombstone (data: null without an explicit Deleted event_type) also deletes", async () => {
   const { db, calls } = createMockDb();
 
@@ -449,7 +479,7 @@ test("projectSkill: SkillConceptDeleted logs a warning only — no all_skills de
 
 // ── profile projection (no-op) ────────────────────────────────────────────────
 
-test("projectProfile: is a no-op that never throws (portfolio owns personal_information)", () => {
+test("projectProfile: legacy payload is a no-op pending Admin's generated projection schema", () => {
   const debugMessages: string[] = [];
   assert.doesNotThrow(() =>
     projectProfile(
@@ -508,6 +538,7 @@ test("parseEnvelope: strips a Confluent/Karapace magic-byte + schema-id prefix b
 
 test("parseEnvelope: returns null for a tombstone (null value)", () => {
   assert.equal(parseEnvelope(null), null);
+  assert.equal(parseEnvelope(Buffer.alloc(0)), null);
 });
 
 test("parseEnvelope: returns null for malformed JSON instead of throwing", () => {
@@ -518,4 +549,5 @@ test("parseEnvelope: returns null for malformed JSON instead of throwing", () =>
 test("parseEnvelope: returns null when required envelope fields are missing", () => {
   const raw = Buffer.from(JSON.stringify({ foo: "bar" }));
   assert.equal(parseEnvelope(raw), null);
+  assert.equal(parseEnvelope(Buffer.from("[]")), null);
 });

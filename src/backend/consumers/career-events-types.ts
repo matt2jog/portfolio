@@ -1,6 +1,6 @@
-// Wire types for the career-context domain events consumed from Kafka.
-// Mirrors ../../../../resume_vcs_cloud/contracts/schemas/*.json (the binding contract,
-// see docs/DECOUPLING.md §4). Kept intentionally loose (most fields optional) because
+// Transitional wire types for Admin-owned career events consumed from Kafka.
+// The checked-in names mirror the legacy topic payload while Admin's generated schemas
+// and final topic family are reconciled. Kept intentionally loose (most fields optional) because
 // "unknown/newer schema fields ignored" and consumers must tolerate partially-populated
 // snapshots rather than reject them.
 

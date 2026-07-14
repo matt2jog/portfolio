@@ -1,46 +1,39 @@
 name: Legal Audit
 
-# When a push to prod changes any legal/**.md, this workflow:
-#   1. Rewrites **Last Updated:** in each changed file with the author date
-#      of the latest commit that touched that file (when the content was
-#      authored).
-#   2. Rewrites **Effective Date:** in each changed file with today's date
-#      (when the change reached prod via CD).
-#   3. Commits the metadata update back to prod with [skip ci] so the
-#      workflow doesn't loop.
-#   4. Records each post-update file content to Supabase as an append-only
-#      audit row (idempotent via unique(doc_type, content_hash)).
-#
-# The workflow is a required status check on prod, so a Supabase outage
-# blocks future merges until the audit can be recorded. That tradeoff is
-# intentional: legal audit integrity > merge availability.
-
 on:
   push:
-    branches:
-      - prod
+    branches: [main]
     paths:
-      - "legal/**.md"
+      - legal/**.md
+      - src/scripts/legal/**
+      - .github/workflows/legal-audit.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: personal-brand-501801
+  LEGAL_AUDIT_SECRET_NAME: portfolio-legal-audit-bundle-prod
+  LEGAL_AUDIT_BUNDLE_VERSION: ${{ vars.PORTFOLIO_LEGAL_AUDIT_BUNDLE_VERSION }}
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/personal-brand-github/providers/portfolio-legal-audit-main
+  DEPLOY_SERVICE_ACCOUNT: portfolio-legal-audit@personal-brand-501801.iam.gserviceaccount.com
 
 jobs:
-  audit:
-    runs-on: ubuntu-latest
-    # Skip if the previous run already committed the date update — prevents
-    # the bot's own commit from re-triggering the workflow.
-    if: github.event.head_commit.author.name != 'github-actions[bot]'
+  record:
+    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Check out legal source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ssh-key: ${{ secrets.LEGAL_AUDIT_DEPLOY_KEY }}
+          persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
           cache: npm
@@ -48,51 +41,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Determine changed legal docs
-        id: changed
-        run: |
-          # Files changed in the push that triggered this workflow.
-          files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'legal/*.md' | tr '\n' ' ')
-          echo "files=${files}" >> "$GITHUB_OUTPUT"
+      - name: Authenticate through repository-bound WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
 
-      - name: Rewrite Last Updated and Effective Date
-        if: steps.changed.outputs.files != ''
-        id: rewrite
-        run: |
-          set -euo pipefail
-          effective_date=$(date -u +"%B %-d, %Y")
-          echo "effective_date=${effective_date}" >> "$GITHUB_OUTPUT"
-          for file in ${{ steps.changed.outputs.files }}; do
-            [ -f "$file" ] || continue
-            last_updated=$(git log -1 --format=%aI -- "$file")
-            last_updated_fmt=$(date -u -d "$last_updated" +"%B %-d, %Y")
-            echo "[$file] last_updated=$last_updated_fmt effective=$effective_date"
-            sed -i -E "s|^\*\*Last Updated:\*\*\s+.*$|**Last Updated:** ${last_updated_fmt}  |" "$file"
-            sed -i -E "s|^\*\*Effective Date:\*\*\s+.*$|**Effective Date:** ${effective_date}|" "$file"
-          done
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
 
-      - name: Commit metadata update
-        if: steps.changed.outputs.files != ''
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -z "$(git status --porcelain legal/)" ]; then
-            echo "No metadata changes to commit."
-            exit 0
-          fi
-          git add legal/
-          git commit -m "chore(legal): update Last Updated / Effective Date [skip ci]"
-          git push origin HEAD:prod
-
-      - name: Compute commit timestamp for audit row
+      - name: Resolve source commit timestamp
         id: commit
-        run: |
-          echo "committed_at=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: echo "committed_at=$(git show -s --format=%cI "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
 
-      - name: Record legal doc versions to Supabase
+      - name: Record immutable legal versions
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          LEGAL_AUDIT_WRITE_ROLE_PASSWORD: ${{ secrets.LEGAL_AUDIT_WRITE_ROLE_PASSWORD }}
           GIT_COMMITTED_AT: ${{ steps.commit.outputs.committed_at }}
-        run: npx tsx src/scripts/legal/record-versions.ts
+        run: |
+          set -euo pipefail
+          [[ "$LEGAL_AUDIT_BUNDLE_VERSION" =~ ^[1-9][0-9]*$ ]]
+          bundle_file="${RUNNER_TEMP}/portfolio-legal-audit-bundle.json"
+          gcloud secrets versions access "$LEGAL_AUDIT_BUNDLE_VERSION" --secret "$LEGAL_AUDIT_SECRET_NAME" --project "$GCP_PROJECT_ID" > "$bundle_file"
+          npm run legal:record:bundle -- "$bundle_file"
+
+      - name: Remove ephemeral legal-audit bundle
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/portfolio-legal-audit-bundle.json"

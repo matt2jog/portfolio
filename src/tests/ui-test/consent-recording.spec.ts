@@ -20,7 +20,7 @@ async function consentRecord(page: import("@playwright/test").Page) {
 
 test("no consent does not initialize LogRocket recording", async ({ page }) => {
   await setupConsentPage(page, "none");
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("consent-banner")).toBeVisible();
 
   const events = await logRocketEvents(page);
@@ -29,7 +29,7 @@ test("no consent does not initialize LogRocket recording", async ({ page }) => {
 
 test("Reject All stores essential-only consent and blocks recording", async ({ page }) => {
   await setupConsentPage(page, "none");
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Reject All" }).click();
   await expect(page.getByTestId("consent-banner")).toBeHidden();
 
@@ -43,7 +43,7 @@ test("Reject All stores essential-only consent and blocks recording", async ({ p
 
 test("Manage Preferences with analytics disabled blocks recording", async ({ page }) => {
   await setupConsentPage(page, "none");
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Manage Preferences" }).click();
 
   const analytics = page.getByRole("checkbox", { name: "Analytics & Performance" });
@@ -64,7 +64,7 @@ test("Manage Preferences with analytics disabled blocks recording", async ({ pag
 
 test("Accept All permits LogRocket initialization", async ({ page }) => {
   await setupConsentPage(page, "none");
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Accept All" }).click();
 
   await expect
@@ -81,11 +81,12 @@ test("Accept All permits LogRocket initialization", async ({ page }) => {
 
 test("no-tracking query param stores reject-all consent and blocks recording", async ({ page }) => {
   await setupConsentPage(page, "none");
-  await page.goto("/?no-tracking=true");
+  await page.goto("/?no-tracking=true", { waitUntil: "domcontentloaded" });
 
-  const record = await consentRecord(page);
-  expect(record.user_action).toBe("reject_all");
-  expect(record.categories_accepted).toEqual(["essential"]);
+  await expect.poll(() => consentRecord(page)).toMatchObject({
+    user_action: "reject_all",
+    categories_accepted: ["essential"],
+  });
 
   const events = await logRocketEvents(page);
   expect(events.some((event) => event.event === "init")).toBe(false);

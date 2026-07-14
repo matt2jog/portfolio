@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Navbar } from "@/components/Navbar";
-import { usePersonalInformation } from "@/hooks/use-personal-information";
 import { useExperience } from "@/hooks/use-experience";
 import Footer from "@/components/Footer";
 import BusinessCard from "@/components/BusinessCard";
@@ -8,51 +7,16 @@ import ExperienceTimeline from "@/components/ExperienceTimeline";
 
 export default function About() {
   const [isOpen, setIsOpen] = useState(false);
-  const { data: info } = usePersonalInformation();
-  const { data: dbExperiences } = useExperience();
+  const {
+    data: dbExperiences = [],
+    isError: experiencesFailed,
+    isPending: experiencesPending,
+  } = useExperience();
 
-  const mockExperiences = [
-    {
-      id: "1",
-      role: "Lead Software Engineer",
-      company: "Tech Corp",
-      location: "Remote",
-      duration: "2022 - Present",
-      description: "Led development of scalable microservices and implemented CI/CD pipelines. Mentored junior developers and established code quality standards across the engineering department.",
-      technologies: ["React", "Node.js", "Docker", "AWS"],
-      isActive: true,
-      position: 0,
-    },
-    {
-      id: "2",
-      role: "Senior Frontend Developer",
-      company: "Design Studio",
-      location: "New York, NY",
-      duration: "2020 - 2022",
-      description: "Architected modern frontend applications focusing on performance and accessible UI/UX. Collaborated closely with design team to implement pixel-perfect user interfaces.",
-      technologies: ["TypeScript", "Next.js", "Tailwind CSS"],
-      isActive: false,
-      position: 1,
-    },
-    {
-      id: "3",
-      role: "Full Stack Engineer",
-      company: "Startup Inc",
-      location: "Austin, TX",
-      duration: "2018 - 2020",
-      description: "Built end-to-end features for a fast-growing SaaS platform. Integrated third-party APIs and optimized database queries for improved performance.",
-      technologies: ["Vue.js", "Python", "PostgreSQL"],
-      isActive: false,
-      position: 2,
-    }
-  ];
-
-  const safeExperiences = dbExperiences && dbExperiences.length > 0
-    ? dbExperiences.map(exp => ({
-      ...exp,
-      role: `${exp.role} | ${exp.location}`,
-    }))
-    : mockExperiences;
+  const experiences = dbExperiences.map(exp => ({
+    ...exp,
+    role: `${exp.role} | ${exp.location}`,
+  }));
 
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-[#00FFFF]/30 relative">
@@ -109,7 +73,27 @@ export default function About() {
         {/* Experience Timeline */}
         <div className="w-full">
           <div data-testid="about-timeline">
-            <ExperienceTimeline experiences={safeExperiences} />
+            {experiencesPending ? (
+              <p
+                aria-live="polite"
+                className="text-sm leading-relaxed text-cyan-100/65"
+                data-testid="about-experience-loading"
+              >
+                Loading experience history&hellip;
+              </p>
+            ) : experiences.length > 0 ? (
+              <ExperienceTimeline experiences={experiences} />
+            ) : (
+              <p
+                aria-live="polite"
+                className="text-sm leading-relaxed text-cyan-100/65"
+                data-testid="about-experience-empty"
+              >
+                {experiencesFailed
+                  ? "Experience history is temporarily unavailable."
+                  : "Experience history is being updated."}
+              </p>
+            )}
           </div>
         </div>
 

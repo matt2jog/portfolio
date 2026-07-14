@@ -4,13 +4,22 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
-import { detectCountryFromIP, extractClientIp, isLocalIp } from "./geoip";
-import { warmLinkedinActivityCache } from "./linkedin";
+import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
 import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
 import { startCareerEventsConsumer } from "./consumers/career-events";
+import { createOriginAccessMiddleware } from "./origin-access";
 
 const app = express();
 const httpServer = createServer(app);
+const isProd = process.env.NODE_ENV === "production";
+
+if (isProd || Boolean(process.env.K_SERVICE)) {
+  app.use(createOriginAccessMiddleware(
+    process.env.EDGE_ORIGIN_TOKEN,
+    process.env.EDGE_ORIGIN_PREVIOUS_TOKEN,
+  ));
+  app.use(markEdgeOriginAuthenticated);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -49,7 +58,7 @@ if (enforceUsOnly) {
       return next();
     }
 
-    const countryCode = detectCountryFromIP(ip || "");
+    const countryCode = extractClientCountry(req);
     if (countryCode === "US") {
       return next();
     }
@@ -71,8 +80,6 @@ export function log(message: string, source = "express") {
 
   console.log(`${formattedTime} [${source}] ${message}`);
 }
-
-const isProd = process.env.NODE_ENV === "production";
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -137,7 +144,6 @@ app.use((req, res, next) => {
     httpServer.listen(port, () => {
       log(`serving on port ${port}`);
       log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
-      warmLinkedinActivityCache();
       startCareerEventsConsumer();
     });
   } else {
@@ -150,7 +156,6 @@ app.use((req, res, next) => {
       () => {
         log(`serving on port ${port}`);
         log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
-        warmLinkedinActivityCache();
         startCareerEventsConsumer();
       },
     );

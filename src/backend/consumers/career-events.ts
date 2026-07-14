@@ -1,12 +1,17 @@
-// Kafka consumer for career-context domain events (DECOUPLING.md §6).
+// Transitional Kafka consumer for Admin-owned public career projection events.
 //
-// Subscribes to the five compacted `career.*.v1` topics published by the resume-studio
-// ("career") service and projects them into the pre-existing portfolio tables
+// Subscribes to the five legacy `career.*.v1` topic names and projects them into
+// Portfolio's local read model. Admin Dashboard is the only canonical writer/publisher.
+// These topic names are not a final ownership contract and this compatibility consumer
+// remains off until Admin's producer, schemas, replay, ordering, idempotence, and
+// tombstone behavior are proven end to end.
+//
+// The read model uses the pre-existing portfolio tables
 // (experiences, education, projects, xyz_bullets, all_skills). Portfolio remains the
 // system of record for its own display-only fields (image, hover_image, category,
 // portfolio_skills, bio…) — those are never touched here.
 //
-// Only started when CAREER_EVENTS_ENABLED=1. Never allowed to crash the web server:
+// Only started when CAREER_EVENTS_COMPAT_ENABLED=1. Never allowed to crash the web server:
 // every per-message failure is caught, logged, and the consumer keeps polling.
 
 import { Kafka, logLevel, type Consumer, type EachMessagePayload } from "kafkajs";
@@ -67,8 +72,8 @@ interface CareerEventsConfig {
   ca: string;
 }
 
-function loadConfig(): CareerEventsConfig | null {
-  if (process.env.CAREER_EVENTS_ENABLED !== "1") {
+export function loadCareerEventsConfig(): CareerEventsConfig | null {
+  if (process.env.CAREER_EVENTS_COMPAT_ENABLED !== "1") {
     return null;
   }
 
@@ -85,7 +90,7 @@ function loadConfig(): CareerEventsConfig | null {
 
   if (missing.length > 0) {
     console.error(
-      `[career-events] CAREER_EVENTS_ENABLED=1 but missing required env var(s): ${missing.join(", ")}. Consumer NOT started.`,
+      `[career-events] CAREER_EVENTS_COMPAT_ENABLED=1 but missing required env var(s): ${missing.join(", ")}. Consumer NOT started.`,
     );
     return null;
   }
@@ -102,7 +107,7 @@ let consumer: Consumer | null = null;
 let shutdownHooked = false;
 
 export async function startCareerEventsConsumer(): Promise<void> {
-  const config = loadConfig();
+  const config = loadCareerEventsConfig();
   if (!config) {
     return;
   }

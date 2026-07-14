@@ -1,6 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import { db } from "./data/db";
 import { linkedinTimelineEvents, personalInformation } from "../shared/schema";
+import { isLinkedinSyncEnabled } from "./linkedin-sync-policy";
 
 type LinkedinEventType = "post" | "repost" | "article";
 
@@ -93,17 +94,14 @@ export async function getLinkedinActivity(): Promise<LinkedinActivitySummary> {
   }
 
   const config = await resolveLinkedinProviderConfig();
-  const configError = getConfigError(config);
 
   if (!config.profileUrl) {
-    return EMPTY_SUMMARY(null, configError ?? "LinkedIn profile URL not configured");
+    return EMPTY_SUMMARY(null, "LinkedIn profile URL not configured");
   }
 
-  if (configError) {
-    return EMPTY_SUMMARY(config.profileUrl, configError);
+  if (isLinkedinSyncEnabled() && !getSyncConfigError(config)) {
+    void ensureLinkedinTimelineFresh(config, false);
   }
-
-  void ensureLinkedinTimelineFresh(config, false);
 
   const rows = await readLinkedinTimelineRows(250, 0);
 
@@ -143,8 +141,10 @@ export async function getLinkedinActivity(): Promise<LinkedinActivitySummary> {
 }
 
 export async function syncLinkedinTimeline() {
+  if (!isLinkedinSyncEnabled()) return;
+
   const config = await resolveLinkedinProviderConfig();
-  const configError = getConfigError(config);
+  const configError = getSyncConfigError(config);
   if (configError) return;
 
   const provider = providers[config.provider];
@@ -175,13 +175,9 @@ export async function getLinkedinTimeline(
   limit: number = TIMELINE_PAGE_LIMIT,
 ): Promise<{ events: LinkedinTimelineEvent[]; hasMore: boolean }> {
   const config = await resolveLinkedinProviderConfig();
-  const configError = getConfigError(config);
-
-  if (configError) {
-    return { events: [], hasMore: false };
+  if (isLinkedinSyncEnabled() && !getSyncConfigError(config)) {
+    void ensureLinkedinTimelineFresh(config, false);
   }
-
-  void ensureLinkedinTimelineFresh(config, false);
 
   const offset = (page - 1) * limit;
   const rows = await readLinkedinTimelineRows(limit + 1, offset);
@@ -204,10 +200,6 @@ export async function getLinkedinTimeline(
   };
 }
 
-export function warmLinkedinActivityCache() {
-  void refreshLinkedinActivityCache();
-}
-
 async function resolveLinkedinProviderConfig(): Promise<LinkedinProviderConfig> {
   const [info] = await db
     .select()
@@ -224,7 +216,7 @@ async function resolveLinkedinProviderConfig(): Promise<LinkedinProviderConfig> 
   };
 }
 
-function getConfigError(config: LinkedinProviderConfig): string | undefined {
+function getSyncConfigError(config: LinkedinProviderConfig): string | undefined {
   if (!config.profileUrl) {
     return "LINKEDIN_PROFILE_URL not configured";
   }
@@ -238,6 +230,8 @@ function getConfigError(config: LinkedinProviderConfig): string | undefined {
 }
 
 async function ensureLinkedinTimelineFresh(_config: LinkedinProviderConfig, waitForSync: boolean) {
+  if (!isLinkedinSyncEnabled()) return;
+
   const cooldownMs = parsePositiveInt(process.env.LINKEDIN_SYNC_COOLDOWN_MINUTES, DEFAULT_SYNC_COOLDOWN_MINUTES) * 60_000;
   if (Date.now() - lastSyncTime <= cooldownMs) return;
 
@@ -268,52 +262,6 @@ async function ensureLinkedinTimelineFresh(_config: LinkedinProviderConfig, wait
   }
 }
 
-async function refreshLinkedinActivityCache() {
-  const config = await resolveLinkedinProviderConfig();
-  const configError = getConfigError(config);
-
-  if (configError) {
-    summaryCache = {
-      data: EMPTY_SUMMARY(config.profileUrl, configError),
-      timestamp: Date.now(),
-    };
-    return;
-  }
-
-  await ensureLinkedinTimelineFresh(config, true);
-
-  const rows = await readLinkedinTimelineRows(250, 0);
-  if (rows.length === 0) {
-    summaryCache = {
-      data: EMPTY_SUMMARY(config.profileUrl, lastSyncError || undefined),
-      timestamp: Date.now(),
-    };
-    return;
-  }
-
-  const lookbackStart = EMPTY_SERIES[0]?.rawDate ?? startOfWeek(new Date()).toISOString();
-  const recentRows = rows.filter((row) => row.timestamp >= new Date(lookbackStart));
-  const latestMeta = (rows[0]?.meta ?? {}) as Record<string, any>;
-  const author = (latestMeta.author ?? {}) as Record<string, any>;
-
-  summaryCache = {
-    data: {
-      name: stringOrNull(author.name),
-      headline: stringOrNull(author.headline),
-      avatarUrl: stringOrNull(author.avatarUrl),
-      url: config.profileUrl,
-      recentPostCount: recentRows.length,
-      visibleReactions: recentRows.reduce((sum, row) => sum + getReactionCount(row.meta), 0),
-      visibleComments: recentRows.reduce((sum, row) => sum + getCommentCount(row.meta), 0),
-      repostsOrArticles: recentRows.filter((row) => row.type === "repost" || row.type === "article").length,
-      weeklyPosts: buildWeeklyMetricSeries(recentRows, "posts"),
-      weeklyEngagement: buildWeeklyMetricSeries(recentRows, "engagement"),
-      ...(lastSyncError ? { _error: lastSyncError } : {}),
-    },
-    timestamp: Date.now(),
-  };
-}
-
 async function readLinkedinTimelineRows(limit: number, offset: number) {
   try {
     const rows = await db
@@ -328,7 +276,7 @@ async function readLinkedinTimelineRows(limit: number, offset: number) {
     return rows;
   } catch (err) {
     if (isMissingLinkedinTableError(err)) {
-      lastSyncError = 'LinkedIn migration missing: run "npm run db:push" to create linkedin_timeline_events';
+      lastSyncError = 'LinkedIn migration missing: run "npm run db:migrate" to create linkedin_timeline_events';
       return [];
     }
     throw err;

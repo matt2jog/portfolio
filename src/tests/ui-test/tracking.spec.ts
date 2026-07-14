@@ -35,10 +35,6 @@ test("tr_uuid cookie is readable from JS after being set", async ({ page }) => {
 test("getTrackerUuid returns null when localStorage has no consent record", async ({ page }) => {
   await setup(page, "none");
   await page.goto("/");
-  const result = await page.evaluate(() => {
-    const { getTrackerUuid } = (window as any).__trackingLib ?? {};
-    return typeof getTrackerUuid === "function" ? getTrackerUuid() : "NO_LIB";
-  });
   // Without the lib exposed we verify indirectly: user_uuid must NOT be emitted
   const events = await logRocketEvents(page);
   expect(events.some((e) => e.event === "user_uuid")).toBe(false);
@@ -115,10 +111,9 @@ test("tr_en param is stripped from URL after page load (no consent)", async ({ p
     return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
   });
   await seedBrowserState(page, { introSeen: true, consent: "none", logRocketTestMode: true });
-  await page.goto("/?tr_en=campaign1");
+  await page.goto("/?tr_en=campaign1", { waitUntil: "domcontentloaded" });
 
-  // Wait for the redirect to settle
-  await page.waitForURL((url) => !url.searchParams.has("tr_en"), { timeout: 5000 });
+  await expect.poll(() => new URL(page.url()).searchParams.has("tr_en")).toBe(false);
   expect(page.url()).not.toContain("tr_en");
   expect(trackingRequests).toHaveLength(0);
 });
@@ -132,9 +127,9 @@ test("tr_en param is stripped and backend is called when user has consented", as
     await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
   });
   await seedBrowserState(page, { introSeen: true, consent: "accept_all", logRocketTestMode: true });
-  await page.goto("/?tr_en=partner42");
+  await page.goto("/?tr_en=partner42", { waitUntil: "domcontentloaded" });
 
-  await page.waitForURL((url) => !url.searchParams.has("tr_en"), { timeout: 5000 });
+  await expect.poll(() => new URL(page.url()).searchParams.has("tr_en")).toBe(false);
   expect(page.url()).not.toContain("tr_en");
   await expect.poll(() => trackingRequests).toEqual(["partner42"]);
 });
@@ -142,9 +137,9 @@ test("tr_en param is stripped and backend is called when user has consented", as
 test("tr_en strips other params while preserving them", async ({ page }) => {
   await installMockApi(page);
   await seedBrowserState(page, { introSeen: true, consent: "none", logRocketTestMode: true });
-  await page.goto("/?keep=yes&tr_en=x");
+  await page.goto("/?keep=yes&tr_en=x", { waitUntil: "domcontentloaded" });
 
-  await page.waitForURL((url) => !url.searchParams.has("tr_en"), { timeout: 5000 });
+  await expect.poll(() => new URL(page.url()).searchParams.has("tr_en")).toBe(false);
   const url = new URL(page.url());
   expect(url.searchParams.has("tr_en")).toBe(false);
   expect(url.searchParams.get("keep")).toBe("yes");

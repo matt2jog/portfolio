@@ -35,13 +35,20 @@ SELECT
   ) AS effective_until
 FROM legal_document_versions;
 
--- RLS: anon may INSERT only. No select/update/delete. Service role bypasses RLS
--- so audits via the Supabase dashboard still work.
+-- RLS: the Data API roles have no policy. A dedicated INSERT-only database role
+-- receives a narrowly scoped policy when that role exists in the target database.
 ALTER TABLE legal_document_versions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS legal_document_versions_anon_insert ON legal_document_versions;
-CREATE POLICY legal_document_versions_anon_insert
-  ON legal_document_versions
-  FOR INSERT
-  TO anon
-  WITH CHECK (true);
+DROP POLICY IF EXISTS legal_document_versions_writer_insert ON legal_document_versions;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'legal_audit_writer') THEN
+    CREATE POLICY legal_document_versions_writer_insert
+      ON legal_document_versions
+      FOR INSERT
+      TO legal_audit_writer
+      WITH CHECK (true);
+  END IF;
+END
+$$;

@@ -1,7 +1,7 @@
-import { ensureRuntimeEnv } from "./infisical";
+import { loadRuntimeEnvironment } from "./runtime-config";
 
 void (async () => {
-  await ensureRuntimeEnv("PORTFOLIO");
+  loadRuntimeEnvironment();
   await import("./index");
 })().catch((error) => {
   console.error(error);

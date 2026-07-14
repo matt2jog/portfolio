@@ -93,7 +93,7 @@ function TrackingBridge() {
   return null;
 }
 
-// Detects tr_en= on any page, stores (if consented), then strips param and reloads.
+// Detects tr_en= on any page, stores it when consented, then strips it without a reload.
 function TrEnProcessor() {
   const [location] = useLocation();
 
@@ -110,8 +110,8 @@ function TrEnProcessor() {
       window.location.hash;
 
     // storeTrEn is a no-op if user hasn't consented
-    storeTrEn(trEn).finally(() => {
-      window.location.replace(cleanUrl);
+    void storeTrEn(trEn).finally(() => {
+      window.history.replaceState(window.history.state, "", cleanUrl);
     });
   }, [location]);
 

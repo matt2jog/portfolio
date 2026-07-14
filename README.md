@@ -6,8 +6,8 @@ development, and serves the prebuilt SPA in production.
 
 - Frontend: React 19 + Vite + Tailwind v4 + Wouter routing + TanStack Query
   + Three.js / R3F + GSAP + Framer Motion
-- Backend: Express 5 + Drizzle ORM + Supabase Postgres + Passport
-  (Google OAuth + local) + connect-pg-simple sessions
+- Backend: Express 5 + Drizzle ORM + Supabase Postgres + strict Admin Dashboard
+  RS256/JWKS identity consumption
 - AI: pluggable LLM provider stack (Gradient primary, Fireworks fallback)
   driving the project-chat agent with tool use and an output evaluator
 - Observability/compliance: GeoIP-gated US-only access, consent clickwrap,
@@ -33,8 +33,9 @@ portfolio/
 │   ├── tests/                   # Playwright: assertions + viewport screenshots
 │   └── migrations/              # Drizzle migrations + raw SQL
 ├── .github/workflows/
-│   ├── ui-tests.yml             # lint + typecheck + Playwright on PRs
-│   └── legal-audit.yml          # records legal-doc versions to Supabase
+│   ├── ci.yml                   # fork-safe PR verification and image scan
+│   ├── deploy.yml               # merge-SHA image release and coordinated edge cutover
+│   └── legal-audit.yml          # immutable legal-doc audit recording
 ├── drizzle.config.ts, vite.config.ts, package.json, tsconfig.json, ...
 ```
 
@@ -63,10 +64,18 @@ Vite path aliases: `@/*` → `src/client/src/*`, `@shared/*` → `src/shared/*`,
   the US; localhost/private IPs always allowed; static assets exempt
 
 ### Admin (`/admin`, Google OAuth)
-- Bio, projects, skills (with groups), AI-model registry, personal info,
-  experiences — full CRUD with audit logging
+- Portfolio-local bio, project presentation, skill grouping/selection,
+  AI-model registry, and welcome-message administration with audit logging
 - Admin policy-acceptance modal records the binding version of legal docs
   the admin agreed to
+
+Admin Dashboard is the sole human identity and canonical career-data authority.
+Portfolio's Cloudflare edge and origin both accept only Admin's 15-minute RS256 identity through its public JWKS;
+HS256 compatibility is rejected. Legacy Portfolio admin routes may edit
+Portfolio-owned presentation fields and local display order, but return
+`CANONICAL_CAREER_READ_ONLY` for canonical profile, project, experience, and
+skill mutations. The disabled compatibility consumer projects Admin-owned
+public career data into Portfolio's local read model.
 
 ### AI project chat
 - Per-project system prompt; tools include `ProjectContextTool`,
@@ -80,7 +89,7 @@ Vite path aliases: `@/*` → `src/client/src/*`, `@shared/*` → `src/shared/*`,
 ### Legal-document VCS
 - Files in `/legal/` are the source of truth; the frontend pulls them via
   `/api/legal/*`
-- On every push to `prod` that touches `legal/**.md`, the `Legal Audit`
+- On every push to protected `main` that touches `legal/**.md`, the `Legal Audit`
   workflow records sha256-deduped rows in Supabase
   `legal_document_versions`. The `legal_document_active_ranges` view
   computes `effective_until` per `doc_type` so you can ask "which version
@@ -91,19 +100,21 @@ Vite path aliases: `@/*` → `src/client/src/*`, `@shared/*` → `src/shared/*`,
 
 ### Prerequisites
 - Node 22+, npm
-- A Supabase Postgres database (or any Postgres with `pgvector`)
-- A Google OAuth client (for admin login)
+- An isolated non-production Supabase development database
+- An Admin Dashboard RS256 test identity or mocked auth adapter for protected-route development
 
 ### First-time setup
 ```bash
 npm ci
-cp .env.example .env       # then fill in DATABASE_URL, OAuth creds, etc.
-npm run db:push            # apply Drizzle schema to your database
+cp .env.example .env       # set DATABASE_URL and SUPABASE_CA_CERT_PATH for the development project
+npm run db:migrate         # apply every committed migration
 ```
 
-Then apply the raw SQL migrations that drizzle-kit doesn't manage
-(constraints, views, RLS policies) via the Supabase SQL editor — at minimum
-`src/migrations/0005_legal_document_versions.sql`.
+Localhost Postgres is reserved for automated integration tests. CI starts a
+disposable `pgvector/Postgres` service, applies every migration, runs the tests,
+and destroys it. Development uses an isolated non-production Supabase database.
+Production reads its separate Supabase URL and TLS certificate only from a pinned
+`portfolio-runtime-bundle-prod` Secret Manager version sourced from Infisical.
 
 ### Run in dev
 ```bash
@@ -126,9 +137,12 @@ npm run dev:client   # Vite on port 5000 with /api + /auth proxied to :3000
 | `npm run check` | TypeScript type-check (no emit) |
 | `npm run lint` | ESLint over the repo |
 | `npm run test:ui` | Playwright assertions against the running dev server |
+| `npm run test:backend-unit` | Secretless backend unit and policy tests |
+| `npm run test:backend-integration` | Database integration tests against `TEST_DATABASE_URL` |
+| `npm run test:coverage` | Enforce 70% lines, branches, functions, and statements |
 | `npm run test:pictures` | Generate viewport screenshots for visual review |
 | `npm run test:pictures:verify` | Verify expected screenshots exist |
-| `npm run db:push` | Drizzle-kit push (schema → DB) |
+| `npm run db:migrate` | Apply every committed migration to the configured database |
 | `npm run skills:cluster` | Re-cluster skill embeddings and update groups |
 | `npm run legal:record` | Manually run the legal-audit recorder (normally run by CI) |
 
@@ -141,7 +155,8 @@ npm run build
 
 `src/scripts/build.ts` does two things:
 1. `vite build` → emits the SPA to `dist/public/`
-2. `esbuild` bundles `src/backend/index.ts` into `dist/index.cjs` (CJS,
+2. `esbuild` bundles the server into `dist/index.cjs` and the immutable-image
+   migration entry point into `dist/migrate.cjs` (CJS,
    minified, with an allowlist of deps bundled inline to reduce cold-start
    syscalls; the rest are kept external and resolved from `node_modules`)
 
@@ -150,47 +165,49 @@ npm run build
 npm start
 ```
 
-Runs `node dist/index.cjs` with `NODE_ENV=production`. In production mode
+Runs `dist/index.cjs` through the pinned distroless Node 22 entrypoint with
+`NODE_ENV=production`. In production mode
 the server calls `serveStatic(app)` (from `src/backend/static.ts`) instead
 of mounting Vite, serving `dist/public/` with an SPA fallback to
 `index.html`.
 
-The container needs to ship: `dist/`, `node_modules/` (for externals),
-`package.json`, and the `/legal/` directory (the backend reads markdown
+The container ships `dist/`, production `node_modules/`, `package.json`,
+`legal/`, and `migrations/` (the backend reads markdown
 from there at request time).
 
 ### Required env vars
-At minimum:
+Cloud Run injects the schema-validated JSON bundle as one pinned Secret Manager
+environment reference:
 ```
 NODE_ENV=production
-PORT=3000
-DATABASE_URL=postgres://...
-SESSION_SECRET=<strong random>
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-CALLBACK_URL=https://<your-domain>/auth/google/callback
+PORT=8080
+PUBLIC_BASE_URL=https://2jog.dev
+PORTFOLIO_RUNTIME_BUNDLE=<portfolio-runtime-bundle-prod JSON>
 ```
 
-Optional: `ENFORCE_US_ONLY`, `ALLOWED_ADMIN_EMAIL`, `ALLOWED_ADMIN_SUB`,
-LinkedIn ingestion (`LINKEDIN_*`, `APIFY_*`), AI providers
-(`GRADIENT_AI_TOKEN`, `FIREWORKS_AI_TOKEN`), Supabase TLS
-(`SUPABASE_CA_CERT_PATH` or `SUPABASE_CA_CERT`).
-See `.env.example` for the full list.
+The bundle supplies database, Admin RS256/JWKS, inference, and Supabase TLS
+credentials, plus `EDGE_ORIGIN_TOKEN`. It intentionally excludes Google OAuth,
+Kafka, session, and paid ingestion credentials because those integrations are
+not active in the target production runtime. Cloudflare receives the same
+credential as `ORIGIN_ACCESS_TOKEN` from the deployment bundle and overwrites
+any client-supplied origin header before proxying. Direct `run.app` requests
+without the exact credential return HTTP 401. The self-contained contract is
+`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\config\secret-schema.prod.json`.
+Infisical remains the human-edited authority; production
+does not fetch Infisical directly. Local development uses a service-local `.env`
+created from `.env.example`; it never reads the root union environment file.
 
 ### CI/CD
-- **`ui-test.yml`** — lint + typecheck + functional Playwright assertions
-  on every PR and push to `main`.
-- **`ui-artifacts.yml`** — generates and uploads viewport screenshots
-  on every PR and push to `main`.
-- **`backend-unit.yml`** — DB connectivity + core backend action tests.
-  Requires `DATABASE_URL` secret.
-- **`legal-audit.yml`** — runs on push to `prod` when any `legal/**.md`
-  changes. Computes the commit timestamp and inserts an audit row per doc
-  (idempotent via `unique(doc_type, content_hash)`). Retries 3× with
-  exponential backoff; fails the workflow loudly on persistent failure.
-  Required GitHub secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Make this
-  workflow a required status check on `prod` so legal changes can't merge
-  without a successful audit record.
+
+`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\CI_SETUP.md`
+is the operational source for fork-safe `main` PR CI, repository-bound WIF,
+the dedicated Artifact Registry, digest-pinned zero-traffic candidates,
+custom/raw smoke checks, ten-minute observation, and causal rollback. Cloud Build
+and the legacy shared deployment identity/repository are not part of delivery.
+The checked-in `portfolio-edge` Worker owns `2jog.dev` and `www.2jog.dev`; its
+deployment is coordinated with Cloud Run because both sides share the origin
+credential. The previous route owners and Worker version are retained in a
+three-day GitHub artifact so the required 48-hour rollback window is reproducible.
 
 ## Testing
 
@@ -198,15 +215,18 @@ Tests live under `src/tests/`:
 
 - `src/tests/ui-test/` — Playwright functional assertions (consent
   recording, etc.). `npm run test:ui` runs these against a Vite dev server
-  it spawns on `127.0.0.1:5000`. CI: `.github/workflows/ui-test.yml`.
+  it spawns on `127.0.0.1:5000`. Add `-- --headed` for headed execution and
+  set `PLAYWRIGHT_SLOW_MO_MS` to add a human-viewable delay between actions.
+  Two workers run by default to keep cold Vite startup reliable; override
+  that with `PLAYWRIGHT_WORKERS` when the host has additional capacity.
 - `src/tests/ui-artifacts/` — Playwright viewport screenshots at desktop
   (1440×900) and mobile (390×844). Output goes to
   `src/tests/ui-artifacts/{desktop,mobile}/` (gitignored except
   `.gitkeep`). `npm run test:pictures` to regenerate.
-  CI: `.github/workflows/ui-artifacts.yml`.
-- `src/tests/backend-unit/` — Node `node:test` suite covering DB
-  connectivity and core backend actions. `npm run test:backend-unit`.
-  CI: `.github/workflows/backend-unit.yml`.
+- `src/tests/backend-unit/` — secretless Node `node:test` suite covering core
+  behavior and delivery policy. `npm run test:backend-unit`.
+- `src/tests/backend-integration/` — database connectivity/schema checks against
+  an isolated pgvector/Postgres database. `npm run test:backend-integration`.
 
 ## Database
 
@@ -217,6 +237,20 @@ Tables include: `users`, `projects`, `xyz_bullets`, `bio`, `bio_paragraphs`,
 `linkedin_timeline_events`, `github_timeline_events`,
 `admin_policy_acceptance`, and `legal_document_versions`.
 
-Migrations are in `src/migrations/`. Drizzle-managed ones use the
-`drizzle-kit` journal; raw SQL files (constraints, views, RLS) are applied
-manually via the Supabase SQL editor.
+Migrations are in `src/migrations/`. CI applies them to disposable Postgres; CD
+runs additive production migrations from the same scanned image digest before
+the zero-traffic candidate deploy.
+
+## Runtime ownership
+
+Public browsers and mail clients call `https://2jog.dev` and
+`https://www.2jog.dev`. Portfolio calls Admin's JWKS/public career contracts,
+Supabase PostgreSQL, and optional inference providers. LinkedIn reads persisted
+SQL activity without a provider call; paid Apify synchronization defaults off
+and requires `LINKEDIN_SYNC_ENABLED=1` locally. Kafka compatibility code also
+defaults off and has no production credentials. Re-enabling either integration
+requires a reviewed secret-schema and cost-policy change. It runs as
+`portfolio--prod` in Cloud
+Run `us-east4`; any public request scales it from zero, with one maximum instance,
+one CPU, 512 MiB memory, and request-based CPU. Rollback moves traffic to the
+retained prior revision; it never rebuilds or invokes Cloud Build.

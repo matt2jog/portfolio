@@ -53,6 +53,7 @@ export async function installMockApi(page: Page) {
   await page.route("**/api/legal/tracking", (route) => fulfillJson(route, legalDocFixture));
 
   await mockDbRoute(page, "**/api/public/personal-information", personalInformationFixture);
+  await mockDbRoute(page, "**/api/public/bio", adminFixtures.bio);
   await mockDbRoute(page, "**/api/public/experiences", experienceFixture);
   await mockDbRoute(page, "**/api/skills-constellation", skillsConstellationFixture);
   await mockDbRoute(page, "**/api/public/skills", skillsConstellationFixture);

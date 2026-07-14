@@ -7,22 +7,18 @@ import { rm, readFile } from "fs/promises";
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "connect-pg-simple",
   "cors",
   "date-fns",
   "drizzle-orm",
   "drizzle-zod",
   "express",
   "express-rate-limit",
-  "express-session",
   "jsonwebtoken",
   "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
   "openai",
-  "passport",
-  "passport-local",
   "pg",
   "stripe",
   "uuid",
@@ -47,11 +43,15 @@ async function buildAll() {
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
-    entryPoints: ["src/backend/bootstrap.ts"],
+    entryPoints: {
+      index: "src/backend/bootstrap.ts",
+      migrate: "src/scripts/migrate.ts",
+    },
     platform: "node",
     bundle: true,
     format: "cjs",
-    outfile: "dist/index.cjs",
+    outdir: "dist",
+    outExtension: { ".js": ".cjs" },
     define: {
       "process.env.NODE_ENV": '"production"',
     },

@@ -1,4 +1,4 @@
-// Projection logic for career-context domain events (DECOUPLING.md §6).
+// Projection logic for Admin-owned public career events.
 //
 // Every function here is a pure mapping from a parsed event envelope onto drizzle
 // upsert/delete calls against the pre-existing portfolio tables. `db` is always passed
@@ -264,8 +264,9 @@ export function projectProfile(
   envelope: CareerEventEnvelope<ProfileEventData>,
   logger: ProjectionLogger = consoleProjectionLogger,
 ): void {
-  // Portfolio owns personal_information; profile events are a no-op in v1.
-  logger.debug("profile event received (no-op; portfolio owns personal_information)", {
+  // The legacy profile shape does not safely map to the final Admin projection yet.
+  // Keep this compatibility path a no-op until Admin's generated schema lands.
+  logger.debug("legacy profile event received (no-op pending Admin projection schema)", {
     aggregateId: envelope.aggregate_id,
     eventType: envelope.event_type,
   });

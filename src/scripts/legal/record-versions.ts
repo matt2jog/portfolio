@@ -3,9 +3,8 @@
  *
  * Idempotent: the unique(doc_type, content_hash) constraint means re-runs on
  * unchanged content insert nothing. Intended to be called from a GitHub
- * Actions workflow that triggers on push to the main branch when legal/**.md
- * changes. Failing the workflow blocks future merges (the workflow is
- * a required status check on the main branch).
+ * Actions workflow that triggers on a protected-main push when legal/**.md
+ * changes. The workflow never rewrites or pushes legal source.
  *
  * Connects as the dedicated `legal_audit_writer` Postgres role, which has
  * INSERT-only privilege on legal_document_versions. The connection is built
@@ -15,6 +14,7 @@
  * Env required:
  *   DATABASE_URL                   — full Postgres URL; host/port/db are reused
  *   LEGAL_AUDIT_WRITE_ROLE_PASSWORD — password for the legal_audit_writer role
+ *   SUPABASE_CA_CERT               — CA used for verified Supabase TLS
  *   GITHUB_SHA                     — commit sha (set by GitHub Actions)
  *   GIT_COMMITTED_AT               — ISO-8601 commit timestamp (workflow computes)
  */
@@ -23,6 +23,8 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Client } from "pg";
+import { postgresConnectionConfig } from "../../shared/postgres-tls";
+import { buildLegalWriterConnectionString } from "./writer-connection";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "privacy", filename: "PRIVACY_POLICY.md" },
@@ -30,7 +32,6 @@ const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "tracking", filename: "TRACKING_NOTICE_AND_CONSENT.md" },
 ];
 
-const WRITER_ROLE = "legal_audit_writer";
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1_000;
 
@@ -53,18 +54,7 @@ async function sleep(ms: number) {
 function buildWriterConnectionString(): string {
   const base = required("DATABASE_URL");
   const password = required("LEGAL_AUDIT_WRITE_ROLE_PASSWORD");
-  const url = new URL(base);
-  // Supavisor pooler hosts (`*.pooler.supabase.com`) require the tenant
-  // identifier baked into the username as `<role>.<project_ref>`. The
-  // original username is `postgres.<project_ref>`, so preserve that suffix
-  // when swapping in the writer role. Direct-connection hosts don't use
-  // this convention, so only apply it when the username actually has a dot.
-  const originalUser = decodeURIComponent(url.username);
-  const dotIndex = originalUser.indexOf(".");
-  const tenantSuffix = dotIndex >= 0 ? originalUser.slice(dotIndex) : "";
-  url.username = `${WRITER_ROLE}${tenantSuffix}`;
-  url.password = encodeURIComponent(password);
-  return url.toString();
+  return buildLegalWriterConnectionString(base, password);
 }
 
 async function insertWithRetry(
@@ -122,10 +112,8 @@ async function main() {
   const committedAt = required("GIT_COMMITTED_AT");
   const connectionString = buildWriterConnectionString();
 
-  const sslRequired = connectionString.includes("supabase.com");
   const client = new Client({
-    connectionString,
-    ssl: sslRequired ? { rejectUnauthorized: false } : undefined,
+    ...postgresConnectionConfig(connectionString, process.env.SUPABASE_CA_CERT),
   });
 
   await client.connect();

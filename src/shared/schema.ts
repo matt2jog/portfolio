@@ -76,14 +76,13 @@ export const skillsGroup = pgTable("skills_group", {
 export const allSkills = pgTable("all_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  groupingId: varchar("grouping_id"),
+  groupingId: varchar("grouping_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   embedding: vector("embedding", { dimensions: 768 }),
   embeddingModel: text("embedding_model"),
 });
-
 export const portfolioSkills = pgTable("portfolio_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  allSkillId: varchar("all_skill_id").notNull(),
+  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "cascade" }),
   position: integer("position").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
@@ -249,13 +248,9 @@ export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 export type AiModel = typeof aiModels.$inferSelect;
 
-// Career-content projection table (DECOUPLING.md §1/§6). This table already exists in
-// the shared DB (created by resume_vcs_cloud's SQLModel, table name "education") but was
-// never declared in drizzle here. Declaring it is NOT a schema/DDL change — no migration
-// is added, no columns are created — it only lets the career-events Kafka consumer write
-// to the pre-existing table through drizzle instead of raw SQL. Verified live against the
-// shared DB on 2026-07-07: id/school/location/degree/dates/position/created_at/updated_at,
-// matching this declaration exactly.
+// Portfolio-local read-model table for Admin-owned public career data. Declaring it here
+// does not transfer canonical ownership to Portfolio; only the disabled compatibility
+// projector may update canonical fields, while Portfolio keeps local display order.
 export const education = pgTable("education", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   school: text("school").notNull(),

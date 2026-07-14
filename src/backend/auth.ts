@@ -1,4 +1,4 @@
-import type { Express, NextFunction, Request, RequestHandler, Response } from "express";
+import type { Express, Request, RequestHandler, Response } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type JWTPayload } from "jose";
 import { eq, or } from "drizzle-orm";
 import { db } from "./data/db";
@@ -30,6 +30,13 @@ if (isProd) {
 interface AdminClaims extends JWTPayload {
   email: string;
   role: "admin";
+}
+
+export function selectSingleAdminIdentityMatch<T>(matches: readonly T[]): T | undefined {
+  if (matches.length > 1) {
+    throw new Error("users contains conflicting rows for this Admin identity");
+  }
+  return matches[0];
 }
 
 function parseCookies(raw: string | undefined): Record<string, string> {
@@ -65,7 +72,9 @@ export async function verifyAdminIdentity(token: string, verificationKeySet: JWT
 
 async function localAdmin(claims: AdminClaims): Promise<Express.User> {
   const email = claims.email.trim().toLowerCase();
-  const [existing] = await db.select().from(users).where(or(eq(users.googleSub, claims.sub!), eq(users.email, email))).limit(1);
+  const existing = selectSingleAdminIdentityMatch(
+    await db.select().from(users).where(or(eq(users.googleSub, claims.sub!), eq(users.email, email))),
+  );
   if (existing) {
     const [updated] = await db.update(users).set({ googleSub: claims.sub!, email, role: "admin" }).where(eq(users.id, existing.id)).returning();
     return updated!;

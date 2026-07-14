@@ -57,9 +57,9 @@ const EFFECTIVE_DATE_RE = /^\*\*Effective Date:\*\*\s+(.+?)\s*$/m;
 /**
  * Parse and strip the **Last Updated** / **Effective Date** lines from the
  * top of a legal markdown document, returning the rendered HTML plus the two
- * date strings as written. The GitHub Actions `legal-audit` workflow keeps
- * those two lines accurate on every push to prod; the server just surfaces
- * them so the frontend can render them in the page header.
+ * date strings as written. Legal Markdown is the binding checked-in source;
+ * the GitHub Actions audit records each immutable main-branch version without
+ * rewriting it. The server surfaces these values in the page header.
  */
 export function loadLegalDoc(filename: string): LegalDoc | null {
   try {

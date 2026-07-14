@@ -1,5 +1,13 @@
-import type { Request } from "express";
-import geoip from "geoip-lite";
+import type { Request, RequestHandler } from "express";
+import { isIP } from "node:net";
+
+declare global {
+  namespace Express {
+    interface Request {
+      edgeOriginAuthenticated?: boolean;
+    }
+  }
+}
 
 function normalizeIp(ip: string): string {
   if (!ip) return "";
@@ -7,12 +15,27 @@ function normalizeIp(ip: string): string {
   return ip;
 }
 
+export const markEdgeOriginAuthenticated: RequestHandler = (req, _res, next) => {
+  req.edgeOriginAuthenticated = true;
+  next();
+};
+
 export function extractClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(forwarded)
-    ? forwarded[0]
-    : forwarded?.split(",")[0]?.trim() || req.ip || "";
-  return normalizeIp(raw);
+  if (!req.edgeOriginAuthenticated) return "";
+
+  const edgeHeader = req.headers["x-2jog-client-ip"];
+  const edgeIp = normalizeIp(typeof edgeHeader === "string" ? edgeHeader.trim() : "");
+  if (isIP(edgeIp)) return edgeIp;
+
+  return "";
+}
+
+export function extractClientCountry(req: Request): string | undefined {
+  if (!req.edgeOriginAuthenticated) return undefined;
+
+  const edgeHeader = req.headers["x-2jog-client-country"];
+  const edgeCountry = typeof edgeHeader === "string" ? edgeHeader.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(edgeCountry) ? edgeCountry : undefined;
 }
 
 export function isLocalIp(ip: string): boolean {
@@ -32,13 +55,4 @@ export function isLocalIp(ip: string): boolean {
   }
 
   return false;
-}
-
-export function detectCountryFromIP(ip: string): string | undefined {
-  const cleanIp = normalizeIp(ip);
-  if (!cleanIp) return undefined;
-  if (isLocalIp(cleanIp)) return "US";
-
-  const result = geoip.lookup(cleanIp);
-  return result?.country || undefined;
 }
