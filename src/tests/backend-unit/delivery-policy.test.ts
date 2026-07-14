@@ -52,18 +52,74 @@ test("production sources contain no fabricated content or schema-push shortcut",
   const about = read("src/client/src/pages/About.tsx");
   const admin = read("src/client/src/pages/Admin.tsx");
   const github = read("src/backend/github.ts");
+  const portfolio = read("src/client/src/pages/Portfolio.tsx");
+  const routes = read("src/backend/routes.ts");
+  const businessCard = read("src/client/src/components/BusinessCard.tsx");
+  const businessCard3d = read("src/client/src/components/BusinessCard3D.tsx");
+  const footer = read("src/client/src/components/Footer.tsx");
   const packageJson = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
   const localEnvironment = read(".env.example");
 
   assert.doesNotMatch(about, /mockExperiences|Tech Corp|Design Studio|Startup Inc/);
   assert.doesNotMatch(admin, /isLocalProductionPreview|window\.location\.hostname/);
   assert.doesNotMatch(github, /mock-event-2024-test/);
+  assert.doesNotMatch(portfolio, /Lorem Ipsum|Lorem ipsum|example\.com/);
+  assert.doesNotMatch(routes, /matthew@2jog\.dev|Matthew Tujague|7326393889|\(732\) 639-3889|example\.com/);
+  for (const source of [businessCard, businessCard3d, footer]) {
+    assert.doesNotMatch(
+      source,
+      /info\?\.[\s\S]{0,100}\|\|\s*["'](?:Matthew Tujague|Software Engineer|NJ-NY-PA|matthew@2jog\.dev|https:\/\/2jog\.dev|https:\/\/github\.com\/binimal101|\(732\) 639-3889|7326393889)/,
+    );
+  }
+  assert.match(routes, /buildPublicPersonalInformationResponse\(row\)/);
+  assert.match(routes, /buildChatOwnerContext\(personalInfo\)/);
+  assert.doesNotMatch(routes, /project\/portfolio owner is Matthew Tujague|ownerName = personalInfo\?\./);
+  assert.equal(existsSync(path.join(root, ".claude", "settings.local.json")), false);
   assert.equal(existsSync(path.join(root, "src", "scripts", "seed-experiences.ts")), false);
+  assert.equal(existsSync(path.join(root, "src", "scripts", "seed-personal-info.ts")), false);
+  assert.equal(existsSync(path.join(root, "src", "scripts", "init-personal-info.ts")), false);
+  const schema = read("src/shared/schema.ts");
+  const migration = read("src/migrations/0012_remove_personal_information_defaults.sql");
+  assert.doesNotMatch(schema, /personalInformation[\s\S]+\.default\("(?:Matthew Tujague|Software Engineer|NJ-NY-PA|matthew@2jog\.dev|\+17326393889|\(732\) 639-3889)"\)/);
+  for (const column of ["name", "title", "location", "short_bio", "email", "phone", "phone_formatted", "linkedin_url", "github_url", "devpost_url", "portfolio_url"]) {
+    assert.match(migration, new RegExp(`ALTER COLUMN \\"?${column}\\"? DROP DEFAULT`, "i"));
+  }
   assert.equal(packageJson.scripts?.["db:push"], undefined);
   assert.doesNotMatch(
     localEnvironment,
     /ALLOWED_ADMIN_(?:EMAIL|SUB)|APIFY_TOKEN|KAFKA_SASL_PASSWORD|LEGAL_AUDIT_WRITE_ROLE_PASSWORD/,
   );
+});
+
+test("production mutation helpers are gated to Portfolio main GitHub Actions", () => {
+  const guard = read("src/scripts/production-execution-guard.ts");
+  assert.match(guard, /NODE_ENV/);
+  assert.match(guard, /GITHUB_ACTIONS/);
+  assert.match(guard, /matt2jog\/portfolio/);
+  assert.match(guard, /refs\/heads\/main/);
+
+  for (const relativePath of [
+    "src/scripts/embed_skills.ts",
+    "src/scripts/cluster_anchors.ts",
+    "src/scripts/update_skill_groups.ts",
+    "src/scripts/migrate.ts",
+    "src/scripts/legal/record-versions.ts",
+    "src/scripts/legal/record-versions-from-bundle.ts",
+    "src/scripts/release/run-migrations-from-bundle.ts",
+    "src/scripts/release/run-deployment-command.ts",
+    "src/scripts/release/cloudflare-routes.ts",
+    "drizzle.config.ts",
+  ]) {
+    assert.match(read(relativePath), /assertProductionMutationAllowed/);
+  }
+
+  for (const relativePath of [
+    ".github/scripts/deploy-cloud-run.sh",
+    ".github/scripts/deploy-portfolio-edge.sh",
+  ]) {
+    assert.match(read(relativePath), /GITHUB_REPOSITORY.*matt2jog\/portfolio/);
+    assert.match(read(relativePath), /GITHUB_REF.*refs\/heads\/main/);
+  }
 });
 
 test("the repository carries the typed Portfolio secret contract", () => {

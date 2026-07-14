@@ -186,17 +186,17 @@ export const insertLinkedinTimelineEventSchema = createInsertSchema(linkedinTime
 
 export const personalInformation = pgTable("personal_information", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().default("Matthew Tujague"),
-  title: text("title").notNull().default("Software Engineer"),
-  location: text("location").notNull().default("NJ-NY-PA"),
-  shortBio: text("short_bio").notNull().default("Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value."),
-  email: text("email").notNull().default("matthew@2jog.dev"),
-  phone: text("phone").notNull().default("+17326393889"),
-  phoneFormatted: text("phone_formatted").notNull().default("(732) 639-3889"),
-  linkedinUrl: text("linkedin_url").notNull().default("https://linkedin.com/in/matthewtujague"),
-  githubUrl: text("github_url").notNull().default("https://github.com/binimal101"),
-  devpostUrl: text("devpost_url").notNull().default("https://devpost.com/"),
-  portfolioUrl: text("portfolio_url").notNull().default("https://2jog.dev/"),
+  name: text("name").notNull(),
+  title: text("title").notNull(),
+  location: text("location").notNull(),
+  shortBio: text("short_bio").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  phoneFormatted: text("phone_formatted").notNull(),
+  linkedinUrl: text("linkedin_url").notNull(),
+  githubUrl: text("github_url").notNull(),
+  devpostUrl: text("devpost_url").notNull(),
+  portfolioUrl: text("portfolio_url").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

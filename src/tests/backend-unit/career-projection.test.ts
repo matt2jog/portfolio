@@ -17,7 +17,7 @@ import {
 } from "../../backend/consumers/career-projection";
 import { parseEnvelope } from "../../backend/consumers/career-events-types";
 
-// ── mock db ───────────────────────────────────────────────────────────────────
+// ---- recording adapter/double ------------------------------------------------
 //
 // Records every insert/update/delete call the projection logic makes so tests can
 // assert exactly which columns were written, without touching a real Postgres pool.
@@ -203,7 +203,7 @@ test("projectExperience: tombstone (data: null without an explicit Deleted event
 
 // ── project projection (+ bullets) ───────────────────────────────────────────
 
-test("projectProject: upsert writes content fields, a category placeholder only in values (never in the update set), and replaces bullets by id", async () => {
+test("projectProject: upsert writes content fields, a category sentinel only in values (never in the update set), and replaces bullets by id", async () => {
   const { db, calls } = createMockDb();
 
   await projectProject(

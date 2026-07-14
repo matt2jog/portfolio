@@ -1,0 +1,11 @@
+ALTER TABLE "personal_information" ALTER COLUMN "name" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "title" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "location" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "short_bio" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "email" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "phone" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "phone_formatted" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "linkedin_url" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "github_url" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "devpost_url" DROP DEFAULT;
+ALTER TABLE "personal_information" ALTER COLUMN "portfolio_url" DROP DEFAULT;

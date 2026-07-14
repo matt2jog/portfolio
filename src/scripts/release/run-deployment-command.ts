@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { parseDeploymentBundle } from "./deployment-config";
+import { assertProductionMutationAllowed } from "../production-execution-guard";
 
 async function main(): Promise<void> {
+  assertProductionMutationAllowed(process.env, "Cloud Run and edge deployment");
   const separator = process.argv.indexOf("--");
   const bundlePath = process.argv[2];
   const command = separator >= 0 ? process.argv[separator + 1] : undefined;

@@ -1,12 +1,16 @@
 import fs from "fs";
 import dotenv from "dotenv";
-import { db } from "../backend/data/db.js";
-import { skillsGroup, allSkills, portfolioSkills } from "../shared/schema.js";
 import { eq } from "drizzle-orm";
+import { assertProductionMutationAllowed } from "./production-execution-guard";
 
 dotenv.config();
 
 async function run() {
+  assertProductionMutationAllowed(process.env, "Skill-group update");
+  const [{ db }, { skillsGroup, allSkills, portfolioSkills }] = await Promise.all([
+    import("../backend/data/db.js"),
+    import("../shared/schema.js"),
+  ]);
   const filePath = "script/skill_communities_anchored.json";
   if (!fs.existsSync(filePath)) {
     console.error(`File not found: ${filePath}`);
@@ -77,4 +81,7 @@ async function run() {
   console.log("Database update complete! All skills have been categorized.");
 }
 
-run().catch(console.error);
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

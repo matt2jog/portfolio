@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { parseDeploymentBundle } from "./deployment-config";
+import { assertProductionMutationAllowed } from "../production-execution-guard";
 
 async function main(): Promise<void> {
+  assertProductionMutationAllowed(process.env, "Digest-pinned database migration");
   const bundlePath = process.argv[2];
   const imageDigestUri = process.argv[3];
   if (!bundlePath || !imageDigestUri.includes("@sha256:")) {
@@ -12,6 +14,7 @@ async function main(): Promise<void> {
   const raw = await readFile(bundlePath, "utf8");
   const bundle = parseDeploymentBundle(raw);
 
+  const githubEnvironmentKeys = ["GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_REF"] as const;
   const child = spawn(
     "docker",
     [
@@ -21,6 +24,7 @@ async function main(): Promise<void> {
       "DATABASE_URL",
       "--env",
       "SUPABASE_CA_CERT",
+      ...githubEnvironmentKeys.flatMap((key) => process.env[key] === undefined ? [] : ["--env", key]),
       imageDigestUri,
       "dist/migrate.cjs",
     ],

@@ -3,12 +3,12 @@
 // Every function here is a pure mapping from a parsed event envelope onto drizzle
 // upsert/delete calls against the pre-existing portfolio tables. `db` is always passed
 // in (never imported directly) so this module stays hermetic: unit tests supply a small
-// recording mock instead of a live Postgres pool.
+// recording adapter/double instead of a live Postgres pool.
 //
-// Ground rules enforced throughout (see DECOUPLING.md §6):
+// Ground rules enforced throughout (see DECOUPLING.md section 6):
 //  - Only content fields from the event are written; portfolio-local columns (image,
-//    hover_image, category, portfolio_skills…) are never touched here.
-//  - `position` is applied on INSERT only — never included in the `set` clause of an
+//    hover_image, category, portfolio_skills...) are never touched here.
+//  - `position` is applied on INSERT only - never included in the `set` clause of an
 //    upsert, so a locally-reordered row keeps its portfolio display order.
 //  - Deletes/tombstones remove (or, where the table has soft-delete columns, archive)
 //    the projection row. Unknown/newer fields are ignored.
@@ -47,7 +47,7 @@ export const consoleProjectionLogger: ProjectionLogger = {
   warn: (message, meta) => console.warn(`[career-events] ${message}`, meta ?? ""),
 };
 
-// ─── Experience ──────────────────────────────────────────────────────────────
+// ---- Experience -------------------------------------------------------------
 
 export async function projectExperience(
   db: Db,
@@ -66,7 +66,7 @@ export async function projectExperience(
   const data = envelope.data as ExperienceEventData;
 
   // Bullets ride inside the experience aggregate per the wire contract, but the
-  // portfolio schema has no bullets-for-experiences concept (only projects do) —
+  // portfolio schema has no bullets-for-experiences concept (only projects do) -
   // deliberately ignored here.
   await db
     .insert(experiences)
@@ -96,9 +96,9 @@ export async function projectExperience(
     });
 }
 
-// ─── Project (+ bullets) ─────────────────────────────────────────────────────
+// ---- Project (+ bullets) ----------------------------------------------------
 
-const PROJECT_INSERT_CATEGORY_PLACEHOLDER = "uncategorized";
+const PROJECT_INSERT_CATEGORY_SENTINEL = "uncategorized";
 
 export async function projectProject(
   db: Db,
@@ -109,7 +109,7 @@ export async function projectProject(
   const projectId = envelope.data?.id ?? envelope.aggregate_id;
 
   if (isDelete) {
-    // projects has soft-delete columns already used by the admin "archive" flow —
+    // projects has soft-delete columns already used by the admin "archive" flow -
     // respect that semantics instead of a hard delete.
     await db
       .update(projects)
@@ -127,11 +127,11 @@ export async function projectProject(
       id: data.id,
       title: data.title,
       // category is NOT NULL with no DB default and is exclusively portfolio-owned
-      // content (DECOUPLING.md §6: "NEVER touch image/hover_image/category"). This
-      // placeholder is used ONLY on first insert of a project the portfolio has never
+      // content (DECOUPLING.md section 6: "NEVER touch image/hover_image/category"). This
+      // sentinel is used ONLY on first insert of a project the portfolio has never
       // seen before; an admin fills in the real category/images afterward. Existing
       // rows never have this column touched (see `set` below, which omits it).
-      category: PROJECT_INSERT_CATEGORY_PLACEHOLDER,
+      category: PROJECT_INSERT_CATEGORY_SENTINEL,
       description: data.description ?? "",
       longDescription: data.long_description ?? null,
       tech: data.tech ?? [],
@@ -180,7 +180,7 @@ async function replaceProjectBullets(
   }
 }
 
-// ─── Education ───────────────────────────────────────────────────────────────
+// ---- Education --------------------------------------------------------------
 
 export async function projectEducation(
   db: Db,
@@ -220,7 +220,7 @@ export async function projectEducation(
     });
 }
 
-// ─── Skill (concept + variants) ──────────────────────────────────────────────
+// ---- Skill (concept + variants) ---------------------------------------------
 
 export async function projectSkill(
   db: Db,
@@ -230,7 +230,7 @@ export async function projectSkill(
   const isDelete = envelope.event_type === "SkillConceptDeleted" || envelope.data === null;
 
   if (isDelete) {
-    // v1: no destructive all_skills deletes — portfolio_skills may still reference the
+    // v1: no destructive all_skills deletes - portfolio_skills may still reference the
     // rows that back this concept's variants. Log only.
     logger.warn("skill concept deleted upstream; not deleting all_skills rows (v1)", {
       aggregateId: envelope.aggregate_id,
@@ -258,7 +258,7 @@ export async function projectSkill(
   }
 }
 
-// ─── Profile ─────────────────────────────────────────────────────────────────
+// ---- Profile ----------------------------------------------------------------
 
 export function projectProfile(
   envelope: CareerEventEnvelope<ProfileEventData>,

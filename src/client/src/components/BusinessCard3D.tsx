@@ -56,13 +56,13 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
             {/* Name / Title */}
             <div className="text-center w-full mt-12">
               <h1 className="font-semibold text-white text-[25px] leading-[1.05] drop-shadow-[0_2px_12px_rgba(255,255,255,0.2)] uppercase whitespace-nowrap">
-                {info?.name || "Matthew Tujague"}
+                {info?.name || <span data-testid="personal-information-empty">Personal information is not configured.</span>}
               </h1>
               <div className="flex flex-col items-center mt-3 w-full relative">
                 <h2 className="text-[#e2e2e2] font-sans tracking-[0.15em] text-[11px] uppercase font-normal mb-3 text-center leading-[1.6]">
-                  {info?.title || "Software Engineer"}
+                  {info?.title || "Title not configured"}
                   <br />
-                  <span className="text-[9px] text-[#00FFFF]/80">{info?.location || "NJ-NY-PA"}</span>
+                  <span className="text-[9px] text-[#00FFFF]/80">{info?.location || "Location not configured"}</span>
                 </h2>
                 <div className="w-[85%] h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
                 <div className="absolute bottom-[0px] w-[30%] h-[1px] bg-[#00FFFF] shadow-[0_0_8px_rgba(0,255,255,1)]" />
@@ -73,15 +73,15 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
             <div className="w-full flex-1 flex flex-col justify-end gap-3 text-xs text-gray-300 mt-auto pb-4 pl-4 pr-1">
               <div className="flex items-center gap-4">
                 <Phone size={14} className="text-[#00FFFF] stroke-[2px]" />
-                <span className="tracking-wide">{info?.phoneFormatted || "(732) 639-3889"}</span>
+                <span className="tracking-wide">{info?.phoneFormatted || "Phone not configured"}</span>
               </div>
               <div className="flex items-center gap-4">
                 <Mail size={14} className="text-[#00FFFF] stroke-[2px]" />
-                <span className="tracking-wide">{info?.email || "matthew@2jog.dev"}</span>
+                <span className="tracking-wide">{info?.email || "Email not configured"}</span>
               </div>
               <div className="flex items-center gap-4">
                 <Globe size={14} className="text-[#00FFFF] stroke-[2px]" />
-                <span className="tracking-wide tracking-wider">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</span>
+                <span className="tracking-wide tracking-wider">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "Portfolio URL not configured"}</span>
               </div>
             </div>
           </div>
@@ -107,7 +107,7 @@ function CardGeometry({ info }: { info: PersonalInformation | undefined }) {
                   className="w-full h-full object-contain mix-blend-screen"
                 />
             </div>
-            <div className="text-[9px] text-[#00FFFF]/50 tracking-[0.4em] uppercase">{info?.name || "Matthew Tujague"} // {info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</div>
+            <div className="text-[9px] text-[#00FFFF]/50 tracking-[0.4em] uppercase">{info?.name || "Name not configured"} // {info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "Portfolio URL not configured"}</div>
           </div>
         </Html>
       </mesh>

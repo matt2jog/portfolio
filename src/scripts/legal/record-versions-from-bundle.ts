@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { parseLegalAuditBundle } from "./legal-audit-config";
+import { assertProductionMutationAllowed } from "../production-execution-guard";
 
 async function loadDeploymentBundle(filePath: string): Promise<void> {
   const raw = await readFile(filePath, "utf8");
@@ -10,6 +11,7 @@ async function loadDeploymentBundle(filePath: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assertProductionMutationAllowed(process.env, "Legal audit bundle recording");
   const bundlePath = process.argv[2];
   if (!bundlePath) throw new Error("Deployment bundle path is required");
 

@@ -10,7 +10,7 @@ The final system prompt is assembled on every request from three independent lay
 
 ```
 basePrompt          (DB column: projects.ai_system_prompt, or auto-generated fallback)
-  + generalInformation   (owner contact info, background — TODO: pull from personal_information table)
+  + generalInformation   (configured owner context, or an explicit not-configured instruction)
   + rules.toPromptBlock()  (rendered from PORTFOLIO_CHAT_RULES in rules.ts)
          │
          └──► pushPromptVersion()  ──► LangSmith Hub (versioned, one prompt per project ID)
@@ -20,8 +20,8 @@ basePrompt          (DB column: projects.ai_system_prompt, or auto-generated fal
 
 | Layer | File | How |
 |-------|------|-----|
-| Base persona / project framing | `server/routes.ts:282` or `projects.ai_system_prompt` in DB | Per-project override via admin panel |
-| Owner info | `server/routes.ts:280` | Hardcoded (TODO: DB pull) |
+| Base persona / project framing | `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\src\backend\routes.ts` or `projects.ai_system_prompt` in DB | Per-project override via admin panel |
+| Owner info | `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\src\backend\personal-information.ts` | Read from `personal_information`; omitted when not configured |
 | Behavioral rules | `server/agent/rules.ts` | Add/modify `Rule` objects in `PORTFOLIO_CHAT_RULES` |
 
 ---

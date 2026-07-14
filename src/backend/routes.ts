@@ -51,6 +51,10 @@ import {
   ProjectContextTool,
 } from "./agent/tools";
 import { PORTFOLIO_CHAT_RULES } from "./agent/rules";
+import {
+  buildChatOwnerContext,
+  buildPublicPersonalInformationResponse,
+} from "./personal-information";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
@@ -90,7 +94,7 @@ async function getAiProvider(): Promise<LLMProvider | undefined> {
     return _aiProvider;
   }
 
-  // Build the gradient → fireworks model ID map from the DB
+  // Build the gradient-to-fireworks model ID map from the DB
   const rows = await db
     .select({ modelId: aiModels.modelId, fireworksModelId: aiModels.fireworksModelId })
     .from(aiModels)
@@ -112,7 +116,7 @@ async function getAiProvider(): Promise<LLMProvider | undefined> {
   return _aiProvider;
 }
 const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
-// Deduplicates concurrent requests for the same cache key → single LLM call
+// Deduplicates concurrent requests for the same cache key to a single LLM call
 const promptSuggestionsInflight = new Map<string, Promise<PromptSuggestion[]>>();
 
 function writeSseAssistantMessage(res: Response, content: string) {
@@ -586,9 +590,10 @@ export async function registerRoutes(
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
 
-    const generalInformation = personalInfo
-      ? `\n\nGeneral information: The project/portfolio owner is ${personalInfo.name}. Contact: ${personalInfo.email} | ${personalInfo.phoneFormatted} | ${personalInfo.linkedinUrl}`
-      : `\n\nGeneral information: The project/portfolio owner is Matthew Tujague. Contact: matthew@2jog.dev | (732) 639-3889 | https://linkedin.com/in/matthewtujague`;
+    const owner = buildChatOwnerContext(personalInfo);
+    const generalInformation = owner
+      ? `\n\nGeneral information: The project/portfolio owner is ${owner.name}. Contact: ${owner.email} | ${owner.phone} | ${owner.linkedinUrl}`
+      : "\n\nOwner information is not configured. Do not invent or infer the creator's identity, contact details, or links.";
 
     const basePrompt = project.aiSystemPrompt
       || `You are an AI assistant for the project "${project.title}". Full project details have been loaded into this conversation as tool results — refer to them. Use the GitHub tools to fetch repository details and dig deeper whenever a question requires verified source-level information. Be professional yet conversational.`;
@@ -625,17 +630,14 @@ export async function registerRoutes(
       tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
-    const ownerName = personalInfo?.name ?? "Matthew Tujague";
-    const ownerEmail = personalInfo?.email ?? "matthew@2jog.dev";
-    const ownerPhone = personalInfo?.phone ?? "+17326393889";
-    const ownerLinkedin = personalInfo?.linkedinUrl ?? "https://linkedin.com/in/matthewtujague";
-    const ownerGithub = personalInfo?.githubUrl ?? "https://github.com/binimal101";
-    const ownerPortfolio = personalInfo?.portfolioUrl ?? "https://2jog.dev/";
+    const welcomeOwnerInstruction = owner
+      ? ` Then naturally introduce its creator, ${owner.name}, and invite the visitor to reach out: email ${owner.email}, phone ${owner.phone}, LinkedIn ${owner.linkedinUrl}.`
+      : " Do not invent or infer the creator's identity or contact details because owner information is not configured.";
 
     const userMessages: Array<{ role: "user" | "assistant"; content: string }> = welcome
       ? [{
         role: "user",
-        content: `[WELCOME] Greet this visitor with a single short paragraph — no lists, no headers. First, give a crisp ~20-word description of this project as you would pitch it to a non-technical hiring manager: what it does and why it matters. Then naturally introduce its creator, ${ownerName}, and invite the visitor to reach out: email ${ownerEmail}, phone ${ownerPhone}, LinkedIn ${ownerLinkedin}.`,
+        content: `[WELCOME] Greet this visitor with a single short paragraph — no lists, no headers. First, give a crisp ~20-word description of this project as you would pitch it to a non-technical hiring manager: what it does and why it matters.${welcomeOwnerInstruction}`,
       }]
       : messages.slice(-20).map((m: any) => ({
         role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
@@ -698,15 +700,7 @@ export async function registerRoutes(
           content: `Project Details: ${JSON.stringify(project)}\n\n[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.`,
         }];
         const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any, chatRun ?? undefined)).trim() || project.description;
-        const welcomeMessages = buildWelcomeMessages({
-          aiSummary,
-          ownerName,
-          ownerEmail,
-          ownerPhone,
-          ownerLinkedin,
-          ownerGithub,
-          ownerPortfolio,
-        });
+        const welcomeMessages = buildWelcomeMessages({ aiSummary, owner });
         writeSseAssistantMessages(res, welcomeMessages);
         
         if (chatRun) {
@@ -775,7 +769,7 @@ export async function registerRoutes(
       const evalStatus = randomEvaluatorStatus();
       writeSseEvaluatorStatus(res, evalStatus);
 
-      // Run evaluator and capture result for tracing — never let it break the response
+      // Run evaluator and capture result for tracing - never let it break the response
       let evalResult = await evaluateResponse({
         response: responseContent,
         userMessages,
@@ -957,20 +951,7 @@ export async function registerRoutes(
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
 
-    // Fallbacks if no data exists yet (before seed)
-    res.json(row || {
-      name: "Matthew Tujague",
-      title: "Software Engineer",
-      location: "NJ-NY-PA",
-      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
-      email: "matthew@2jog.dev",
-      phone: "+17326393889",
-      phoneFormatted: "(732) 639-3889",
-      linkedinUrl: "https://linkedin.com/in/matthewtujague",
-      githubUrl: "https://github.com/binimal101",
-      devpostUrl: "https://devpost.com/",
-      portfolioUrl: "https://2jog.dev/",
-    });
+    res.json(buildPublicPersonalInformationResponse(row));
   });
 
   app.get("/api/public/ip", (req, res) => {
@@ -1060,19 +1041,7 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    res.json(row || {
-      name: "Matthew Tujague",
-      title: "Software Engineer",
-      location: "NJ-NY-PA",
-      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
-      email: "matthew@2jog.dev",
-      phone: "+17326393889",
-      phoneFormatted: "(732) 639-3889",
-      linkedinUrl: "https://linkedin.com/in/matthewtujague",
-      githubUrl: "https://github.com/binimal101",
-      devpostUrl: "https://devpost.com/",
-      portfolioUrl: "https://2jog.dev/",
-    });
+    res.json(buildPublicPersonalInformationResponse(row));
   });
 
   app.put("/api/admin/personal-information", requireAdmin, canonicalCareerMutationRejected);
@@ -1436,16 +1405,9 @@ function routeId(value: string | string[] | undefined): string {
 
 function buildWelcomeMessages(args: {
   aiSummary: string;
-  ownerName: string;
-  ownerEmail: string;
-  ownerPhone: string;
-  ownerLinkedin: string;
-  ownerGithub: string;
-  ownerPortfolio: string;
+  owner: ReturnType<typeof buildChatOwnerContext>;
 }) {
-  const firstName = args.ownerName.trim().split(/\s+/)[0] || "Matt";
-
-  return [
+  const messages = [
     [`**What this is:** ${args.aiSummary}`].join("\n"),
     [
       "**I'm here to help, I can:**",
@@ -1453,8 +1415,16 @@ function buildWelcomeMessages(args: {
     "- Pull from the actual project source code when needed.",
     "- Check the repository context, commits, and related history.",
     ].join("\n"),
-    `Reach out to ${firstName} via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [LinkedIn](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
   ];
+
+  if (args.owner) {
+    const firstName = args.owner.name.trim().split(/\s+/)[0];
+    messages.push(
+      `Reach out to ${firstName} via [Email](mailto:${args.owner.email}), [Phone](tel:${args.owner.phone}), [LinkedIn](${args.owner.linkedinUrl}), or [GitHub](${args.owner.githubUrl})!`,
+    );
+  }
+
+  return messages;
 }
 
 function createPromptSuggestionsHash(

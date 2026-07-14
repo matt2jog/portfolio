@@ -1,14 +1,18 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { db } from "../backend/data/db.js";
-import { allSkills } from "../shared/schema.js";
 import { isNull, eq } from "drizzle-orm";
+import { assertProductionMutationAllowed } from "./production-execution-guard";
 
 const FIREWORKS_TOKEN = process.env.FIREWORKS_AI_TOKEN;
 const EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5";
 
 async function run() {
+  assertProductionMutationAllowed(process.env, "Skill embedding");
+  const [{ db }, { allSkills }] = await Promise.all([
+    import("../backend/data/db.js"),
+    import("../shared/schema.js"),
+  ]);
   if (!FIREWORKS_TOKEN) {
     console.error("Missing FIREWORKS_AI_TOKEN");
     return;
@@ -62,4 +66,7 @@ async function run() {
   }
 }
 
-run().catch(console.error);
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

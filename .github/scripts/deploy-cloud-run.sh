@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" ) ]]; then
+  echo "Production Cloud Run mutation is allowed only from GitHub Actions matt2jog/portfolio refs/heads/main." >&2
+  exit 2
+fi
+
 : "${GCP_PROJECT_ID:?GCP_PROJECT_ID is required}"
 : "${GCP_PROJECT_NUMBER:?GCP_PROJECT_NUMBER is required}"
 : "${GCP_REGION:?GCP_REGION is required}"

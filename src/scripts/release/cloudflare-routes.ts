@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { assertProductionMutationAllowed } from "../production-execution-guard";
 
 export interface CloudflareWorkerRoute {
   id: string;
@@ -154,6 +155,7 @@ class HttpCloudflareRouteClient implements CloudflareRouteClient {
 }
 
 async function main(): Promise<void> {
+  assertProductionMutationAllowed(process.env, "Cloudflare route mutation");
   const [command, argument, expectedCurrentOwner] = process.argv.slice(2);
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const zoneId = process.env.CLOUDFLARE_ZONE_ID;

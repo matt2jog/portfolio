@@ -259,7 +259,11 @@ export default function Tree() {
   const links = getLinks(info);
 
   if (!info) {
-    return null; // or a skeleton loader
+    return (
+      <div data-testid="tree-empty" className="min-h-dvh bg-background px-6 pt-32 text-center text-gray-400">
+        Personal information is not configured.
+      </div>
+    );
   }
 
   return (

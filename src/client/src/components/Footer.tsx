@@ -14,9 +14,14 @@ export default function Footer() {
           <a href={info.githubUrl} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-primary transition-colors font-mono text-sm underline underline-offset-4">GITHUB</a>
         </div>
       )}
+      {!info && (
+        <p data-testid="footer-config-status" className="mb-12 font-mono text-xs uppercase tracking-widest text-gray-500">
+          Personal information is not configured.
+        </p>
+      )}
       <div className="text-gray-600 text-xs font-mono mb-6 space-y-1">
         <div>
-          {info?.name || "Matthew Tujague"} © {new Date().getFullYear()}. ALL RIGHTS RESERVED.
+          {info?.name || "Portfolio owner not configured"} © {new Date().getFullYear()}. ALL RIGHTS RESERVED.
         </div>
         <div className="flex justify-center gap-4 text-gray-700">
           <a href="/privacy" className="hover:text-gray-500 transition-colors">Privacy Policy</a>

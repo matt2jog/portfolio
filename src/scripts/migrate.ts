@@ -3,8 +3,10 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { postgresConnectionConfig } from "../shared/postgres-tls";
+import { assertProductionMutationAllowed } from "./production-execution-guard";
 
 async function main(): Promise<void> {
+  assertProductionMutationAllowed(process.env, "Portfolio database migration");
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
 

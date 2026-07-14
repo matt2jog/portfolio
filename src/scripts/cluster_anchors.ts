@@ -1,8 +1,7 @@
 import fs from "fs";
 import dotenv from "dotenv";
-import { db } from "../backend/data/db.js";
-import { allSkills } from "../shared/schema.js";
 import { isNotNull } from "drizzle-orm";
+import { assertProductionMutationAllowed } from "./production-execution-guard";
 
 dotenv.config();
 
@@ -32,6 +31,11 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
 }
 
 async function run() {
+  assertProductionMutationAllowed(process.env, "Skill clustering");
+  const [{ db }, { allSkills }] = await Promise.all([
+    import("../backend/data/db.js"),
+    import("../shared/schema.js"),
+  ]);
   console.log("Fetching embeddings for anchor categories...");
   const res = await fetch("https://api.fireworks.ai/inference/v1/embeddings", {
     method: "POST",
@@ -108,4 +112,7 @@ async function run() {
   }
 }
 
-run().catch(console.error);
+run().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

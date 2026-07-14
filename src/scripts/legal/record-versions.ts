@@ -9,14 +9,14 @@
  * Connects as the dedicated `legal_audit_writer` Postgres role, which has
  * INSERT-only privilege on legal_document_versions. The connection is built
  * by swapping the credentials of the existing DATABASE_URL with that role's
- * username/password — so we only need one extra secret in CI.
+ * username/password - so we only need one extra secret in CI.
  *
  * Env required:
- *   DATABASE_URL                   — full Postgres URL; host/port/db are reused
- *   LEGAL_AUDIT_WRITE_ROLE_PASSWORD — password for the legal_audit_writer role
- *   SUPABASE_CA_CERT               — CA used for verified Supabase TLS
- *   GITHUB_SHA                     — commit sha (set by GitHub Actions)
- *   GIT_COMMITTED_AT               — ISO-8601 commit timestamp (workflow computes)
+ *   DATABASE_URL                   - full Postgres URL; host/port/db are reused
+ *   LEGAL_AUDIT_WRITE_ROLE_PASSWORD - password for the legal_audit_writer role
+ *   SUPABASE_CA_CERT               - CA used for verified Supabase TLS
+ *   GITHUB_SHA                     - commit sha (set by GitHub Actions)
+ *   GIT_COMMITTED_AT               - ISO-8601 commit timestamp (workflow computes)
  */
 
 import { readFile } from "node:fs/promises";
@@ -25,6 +25,7 @@ import path from "node:path";
 import { Client } from "pg";
 import { postgresConnectionConfig } from "../../shared/postgres-tls";
 import { buildLegalWriterConnectionString } from "./writer-connection";
+import { assertProductionMutationAllowed } from "../production-execution-guard";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "privacy", filename: "PRIVACY_POLICY.md" },
@@ -108,6 +109,7 @@ async function insertWithRetry(
 }
 
 async function main() {
+  assertProductionMutationAllowed(process.env, "Legal audit recording");
   const commitSha = required("GITHUB_SHA");
   const committedAt = required("GIT_COMMITTED_AT");
   const connectionString = buildWriterConnectionString();
