@@ -189,6 +189,10 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
   assert.match(workflow, /npm run test:backend-integration/);
   assert.match(workflow, /npm run test:ui/);
   assert.match(workflow, /npm run build/);
+  assert.ok(
+    workflow.indexOf("Install Chromium") < workflow.indexOf("Enforce client coverage"),
+    "Chromium must be installed before browser-based client coverage",
+  );
   assert.match(workflow, /docker build[^\n]+portfolio-ci:\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /image-ref:\s*portfolio-ci:\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /scanners:\s*['"]?secret/);
