@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { parseDeploymentBundle } from "./deployment-config";
 import { assertProductionMutationAllowed } from "../production-execution-guard";
+import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
 
 async function main(): Promise<void> {
   assertProductionMutationAllowed(process.env, "Digest-pinned database migration");
@@ -11,10 +11,16 @@ async function main(): Promise<void> {
     throw new Error("A deployment bundle path and digest-pinned image URI are required");
   }
 
-  const raw = await readFile(bundlePath, "utf8");
+  const raw = await readAndDeleteBundle(bundlePath);
   const bundle = parseDeploymentBundle(raw);
 
-  const githubEnvironmentKeys = ["GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_REF"] as const;
+  const productionContextKeys = [
+    "NODE_ENV",
+    "GITHUB_ACTIONS",
+    "GITHUB_REPOSITORY",
+    "GITHUB_REF",
+    "GITHUB_WORKFLOW_REF",
+  ] as const;
   const child = spawn(
     "docker",
     [
@@ -24,15 +30,18 @@ async function main(): Promise<void> {
       "DATABASE_URL",
       "--env",
       "SUPABASE_CA_CERT",
-      ...githubEnvironmentKeys.flatMap((key) => process.env[key] === undefined ? [] : ["--env", key]),
+      "--env",
+      "SUPABASE_PROJECT_REF",
+      ...productionContextKeys.flatMap((key) => process.env[key] === undefined ? [] : ["--env", key]),
       imageDigestUri,
       "dist/migrate.cjs",
     ],
     {
       env: {
         ...process.env,
-        DATABASE_URL: bundle.DATABASE_URL,
+        DATABASE_URL: bundle.MIGRATION_DATABASE_URL,
         SUPABASE_CA_CERT: bundle.SUPABASE_CA_CERT,
+        SUPABASE_PROJECT_REF: bundle.SUPABASE_PROJECT_REF,
       },
       stdio: "inherit",
       shell: false,

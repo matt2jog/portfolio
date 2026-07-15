@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyRuntimeBundle } from "../../backend/runtime-config";
+import { applyRuntimeBundle, loadRuntimeEnvironment } from "../../backend/runtime-config";
+import {
+  TEST_SUPABASE_CA_CERT,
+  TEST_SUPABASE_PROJECT_REF,
+  testSupabaseDatabaseUrl,
+} from "../support/supabase";
 
 const EDGE_TOKEN = `edge-${"x".repeat(35)}`;
 const PREVIOUS_EDGE_TOKEN = `edge-${"p".repeat(35)}`;
@@ -17,12 +22,13 @@ function validRuntimeBundle() {
     ADMIN_IDENTITY_AUDIENCE: "2jog-services",
     ADMIN_IDENTITY_ISSUER: "https://admin.2jog.dev",
     ADMIN_IDENTITY_JWKS_URL: "https://admin.2jog.dev/.well-known/jwks.json",
-    DATABASE_URL: "postgresql://localhost:5432/portfolio",
+    DATABASE_URL: testSupabaseDatabaseUrl("portfolio_runtime"),
     EDGE_ORIGIN_TOKEN: EDGE_TOKEN,
     EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN,
     FIREWORKS_AI_TOKEN: ["fireworks", "fixture"].join("-"),
     GRADIENT_AI_TOKEN: ["gradient", "fixture"].join("-"),
-    SUPABASE_CA_CERT: "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----",
+    SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
+    SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
   };
 }
 
@@ -30,7 +36,7 @@ test("runtime bundle validates its boundary and installs only schema-owned keys"
   const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value" };
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
 
-  assert.equal(target.DATABASE_URL, "postgresql://localhost:5432/portfolio");
+  assert.equal(target.DATABASE_URL, testSupabaseDatabaseUrl("portfolio_runtime"));
   assert.equal(target.ADMIN_IDENTITY_AUDIENCE, "2jog-services");
   assert.equal(target.EDGE_ORIGIN_TOKEN, EDGE_TOKEN);
   assert.equal(target.EDGE_ORIGIN_PREVIOUS_TOKEN, PREVIOUS_EDGE_TOKEN);
@@ -74,6 +80,15 @@ test("runtime bundle parse errors never include secret values", () => {
   );
 });
 
+test("runtime bundle JSON is removed from the environment before validation", () => {
+  const target: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    PORTFOLIO_RUNTIME_BUNDLE: "{",
+  };
+  assert.throws(() => loadRuntimeEnvironment(target), /not valid JSON/);
+  assert.equal(target.PORTFOLIO_RUNTIME_BUNDLE, undefined);
+});
+
 test("runtime bundle rejects malformed, non-object, legacy-session, and short-edge payloads", () => {
   assert.throws(() => applyRuntimeBundle("{", {}), /not valid JSON/);
   assert.throws(() => applyRuntimeBundle("[]", {}), /JSON object/);
@@ -94,9 +109,24 @@ test("runtime bundle enforces the shared auth contract and typed URI/PEM fields"
     ["ADMIN_IDENTITY_JWKS_URL", "https://admin.2jog.dev/not-jwks"],
     ["DATABASE_URL", "not-a-database-uri"],
     ["SUPABASE_CA_CERT", "not-a-pem-certificate"],
+    ["SUPABASE_PROJECT_REF", "not-a-project-ref"],
   ] as const) {
     const bundle = { ...validRuntimeBundle(), [key]: value };
     assert.throws(() => applyRuntimeBundle(JSON.stringify(bundle), {}), new RegExp(key), key);
+  }
+});
+
+test("runtime production bundle rejects non-Supabase and privileged database sessions", () => {
+  for (const databaseUrl of [
+    "postgresql://portfolio_runtime:fixture@localhost:5432/portfolio",
+    "postgresql://portfolio_runtime:fixture@127.0.0.1:5432/portfolio",
+    testSupabaseDatabaseUrl("postgres"),
+  ]) {
+    assert.throws(
+      () => applyRuntimeBundle(JSON.stringify({ ...validRuntimeBundle(), DATABASE_URL: databaseUrl }), {}),
+      /DATABASE_URL|Supabase|role|username/i,
+      databaseUrl,
+    );
   }
 });
 

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { parseDeploymentBundle } from "./deployment-config";
 import { assertProductionMutationAllowed } from "../production-execution-guard";
+import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
 
 async function main(): Promise<void> {
   assertProductionMutationAllowed(process.env, "Cloud Run and edge deployment");
@@ -13,12 +13,16 @@ async function main(): Promise<void> {
     throw new Error("A deployment bundle path and command after -- are required");
   }
 
-  const bundle = parseDeploymentBundle(await readFile(bundlePath, "utf8"));
+  const bundle = parseDeploymentBundle(await readAndDeleteBundle(bundlePath));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
     CLOUDFLARE_API_TOKEN: bundle.CLOUDFLARE_API_TOKEN,
     EDGE_ORIGIN_TOKEN: bundle.EDGE_ORIGIN_TOKEN,
   };
+  delete childEnvironment.DATABASE_URL;
+  delete childEnvironment.MIGRATION_DATABASE_URL;
+  delete childEnvironment.SUPABASE_CA_CERT;
+  delete childEnvironment.SUPABASE_PROJECT_REF;
   if (bundle.EDGE_ORIGIN_PREVIOUS_TOKEN) {
     childEnvironment.EDGE_ORIGIN_PREVIOUS_TOKEN = bundle.EDGE_ORIGIN_PREVIOUS_TOKEN;
   } else {

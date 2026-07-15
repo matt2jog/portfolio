@@ -1,7 +1,10 @@
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { readFileSync } from "node:fs";
-import { postgresConnectionConfig } from "../../shared/postgres-tls";
+import {
+  postgresConnectionConfig,
+  productionSupabaseConnectionConfig,
+} from "../../shared/postgres-tls";
 
 const databaseUrl = process.env.DATABASE_URL;
 const caCertPath = process.env.SUPABASE_CA_CERT_PATH;
@@ -15,7 +18,14 @@ if (!databaseUrl) {
 }
 
 export const pool = new Pool({
-  ...postgresConnectionConfig(databaseUrl, caCert),
+  ...(process.env.NODE_ENV === "production"
+    ? productionSupabaseConnectionConfig({
+      databaseUrl,
+      projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+      supabaseCaCert: caCert,
+      expectedRole: "portfolio_runtime",
+    })
+    : postgresConnectionConfig(databaseUrl, caCert)),
 });
 
 export const db = drizzle(pool);

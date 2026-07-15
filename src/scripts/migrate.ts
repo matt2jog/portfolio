@@ -2,7 +2,10 @@ import path from "node:path";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { postgresConnectionConfig } from "../shared/postgres-tls";
+import {
+  postgresConnectionConfig,
+  productionSupabaseConnectionConfig,
+} from "../shared/postgres-tls";
 import { assertProductionMutationAllowed } from "./production-execution-guard";
 
 async function main(): Promise<void> {
@@ -11,7 +14,13 @@ async function main(): Promise<void> {
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
 
   const pool = new Pool({
-    ...postgresConnectionConfig(databaseUrl, process.env.SUPABASE_CA_CERT),
+    ...(process.env.NODE_ENV === "production"
+      ? productionSupabaseConnectionConfig({
+        databaseUrl,
+        projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+        supabaseCaCert: process.env.SUPABASE_CA_CERT,
+      })
+      : postgresConnectionConfig(databaseUrl, process.env.SUPABASE_CA_CERT)),
     max: 1,
   });
 

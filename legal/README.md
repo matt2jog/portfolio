@@ -28,6 +28,13 @@ The `unique(doc_type, content_hash)` constraint makes the insert idempotent:
 re-runs on unchanged content are no-ops, and re-running the workflow after a
 transient failure is safe.
 
+The legal workflow receives only `LEGAL_AUDIT_DATABASE_URL`, sourced from
+`PORTFOLIO_LEGAL_AUDIT_DATABASE_URL`. The URL must bind
+`legal_audit_writer` to the configured `SUPABASE_PROJECT_REF`; a parsed
+Supabase CA enforces hostname-verified TLS. The raw JSON file is deleted before
+the recorder starts, and the recorder verifies the exact unprivileged
+`session_user`/`current_user` after connecting.
+
 The recorder retries 3 times with exponential backoff. If all retries fail, the
 workflow fails. The audit is post-merge (the workflow runs on push to `main`,
 not as a PR gate) so a Supabase outage does not block merges, but a failed

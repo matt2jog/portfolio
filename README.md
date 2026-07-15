@@ -113,8 +113,9 @@ npm run db:migrate         # apply every committed migration
 Localhost Postgres is reserved for automated integration tests. CI starts a
 disposable `pgvector/Postgres` service, applies every migration, runs the tests,
 and destroys it. Development uses an isolated non-production Supabase database.
-Production reads its separate Supabase URL and TLS certificate only from a pinned
-`portfolio-runtime-bundle-prod` Secret Manager version sourced from Infisical.
+Production bundles reject localhost, loopback, IP, private, `.local`, arbitrary
+Postgres, cross-project Supabase, and privileged-role URLs. They require the exact
+`SUPABASE_PROJECT_REF`, a parseable Supabase CA, and hostname-verified TLS.
 
 ### Run in dev
 ```bash
@@ -185,8 +186,12 @@ PUBLIC_BASE_URL=https://2jog.dev
 PORTFOLIO_RUNTIME_BUNDLE=<portfolio-runtime-bundle-prod JSON>
 ```
 
-The bundle supplies database, Admin RS256/JWKS, inference, and Supabase TLS
-credentials, plus `EDGE_ORIGIN_TOKEN`. It intentionally excludes Google OAuth,
+The runtime bundle maps `PORTFOLIO_RUNTIME_DATABASE_URL` to the process
+`DATABASE_URL`; that URL must authenticate as `portfolio_runtime`. Startup
+then verifies `session_user`, `current_user`, inherited role attributes,
+database CREATE, and public-schema CREATE before the server listens. The bundle also
+supplies Admin RS256/JWKS, inference, `SUPABASE_PROJECT_REF`, the Supabase CA,
+and `EDGE_ORIGIN_TOKEN`. It intentionally excludes Google OAuth,
 Kafka, session, and paid ingestion credentials because those integrations are
 not active in the target production runtime. Cloudflare receives the same
 credential as `ORIGIN_ACCESS_TOKEN` from the deployment bundle and overwrites
@@ -194,7 +199,8 @@ any client-supplied origin header before proxying. Direct `run.app` requests
 without the exact credential return HTTP 401. The self-contained contract is
 `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\config\secret-schema.prod.json`.
 Infisical remains the human-edited authority; production
-does not fetch Infisical directly. Local development uses a service-local `.env`
+does not fetch Infisical directly. The raw runtime JSON environment value is removed
+immediately after parsing. Local development uses a service-local `.env`
 created from `.env.example`; it never reads the root union environment file.
 
 ### CI/CD
@@ -239,7 +245,14 @@ Tables include: `users`, `projects`, `xyz_bullets`, `bio`, `bio_paragraphs`,
 
 Migrations are in `src/migrations/`. CI applies them to disposable Postgres; CD
 runs additive production migrations from the same scanned image digest before
-the zero-traffic candidate deploy.
+the zero-traffic candidate deploy. The privileged deploy workflow does not start
+localhost Postgres or repeat database integration tests; those are required in PR CI.
+Its deployment bundle carries `MIGRATION_DATABASE_URL` from
+`PORTFOLIO_MIGRATION_DATABASE_URL`; only the digest-pinned migration child
+receives it as `DATABASE_URL`. The legal bundle separately carries
+`LEGAL_AUDIT_DATABASE_URL` from `PORTFOLIO_LEGAL_AUDIT_DATABASE_URL`,
+authenticating as `legal_audit_writer`. Raw bundle files are mode 0600 and
+deleted immediately after each parser reads them.
 
 ## Runtime ownership
 

@@ -132,9 +132,13 @@ test("production mutation helpers are gated to Portfolio main GitHub Actions", (
   }
 });
 
-test("the repository carries the typed Portfolio secret contract", () => {
+test("the repository carries separate scoped Portfolio database secret contracts", () => {
   const schema = JSON.parse(read("config/secret-schema.prod.json")) as {
-    bundles: { runtime: { fields: Record<string, unknown> }; deployment: { fields: Record<string, unknown> } };
+    bundles: {
+      runtime: { fields: Record<string, { source?: string }> };
+      deployment: { fields: Record<string, { source?: string }> };
+      legal_audit: { fields: Record<string, { source?: string }> };
+    };
   };
 
   assert.ok(schema.bundles.runtime.fields.EDGE_ORIGIN_TOKEN);
@@ -143,6 +147,26 @@ test("the repository carries the typed Portfolio secret contract", () => {
   assert.ok(schema.bundles.deployment.fields.EDGE_ORIGIN_PREVIOUS_TOKEN);
   assert.ok(schema.bundles.runtime.fields.SUPABASE_CA_CERT);
   assert.ok(schema.bundles.deployment.fields.SUPABASE_CA_CERT);
+  assert.ok(schema.bundles.legal_audit.fields.SUPABASE_CA_CERT);
+  assert.equal(schema.bundles.runtime.fields.DATABASE_URL?.source, "PORTFOLIO_RUNTIME_DATABASE_URL");
+  assert.equal(
+    schema.bundles.deployment.fields.MIGRATION_DATABASE_URL?.source,
+    "PORTFOLIO_MIGRATION_DATABASE_URL",
+  );
+  assert.equal(
+    schema.bundles.legal_audit.fields.LEGAL_AUDIT_DATABASE_URL?.source,
+    "PORTFOLIO_LEGAL_AUDIT_DATABASE_URL",
+  );
+  assert.equal(
+    schema.bundles.deployment.fields.CLOUDFLARE_API_TOKEN?.source,
+    "PORTFOLIO_CLOUDFLARE_API_TOKEN",
+  );
+  assert.equal(schema.bundles.deployment.fields.DATABASE_URL, undefined);
+  assert.equal(schema.bundles.legal_audit.fields.DATABASE_URL, undefined);
+  assert.equal(schema.bundles.legal_audit.fields.LEGAL_AUDIT_WRITE_ROLE_PASSWORD, undefined);
+  for (const bundle of Object.values(schema.bundles)) {
+    assert.equal(bundle.fields.SUPABASE_PROJECT_REF?.source, "PORTFOLIO_SUPABASE_PROJECT_REF");
+  }
   for (const forbidden of [
     "APIFY_TOKEN",
     "GOOGLE_CLIENT_ID",
@@ -283,6 +307,46 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.doesNotMatch(release, /deploy-portfolio-edge\.sh rollback\s*\|\|\s*true/);
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/);
   assert.match(workflow, /portfolio-edge-rollback-state\.json/);
+});
+
+test("privileged deploy relies on PR CI and the production migration bundle, not localhost Postgres", () => {
+  const deploy = read(".github/workflows/deploy.yml");
+  const ci = read(".github/workflows/ci.yml");
+
+  assert.doesNotMatch(deploy, /services:\s*\n\s*postgres:/);
+  assert.doesNotMatch(deploy, /pgvector\/pgvector:pg17/);
+  assert.doesNotMatch(deploy, /(?:TEST_)?DATABASE_URL:/);
+  assert.doesNotMatch(deploy, /npm run db:migrate/);
+  assert.doesNotMatch(deploy, /npm run test:backend-integration/);
+  assert.match(deploy, /run-migrations-from-bundle\.ts/);
+
+  assert.match(ci, /services:\s*\n\s*postgres:/);
+  assert.match(ci, /DATABASE_URL:/);
+  assert.match(ci, /TEST_DATABASE_URL:/);
+  assert.match(ci, /npm run db:migrate/);
+  assert.match(ci, /npm run test:backend-integration/);
+});
+
+test("production bundle loaders delete raw JSON and migration receives the exact workflow context", () => {
+  const runtime = read("src/backend/runtime-config.ts");
+  const validate = read("src/scripts/release/validate-deployment-bundle.ts");
+  const deployment = read("src/scripts/release/run-deployment-command.ts");
+  const migration = read("src/scripts/release/run-migrations-from-bundle.ts");
+  const legal = read("src/scripts/legal/record-versions-from-bundle.ts");
+
+  assert.match(runtime, /delete target\.PORTFOLIO_RUNTIME_BUNDLE/);
+  for (const source of [validate, deployment, migration, legal]) {
+    assert.match(source, /readAndDeleteBundle/);
+  }
+  for (const key of [
+    "NODE_ENV",
+    "GITHUB_ACTIONS",
+    "GITHUB_REPOSITORY",
+    "GITHUB_REF",
+    "GITHUB_WORKFLOW_REF",
+  ]) {
+    assert.match(migration, new RegExp("[\"']" + key + "[\"']"), key);
+  }
 });
 
 test("coordinated delivery proves origin compatibility and raw-alias denial before edge promotion", () => {

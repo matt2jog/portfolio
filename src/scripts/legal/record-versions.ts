@@ -6,15 +6,13 @@
  * Actions workflow that triggers on a protected-main push when legal/**.md
  * changes. The workflow never rewrites or pushes legal source.
  *
- * Connects as the dedicated `legal_audit_writer` Postgres role, which has
- * INSERT-only privilege on legal_document_versions. The connection is built
- * by swapping the credentials of the existing DATABASE_URL with that role's
- * username/password - so we only need one extra secret in CI.
+ * Connects through the dedicated legal-audit URL as `legal_audit_writer`,
+ * which has INSERT-only privilege on legal_document_versions.
  *
  * Env required:
- *   DATABASE_URL                   - full Postgres URL; host/port/db are reused
- *   LEGAL_AUDIT_WRITE_ROLE_PASSWORD - password for the legal_audit_writer role
+ *   LEGAL_AUDIT_DATABASE_URL       - scoped legal_audit_writer Postgres URL
  *   SUPABASE_CA_CERT               - CA used for verified Supabase TLS
+ *   SUPABASE_PROJECT_REF           - exact Supabase project reference
  *   GITHUB_SHA                     - commit sha (set by GitHub Actions)
  *   GIT_COMMITTED_AT               - ISO-8601 commit timestamp (workflow computes)
  */
@@ -23,8 +21,11 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Client } from "pg";
-import { postgresConnectionConfig } from "../../shared/postgres-tls";
-import { buildLegalWriterConnectionString } from "./writer-connection";
+import {
+  postgresConnectionConfig,
+  productionSupabaseConnectionConfig,
+} from "../../shared/postgres-tls";
+import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
 import { assertProductionMutationAllowed, LEGAL_AUDIT_WORKFLOW_REF } from "../production-execution-guard";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
@@ -52,10 +53,11 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildWriterConnectionString(): string {
-  const base = required("DATABASE_URL");
-  const password = required("LEGAL_AUDIT_WRITE_ROLE_PASSWORD");
-  return buildLegalWriterConnectionString(base, password);
+function legalAuditDatabaseUrl(): string {
+  const scopedUrl = process.env.LEGAL_AUDIT_DATABASE_URL;
+  if (scopedUrl) return scopedUrl;
+  if (process.env.NODE_ENV !== "production") return required("DATABASE_URL");
+  throw new Error("Missing required env var: LEGAL_AUDIT_DATABASE_URL");
 }
 
 async function insertWithRetry(
@@ -112,13 +114,23 @@ async function main() {
   assertProductionMutationAllowed(process.env, "Legal audit recording", [LEGAL_AUDIT_WORKFLOW_REF]);
   const commitSha = required("GITHUB_SHA");
   const committedAt = required("GIT_COMMITTED_AT");
-  const connectionString = buildWriterConnectionString();
+  const connectionString = legalAuditDatabaseUrl();
 
   const client = new Client({
-    ...postgresConnectionConfig(connectionString, process.env.SUPABASE_CA_CERT),
+    ...(process.env.NODE_ENV === "production"
+      ? productionSupabaseConnectionConfig({
+        databaseUrl: connectionString,
+        projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+        supabaseCaCert: process.env.SUPABASE_CA_CERT,
+        expectedRole: "legal_audit_writer",
+      })
+      : postgresConnectionConfig(connectionString, process.env.SUPABASE_CA_CERT)),
   });
 
   await client.connect();
+  if (process.env.NODE_ENV === "production") {
+    await assertUnprivilegedDatabaseSession(client, "legal_audit_writer", "Portfolio legal audit");
+  }
 
   const legalDir = path.resolve(process.cwd(), "legal");
   let inserted = 0;

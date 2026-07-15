@@ -1,10 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { parseDeploymentBundle } from "./deployment-config";
+import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
 
 async function main(): Promise<void> {
   const bundlePath = process.argv[2];
   if (!bundlePath) throw new Error("Deployment bundle path is required");
-  parseDeploymentBundle(await readFile(bundlePath, "utf8"));
+  parseDeploymentBundle(await readAndDeleteBundle(bundlePath));
 }
 
 void main().catch((error) => {

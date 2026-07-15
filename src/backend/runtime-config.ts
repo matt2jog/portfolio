@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
+import { productionSupabaseConnectionConfig } from "../shared/postgres-tls";
 
 const RUNTIME_KEYS = [
   "ADMIN_AUTHORITY_URL",
@@ -12,6 +13,7 @@ const RUNTIME_KEYS = [
   "FIREWORKS_AI_TOKEN",
   "GRADIENT_AI_TOKEN",
   "SUPABASE_CA_CERT",
+  "SUPABASE_PROJECT_REF",
 ] as const;
 const OPTIONAL_RUNTIME_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
 const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
@@ -55,19 +57,6 @@ function validateMetadata(value: unknown): asserts value is RuntimeBundleMetadat
   ) {
     throw new Error("Portfolio runtime bundle metadata is invalid");
   }
-}
-
-function isPostgresUri(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "postgres:" || url.protocol === "postgresql:") && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-function isPemCertificate(value: string): boolean {
-  return /^-----BEGIN CERTIFICATE-----\r?\n[\s\S]+\r?\n-----END CERTIFICATE-----\r?\n?$/.test(value);
 }
 
 export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = process.env): void {
@@ -118,17 +107,25 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
   if (target.ADMIN_IDENTITY_JWKS_URL !== ADMIN_JWKS_URL) {
     throw new Error(`Portfolio runtime bundle ADMIN_IDENTITY_JWKS_URL must match the shared JWKS endpoint`);
   }
-  if (!isPostgresUri(target.DATABASE_URL ?? "")) {
-    throw new Error("Portfolio runtime bundle DATABASE_URL must be a PostgreSQL URI");
-  }
-  if (!isPemCertificate(target.SUPABASE_CA_CERT ?? "")) {
-    throw new Error("Portfolio runtime bundle SUPABASE_CA_CERT must be a PEM certificate");
+  try {
+    productionSupabaseConnectionConfig({
+      databaseUrl: target.DATABASE_URL ?? "",
+      projectRef: target.SUPABASE_PROJECT_REF ?? "",
+      supabaseCaCert: target.SUPABASE_CA_CERT,
+      expectedRole: "portfolio_runtime",
+    });
+  } catch (error) {
+    throw new Error(
+      "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, and SUPABASE_CA_CERT must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
+      { cause: error },
+    );
   }
 }
 
 export function loadRuntimeEnvironment(target: NodeJS.ProcessEnv = process.env): void {
   const runtimeBundle = target.PORTFOLIO_RUNTIME_BUNDLE;
   if (runtimeBundle) {
+    delete target.PORTFOLIO_RUNTIME_BUNDLE;
     applyRuntimeBundle(runtimeBundle, target);
     return;
   }

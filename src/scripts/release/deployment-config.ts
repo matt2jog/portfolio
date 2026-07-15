@@ -1,18 +1,22 @@
+import { productionSupabaseConnectionConfig } from "../../shared/postgres-tls";
+
 const DEPLOYMENT_KEYS = [
   "CLOUDFLARE_API_TOKEN",
-  "DATABASE_URL",
   "EDGE_ORIGIN_TOKEN",
+  "MIGRATION_DATABASE_URL",
   "SUPABASE_CA_CERT",
+  "SUPABASE_PROJECT_REF",
 ] as const;
 const OPTIONAL_DEPLOYMENT_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
 const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
 
 export interface PortfolioDeploymentBundle {
   CLOUDFLARE_API_TOKEN: string;
-  DATABASE_URL: string;
   EDGE_ORIGIN_TOKEN: string;
   EDGE_ORIGIN_PREVIOUS_TOKEN?: string;
+  MIGRATION_DATABASE_URL: string;
   SUPABASE_CA_CERT: string;
+  SUPABASE_PROJECT_REF: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,19 +35,6 @@ function assertExactKeys(
   if (unexpected.length > 0 || missing.length > 0) {
     throw new Error(`Portfolio deployment bundle ${subject} does not match its schema`);
   }
-}
-
-function isPostgresUri(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "postgres:" || url.protocol === "postgresql:") && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-function isPemCertificate(value: string): boolean {
-  return /^-----BEGIN CERTIFICATE-----\r?\n[\s\S]+\r?\n-----END CERTIFICATE-----\r?\n?$/.test(value);
 }
 
 export function parseDeploymentBundle(raw: string): PortfolioDeploymentBundle {
@@ -92,18 +83,25 @@ export function parseDeploymentBundle(raw: string): PortfolioDeploymentBundle {
   if ((parsed.CLOUDFLARE_API_TOKEN as string).length < 20) {
     throw new Error("Portfolio deployment bundle CLOUDFLARE_API_TOKEN must be at least 20 characters");
   }
-  if (!isPostgresUri(parsed.DATABASE_URL as string)) {
-    throw new Error("Portfolio deployment bundle DATABASE_URL must be a PostgreSQL URI");
-  }
-  if (!isPemCertificate(parsed.SUPABASE_CA_CERT as string)) {
-    throw new Error("Portfolio deployment bundle SUPABASE_CA_CERT must be a PEM certificate");
+  try {
+    productionSupabaseConnectionConfig({
+      databaseUrl: parsed.MIGRATION_DATABASE_URL as string,
+      projectRef: parsed.SUPABASE_PROJECT_REF as string,
+      supabaseCaCert: parsed.SUPABASE_CA_CERT as string,
+    });
+  } catch (error) {
+    throw new Error(
+      "Portfolio deployment bundle MIGRATION_DATABASE_URL, SUPABASE_PROJECT_REF, and SUPABASE_CA_CERT must identify the configured Supabase migration boundary with CA-backed verify-full TLS",
+      { cause: error },
+    );
   }
 
   return {
     CLOUDFLARE_API_TOKEN: parsed.CLOUDFLARE_API_TOKEN as string,
-    DATABASE_URL: parsed.DATABASE_URL as string,
     EDGE_ORIGIN_TOKEN: parsed.EDGE_ORIGIN_TOKEN as string,
     EDGE_ORIGIN_PREVIOUS_TOKEN: parsed.EDGE_ORIGIN_PREVIOUS_TOKEN as string | undefined,
+    MIGRATION_DATABASE_URL: parsed.MIGRATION_DATABASE_URL as string,
     SUPABASE_CA_CERT: parsed.SUPABASE_CA_CERT as string,
+    SUPABASE_PROJECT_REF: parsed.SUPABASE_PROJECT_REF as string,
   };
 }

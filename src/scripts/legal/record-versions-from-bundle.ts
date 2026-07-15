@@ -1,13 +1,13 @@
-import { readFile } from "node:fs/promises";
 import { parseLegalAuditBundle } from "./legal-audit-config";
 import { assertProductionMutationAllowed, LEGAL_AUDIT_WORKFLOW_REF } from "../production-execution-guard";
+import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
 
 async function loadDeploymentBundle(filePath: string): Promise<void> {
-  const raw = await readFile(filePath, "utf8");
+  const raw = await readAndDeleteBundle(filePath);
   const bundle = parseLegalAuditBundle(raw);
-  process.env.DATABASE_URL = bundle.DATABASE_URL;
-  process.env.LEGAL_AUDIT_WRITE_ROLE_PASSWORD = bundle.LEGAL_AUDIT_WRITE_ROLE_PASSWORD;
+  process.env.LEGAL_AUDIT_DATABASE_URL = bundle.LEGAL_AUDIT_DATABASE_URL;
   process.env.SUPABASE_CA_CERT = bundle.SUPABASE_CA_CERT;
+  process.env.SUPABASE_PROJECT_REF = bundle.SUPABASE_PROJECT_REF;
 }
 
 async function main(): Promise<void> {

@@ -1,10 +1,16 @@
-const LEGAL_AUDIT_KEYS = ["DATABASE_URL", "LEGAL_AUDIT_WRITE_ROLE_PASSWORD", "SUPABASE_CA_CERT"] as const;
+import { productionSupabaseConnectionConfig } from "../../shared/postgres-tls";
+
+const LEGAL_AUDIT_KEYS = [
+  "LEGAL_AUDIT_DATABASE_URL",
+  "SUPABASE_CA_CERT",
+  "SUPABASE_PROJECT_REF",
+] as const;
 const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
 
 export interface PortfolioLegalAuditBundle {
-  DATABASE_URL: string;
-  LEGAL_AUDIT_WRITE_ROLE_PASSWORD: string;
+  LEGAL_AUDIT_DATABASE_URL: string;
   SUPABASE_CA_CERT: string;
+  SUPABASE_PROJECT_REF: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -16,19 +22,6 @@ function assertExactKeys(value: Record<string, unknown>, expected: readonly stri
   if (Object.keys(value).some((key) => !allowed.has(key)) || expected.some((key) => !(key in value))) {
     throw new Error(`Portfolio legal audit bundle ${subject} does not match its schema`);
   }
-}
-
-function isPostgresUri(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "postgres:" || url.protocol === "postgresql:") && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-function isPemCertificate(value: string): boolean {
-  return /^-----BEGIN CERTIFICATE-----\r?\n[\s\S]+\r?\n-----END CERTIFICATE-----\r?\n?$/.test(value);
 }
 
 export function parseLegalAuditBundle(raw: string): PortfolioLegalAuditBundle {
@@ -55,15 +48,22 @@ export function parseLegalAuditBundle(raw: string): PortfolioLegalAuditBundle {
       throw new Error(`Portfolio legal audit bundle is missing required key: ${key}`);
     }
   }
-  if (!isPostgresUri(parsed.DATABASE_URL as string)) {
-    throw new Error("Portfolio legal audit bundle DATABASE_URL must be a PostgreSQL URI");
-  }
-  if (!isPemCertificate(parsed.SUPABASE_CA_CERT as string)) {
-    throw new Error("Portfolio legal audit bundle SUPABASE_CA_CERT must be a PEM certificate");
+  try {
+    productionSupabaseConnectionConfig({
+      databaseUrl: parsed.LEGAL_AUDIT_DATABASE_URL as string,
+      projectRef: parsed.SUPABASE_PROJECT_REF as string,
+      supabaseCaCert: parsed.SUPABASE_CA_CERT as string,
+      expectedRole: "legal_audit_writer",
+    });
+  } catch (error) {
+    throw new Error(
+      "Portfolio legal audit bundle LEGAL_AUDIT_DATABASE_URL, SUPABASE_PROJECT_REF, and SUPABASE_CA_CERT must identify the scoped Supabase legal writer role with CA-backed verify-full TLS",
+      { cause: error },
+    );
   }
   return {
-    DATABASE_URL: parsed.DATABASE_URL as string,
-    LEGAL_AUDIT_WRITE_ROLE_PASSWORD: parsed.LEGAL_AUDIT_WRITE_ROLE_PASSWORD as string,
+    LEGAL_AUDIT_DATABASE_URL: parsed.LEGAL_AUDIT_DATABASE_URL as string,
     SUPABASE_CA_CERT: parsed.SUPABASE_CA_CERT as string,
+    SUPABASE_PROJECT_REF: parsed.SUPABASE_PROJECT_REF as string,
   };
 }
