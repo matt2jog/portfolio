@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, seedBrowserState } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState } from "../support/mock-api";
+
+registerClientCoverage();
 
 async function setupConsentPage(page: import("@playwright/test").Page, consent: "accept_all" | "reject_all" | "none" = "none") {
   await installMockApi(page);

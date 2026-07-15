@@ -23,7 +23,7 @@ export async function fetchGeoIP(): Promise<GeoIPResponse | null> {
     cachedGeoIP = data;
     return data;
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.warn("Failed to fetch GeoIP:", err);
     }
     return null;

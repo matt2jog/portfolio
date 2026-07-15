@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" ) ]]; then
+if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" || "${GITHUB_WORKFLOW_REF:-}" != "matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main" ) ]]; then
   echo "Production Cloudflare mutation is allowed only from GitHub Actions matt2jog/portfolio refs/heads/main." >&2
   exit 2
 fi
@@ -123,6 +123,29 @@ restore_after_failed_deploy() {
     return 1
   fi
 }
+
+if [[ "$MODE" == "preflight" ]]; then
+  route_snapshot="$(mktemp)"
+  cleanup_preflight() { rm -f "$route_snapshot"; }
+  trap cleanup_preflight EXIT
+  npx tsx "$ROUTE_TOOL" snapshot "$route_snapshot"
+  route_ownership="$(jq -er --arg worker "$WORKER_NAME" '
+    if (.schema_version != 1 or (.routes | type) != "array" or (.routes | length) != 2) then
+      error("Cloudflare route snapshot is incomplete")
+    else
+      ([.routes[] | select(.script == $worker)] | length) as $owned
+      | if $owned == 0 then "legacy"
+        elif $owned == 2 then "target"
+        else error("Cloudflare Portfolio routes have mixed owners")
+        end
+    end
+  ' "$route_snapshot")"
+  if [[ "$route_ownership" == "target" ]]; then
+    worker_version >/dev/null
+  fi
+  echo "Portfolio edge route ownership is readable and internally consistent: ${route_ownership}."
+  exit 0
+fi
 
 if [[ "$MODE" == "rollback" ]]; then
   restore_from_state

@@ -11,6 +11,11 @@
     "lint": "eslint .",
     "check": "tsc",
     "test:ui": "playwright test --config src/tests/ui-test/playwright.config.ts",
+    "test:client-unit": "tsx --test src/tests/client-unit/*.test.ts",
+    "test:client-unit-coverage": "c8 --include='src/client/src/**/*.{ts,tsx}' --exclude='src/tests/**' --reporter=json --reports-dir=coverage/client/unit npm run test:client-unit",
+    "build:client-coverage": "cross-env VITE_COVERAGE=1 vite build",
+    "serve:client-coverage": "node --import tsx src/tests/client-coverage/serve.ts",
+    "test:client-coverage": "tsx src/tests/client-coverage/prepare.ts && npm run test:client-unit-coverage && npm run build:client-coverage && cross-env CLIENT_COVERAGE=1 playwright test --config src/tests/ui-test/playwright.config.ts && tsx src/tests/client-coverage/report.ts",
     "test:pictures": "playwright test --config src/tests/ui-artifacts/playwright.config.ts",
     "test:pictures:verify": "tsx src/tests/ui-artifacts/verify-screenshots.ts",
     "test:backend-unit": "tsx --test src/tests/backend-unit/*.test.ts",
@@ -105,6 +110,9 @@
     "@replit/vite-plugin-runtime-error-modal": "^0.0.4",
     "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^5.0.0",
+    "@types/istanbul-lib-coverage": "2.0.6",
+    "@types/istanbul-lib-report": "3.0.3",
+    "@types/istanbul-reports": "3.0.4",
     "@types/jsdom": "^28.0.1",
     "@types/node": "^20.19.0",
     "@types/pg": "8.20.0",
@@ -122,6 +130,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "istanbul-lib-coverage": "3.2.2",
+    "istanbul-lib-report": "3.0.1",
+    "istanbul-reports": "3.2.0",
     "jimp": "^1.6.0",
     "playwright": "^1.59.1",
     "postcss": "^8.5.6",
@@ -129,7 +140,8 @@
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
     "typescript-eslint": "^8.59.3",
-    "vite": "^7.1.9"
+    "vite": "^7.3.6",
+    "vite-plugin-istanbul": "9.0.1"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"

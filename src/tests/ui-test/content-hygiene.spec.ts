@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, seedBrowserState } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState } from "../support/mock-api";
+
+registerClientCoverage();
 
 test.beforeEach(async ({ page }) => {
   await installMockApi(page);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" ) ]]; then
+if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" || "${GITHUB_WORKFLOW_REF:-}" != "matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main" ) ]]; then
   echo "Production Cloud Run mutation is allowed only from GitHub Actions matt2jog/portfolio refs/heads/main." >&2
   exit 2
 fi

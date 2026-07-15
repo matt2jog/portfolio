@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, seedBrowserState } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState } from "../support/mock-api";
+
+registerClientCoverage();
 
 const FORCE_SHOW_KEY = "__intro_force_show";
 const WELCOME_SLUG_KEY = "__intro_welcome_slug";

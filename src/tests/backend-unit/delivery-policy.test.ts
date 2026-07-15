@@ -93,10 +93,19 @@ test("production sources contain no fabricated content or schema-push shortcut",
 
 test("production mutation helpers are gated to Portfolio main GitHub Actions", () => {
   const guard = read("src/scripts/production-execution-guard.ts");
+  const deployWorkflow = read(".github/workflows/deploy.yml");
+  const legalWorkflow = read(".github/workflows/legal-audit.yml");
   assert.match(guard, /NODE_ENV/);
   assert.match(guard, /GITHUB_ACTIONS/);
   assert.match(guard, /matt2jog\/portfolio/);
   assert.match(guard, /refs\/heads\/main/);
+  assert.match(guard, /matt2jog\/portfolio\/\.github\/workflows\/deploy\.yml@refs\/heads\/main/);
+  assert.match(deployWorkflow, /NODE_ENV:\s*production/);
+  assert.match(legalWorkflow, /NODE_ENV:\s*production/);
+  assert.match(deployWorkflow, /npm ci --include=dev/);
+  assert.match(legalWorkflow, /npm ci --include=dev/);
+  assert.match(read("src/scripts/legal/record-versions.ts"), /LEGAL_AUDIT_WORKFLOW_REF/);
+  assert.match(read("src/scripts/legal/record-versions-from-bundle.ts"), /LEGAL_AUDIT_WORKFLOW_REF/);
 
   for (const relativePath of [
     "src/scripts/embed_skills.ts",
@@ -119,6 +128,7 @@ test("production mutation helpers are gated to Portfolio main GitHub Actions", (
   ]) {
     assert.match(read(relativePath), /GITHUB_REPOSITORY.*matt2jog\/portfolio/);
     assert.match(read(relativePath), /GITHUB_REF.*refs\/heads\/main/);
+    assert.match(read(relativePath), /GITHUB_WORKFLOW_REF.*\.github\/workflows\/deploy\.yml@refs\/heads\/main/);
   }
 });
 
@@ -166,6 +176,8 @@ test("production container is reproducible, unprivileged, and excludes local bui
 
 test("fork-safe pull request CI exercises coverage, integration, UI, build, and the exact image", () => {
   const workflow = read(".github/workflows/ci.yml");
+  const edgePackage = read("infra/cloudflare/portfolio-edge/package.json");
+  const edgeVitest = read("infra/cloudflare/portfolio-edge/vitest.config.ts");
 
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /branches:\s*\[main\]/);
@@ -173,6 +185,7 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
   assert.doesNotMatch(workflow, /id-token:\s*write/);
   assert.doesNotMatch(workflow, /\$\{\{\s*secrets\./);
   assert.match(workflow, /npm run test:coverage/);
+  assert.match(workflow, /npm run test:client-coverage/);
   assert.match(workflow, /npm run test:backend-integration/);
   assert.match(workflow, /npm run test:ui/);
   assert.match(workflow, /npm run build/);
@@ -180,6 +193,11 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
   assert.match(workflow, /image-ref:\s*portfolio-ci:\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /scanners:\s*['"]?secret/);
   assert.match(workflow, /severity:\s*['"]?CRITICAL/);
+  assert.match(workflow, /pgvector\/pgvector:pg17@sha256:[0-9a-f]{64}/);
+  assert.match(edgePackage, /"test:coverage"/);
+  for (const metric of ["lines", "branches", "functions", "statements"]) {
+    assert.match(edgeVitest, new RegExp(`${metric}:\\s*70`));
+  }
 });
 
 test("main delivery uses repository-bound WIF, a dedicated registry, digest pinning, and causal rollback", () => {
@@ -206,6 +224,12 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.ok(
     workflow.indexOf("Validate exact secret bundle versions") < workflow.indexOf("Build immutable merge-SHA image"),
     "bundle versions must be pinned and validated before the production image is built",
+  );
+  assert.match(workflow, /Preflight production dependencies/);
+  assert.match(workflow, /preflight-release\.sh/);
+  assert.ok(
+    workflow.indexOf("Preflight production dependencies") < workflow.indexOf("Build immutable merge-SHA image"),
+    "Cloud Run, IAM, and Cloudflare dependencies must be read-verified before build, push, or migration",
   );
 
   assert.match(release, /--no-traffic/);

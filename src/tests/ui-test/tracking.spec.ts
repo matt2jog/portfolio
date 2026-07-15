@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, seedBrowserState, TEST_TRACKER_UUID } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState, TEST_TRACKER_UUID } from "../support/mock-api";
+
+registerClientCoverage();
 
 async function setup(
   page: import("@playwright/test").Page,

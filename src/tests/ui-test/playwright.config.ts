@@ -24,7 +24,10 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: "npm run dev:client -- --host 127.0.0.1",
+        command:
+          process.env.CLIENT_COVERAGE === "1"
+            ? "node --import tsx src/tests/client-coverage/serve.ts"
+            : "npm run dev:client -- --host 127.0.0.1",
         cwd: "../../..",
         url: baseURL,
         reuseExistingServer: !process.env.CI,

@@ -25,7 +25,7 @@ import path from "node:path";
 import { Client } from "pg";
 import { postgresConnectionConfig } from "../../shared/postgres-tls";
 import { buildLegalWriterConnectionString } from "./writer-connection";
-import { assertProductionMutationAllowed } from "../production-execution-guard";
+import { assertProductionMutationAllowed, LEGAL_AUDIT_WORKFLOW_REF } from "../production-execution-guard";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "privacy", filename: "PRIVACY_POLICY.md" },
@@ -109,7 +109,7 @@ async function insertWithRetry(
 }
 
 async function main() {
-  assertProductionMutationAllowed(process.env, "Legal audit recording");
+  assertProductionMutationAllowed(process.env, "Legal audit recording", [LEGAL_AUDIT_WORKFLOW_REF]);
   const commitSha = required("GITHUB_SHA");
   const committedAt = required("GIT_COMMITTED_AT");
   const connectionString = buildWriterConnectionString();

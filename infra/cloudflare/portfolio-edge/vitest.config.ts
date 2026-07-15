@@ -4,6 +4,15 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" } })],
   test: {
-    coverage: { enabled: false },
+    coverage: {
+      provider: "istanbul",
+      include: ["src/**/*.ts"],
+      thresholds: {
+        lines: 70,
+        branches: 70,
+        functions: 70,
+        statements: 70,
+      },
+    },
   },
 });
