@@ -259,10 +259,10 @@ deleted immediately after each parser reads them.
 Public browsers and mail clients call `https://2jog.dev` and
 `https://www.2jog.dev`. Portfolio calls Admin's JWKS/public career contracts,
 Supabase PostgreSQL, and optional inference providers. LinkedIn reads persisted
-SQL activity without a provider call; paid Apify synchronization defaults off
-and requires `LINKEDIN_SYNC_ENABLED=1` locally. Kafka compatibility code also
-defaults off and has no production credentials. Re-enabling either integration
-requires a reviewed secret-schema and cost-policy change. It runs as
+SQL activity without a provider call; the runtime contains no paid synchronization
+client, activation switch, or provider credential. Kafka compatibility code defaults
+off and has no production credentials. Reintroducing either integration requires a
+reviewed implementation, secret schema, consumer tests, and cost-policy change. It runs as
 `portfolio--prod` in Cloud
 Run `us-east4`; any public request scales it from zero, with one maximum instance,
 one CPU, 512 MiB memory, and request-based CPU. Rollback moves traffic to the
