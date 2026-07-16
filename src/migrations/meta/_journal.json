@@ -92,6 +92,34 @@
       "when": 1784023800002,
       "tag": "0012_remove_personal_information_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784124000000,
+      "tag": "0013_education_projection",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784124000001,
+      "tag": "0014_legacy_projection_alignment",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784140006019,
+      "tag": "0015_career_pubsub_consumer",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784142974621,
+      "tag": "0016_database_audit_compensation",
+      "breakpoints": true
     }
   ]
 }

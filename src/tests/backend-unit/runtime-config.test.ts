@@ -3,6 +3,7 @@ import test from "node:test";
 import { applyRuntimeBundle, loadRuntimeEnvironment } from "../../backend/runtime-config";
 import {
   TEST_SUPABASE_CA_CERT,
+  TEST_SUPABASE_CA_SHA256,
   TEST_SUPABASE_PROJECT_REF,
   testSupabaseDatabaseUrl,
 } from "../support/supabase";
@@ -22,12 +23,16 @@ function validRuntimeBundle() {
     ADMIN_IDENTITY_AUDIENCE: "2jog-services",
     ADMIN_IDENTITY_ISSUER: "https://admin.2jog.dev",
     ADMIN_IDENTITY_JWKS_URL: "https://admin.2jog.dev/.well-known/jwks.json",
-    DATABASE_URL: testSupabaseDatabaseUrl("portfolio_runtime"),
+    CAREER_PUBSUB_PUSH_AUDIENCE: "https://portfolio--prod-project.us-east4.run.app/internal/pubsub/career",
+    CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT: "portfolio-career-push@personal-brand-501801.iam.gserviceaccount.com",
+    CAREER_PUBSUB_SUBSCRIPTION: "projects/personal-brand-501801/subscriptions/portfolio-career-v1",
+    DATABASE_URL: testSupabaseDatabaseUrl("portfolio_runtime_login"),
     EDGE_ORIGIN_TOKEN: EDGE_TOKEN,
     EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN,
     FIREWORKS_AI_TOKEN: ["fireworks", "fixture"].join("-"),
     GRADIENT_AI_TOKEN: ["gradient", "fixture"].join("-"),
     SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
+    SUPABASE_CA_SHA256: TEST_SUPABASE_CA_SHA256,
     SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
   };
 }
@@ -36,8 +41,9 @@ test("runtime bundle validates its boundary and installs only schema-owned keys"
   const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value" };
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
 
-  assert.equal(target.DATABASE_URL, testSupabaseDatabaseUrl("portfolio_runtime"));
+  assert.equal(target.DATABASE_URL, testSupabaseDatabaseUrl("portfolio_runtime_login"));
   assert.equal(target.ADMIN_IDENTITY_AUDIENCE, "2jog-services");
+  assert.equal(target.CAREER_PUBSUB_SUBSCRIPTION, "projects/personal-brand-501801/subscriptions/portfolio-career-v1");
   assert.equal(target.EDGE_ORIGIN_TOKEN, EDGE_TOKEN);
   assert.equal(target.EDGE_ORIGIN_PREVIOUS_TOKEN, PREVIOUS_EDGE_TOKEN);
   assert.equal(target.PORT, undefined);
@@ -107,8 +113,12 @@ test("runtime bundle enforces the shared auth contract and typed URI/PEM fields"
     ["ADMIN_IDENTITY_ISSUER", "https://attacker.example"],
     ["ADMIN_IDENTITY_AUDIENCE", "wrong-audience"],
     ["ADMIN_IDENTITY_JWKS_URL", "https://admin.2jog.dev/not-jwks"],
+    ["CAREER_PUBSUB_PUSH_AUDIENCE", "https://portfolio--prod-project.us-east4.run.app/wrong"],
+    ["CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT", "not-a-service-account"],
+    ["CAREER_PUBSUB_SUBSCRIPTION", "not-a-subscription"],
     ["DATABASE_URL", "not-a-database-uri"],
     ["SUPABASE_CA_CERT", "not-a-pem-certificate"],
+    ["SUPABASE_CA_SHA256", "not-a-fingerprint"],
     ["SUPABASE_PROJECT_REF", "not-a-project-ref"],
   ] as const) {
     const bundle = { ...validRuntimeBundle(), [key]: value };

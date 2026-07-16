@@ -1,8 +1,13 @@
 import type { Express, Request, RequestHandler, Response } from "express";
+import { createHash } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type JWTPayload } from "jose";
 import { eq, or } from "drizzle-orm";
 import { db } from "./data/db";
 import { users } from "@shared/schema";
+import {
+  verifiedAdminDatabaseAuditContext,
+  withDatabaseAuditContext,
+} from "./data/database-audit";
 
 export const ADMIN_IDENTITY_COOKIE = "__Secure-2jog-admin";
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -85,11 +90,16 @@ async function localAdmin(claims: AdminClaims): Promise<Express.User> {
 
 export function setupAuth(app: Express): void {
   app.set("trust proxy", 1);
-  app.use(async (req, _res, next) => {
+  app.use(async (req, res, next) => {
     const token = parseCookies(req.headers.cookie)[ADMIN_IDENTITY_COOKIE];
     if (!token) return next();
     try {
-      req.user = await localAdmin(await verifyAdminIdentity(token));
+      const claims = await verifyAdminIdentity(token);
+      const assertionDigest = createHash("sha256").update(token, "utf8").digest("hex");
+      req.user = await withDatabaseAuditContext(
+        verifiedAdminDatabaseAuditContext(req, res, claims.sub!, assertionDigest),
+        () => localAdmin(claims),
+      );
     } catch {
       req.user = undefined;
     }

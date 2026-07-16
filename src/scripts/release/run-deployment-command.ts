@@ -1,10 +1,18 @@
 import { spawn } from "node:child_process";
 import { parseDeploymentBundle } from "./deployment-config";
-import { assertProductionMutationAllowed } from "../production-execution-guard";
+import {
+  assertProductionMutationAllowed,
+  DEPLOY_WORKFLOW_REF,
+  RELEASE_CLEANUP_WORKFLOW_REF,
+} from "../production-execution-guard";
 import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
 
 async function main(): Promise<void> {
-  assertProductionMutationAllowed(process.env, "Cloud Run and edge deployment");
+  assertProductionMutationAllowed(
+    process.env,
+    "Cloud Run and edge deployment or cleanup",
+    [DEPLOY_WORKFLOW_REF, RELEASE_CLEANUP_WORKFLOW_REF],
+  );
   const separator = process.argv.indexOf("--");
   const bundlePath = process.argv[2];
   const command = separator >= 0 ? process.argv[separator + 1] : undefined;
@@ -18,11 +26,13 @@ async function main(): Promise<void> {
     ...process.env,
     CLOUDFLARE_API_TOKEN: bundle.CLOUDFLARE_API_TOKEN,
     EDGE_ORIGIN_TOKEN: bundle.EDGE_ORIGIN_TOKEN,
+    SOURCE_FENCE_DATABASE_URL: bundle.SOURCE_FENCE_DATABASE_URL,
+    SUPABASE_CA_CERT: bundle.SUPABASE_CA_CERT,
+    SUPABASE_CA_SHA256: bundle.SUPABASE_CA_SHA256,
+    SUPABASE_PROJECT_REF: bundle.SUPABASE_PROJECT_REF,
   };
   delete childEnvironment.DATABASE_URL;
   delete childEnvironment.MIGRATION_DATABASE_URL;
-  delete childEnvironment.SUPABASE_CA_CERT;
-  delete childEnvironment.SUPABASE_PROJECT_REF;
   if (bundle.EDGE_ORIGIN_PREVIOUS_TOKEN) {
     childEnvironment.EDGE_ORIGIN_PREVIOUS_TOKEN = bundle.EDGE_ORIGIN_PREVIOUS_TOKEN;
   } else {

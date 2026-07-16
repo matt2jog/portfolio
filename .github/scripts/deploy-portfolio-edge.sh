@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${NODE_ENV:-}" == "production" && ( "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" || "${GITHUB_WORKFLOW_REF:-}" != "matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main" ) ]]; then
+if [[ "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" || "${GITHUB_REF:-}" != "refs/heads/main" || "${GITHUB_WORKFLOW_REF:-}" != "matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main" || ! "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ || "${GITHUB_WORKFLOW_SHA:-}" != "${GITHUB_SHA:-}" ]]; then
   echo "Production Cloudflare mutation is allowed only from GitHub Actions matt2jog/portfolio refs/heads/main." >&2
   exit 2
 fi
@@ -97,15 +97,11 @@ restore_from_state() {
     return 1
   fi
 
-  if [[ "$prior_routes_owned" == "true" && -n "$prior_version" ]]; then
-    if [[ "$current_version" == "$prior_version" ]]; then
-      return
-    fi
+  if [[ -n "$prior_version" ]]; then
     (cd "$EDGE_DIR" && npx wrangler rollback "$prior_version" \
       --name "$WORKER_NAME" --yes \
       --message "Coordinated rollback of Portfolio edge")
     test "$(worker_version)" = "$prior_version"
-    return
   fi
 
   snapshot_file="$(mktemp)"
@@ -115,6 +111,18 @@ restore_from_state() {
     return 1
   fi
   rm -f "$snapshot_file"
+  if [[ -z "$prior_version" ]]; then
+    (cd "$EDGE_DIR" && npx wrangler delete "$WORKER_NAME" --force)
+    local absent_status=0
+    worker_version >/dev/null || absent_status=$?
+    if [[ "$absent_status" != 3 ]]; then
+      echo "First-cutover Portfolio Worker still exists after route restoration." >&2
+      return 1
+    fi
+  elif [[ "$(worker_version)" != "$prior_version" ]]; then
+    echo "Portfolio edge prior version did not remain active after route restoration." >&2
+    return 1
+  fi
 }
 
 restore_after_failed_deploy() {

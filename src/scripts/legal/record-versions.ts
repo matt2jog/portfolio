@@ -6,7 +6,8 @@
  * Actions workflow that triggers on a protected-main push when legal/**.md
  * changes. The workflow never rewrites or pushes legal source.
  *
- * Connects through the dedicated legal-audit URL as `legal_audit_writer`,
+ * Connects through the dedicated legal-audit login and SET ROLE
+ * `legal_audit_writer`,
  * which has INSERT-only privilege on legal_document_versions.
  *
  * Env required:
@@ -26,7 +27,10 @@ import {
   productionSupabaseConnectionConfig,
 } from "../../shared/postgres-tls";
 import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
-import { assertProductionMutationAllowed, LEGAL_AUDIT_WORKFLOW_REF } from "../production-execution-guard";
+import {
+  assertProductionMutationAllowed,
+  LEGAL_AUDIT_WORKFLOW_REF,
+} from "../production-execution-guard";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "privacy", filename: "PRIVACY_POLICY.md" },
@@ -73,10 +77,30 @@ async function insertWithRetry(
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL TIME ZONE 'UTC'");
       await client.query(
-        `INSERT INTO legal_document_versions
+        `SELECT
+           set_config('portfolio_audit.request_id', $1, true),
+           set_config('portfolio_audit.trace_id', $1, true),
+           set_config('portfolio_audit.actor_kind', 'service', true),
+           set_config('portfolio_audit.actor_id', $2, true),
+           set_config('portfolio_audit.operation', 'legal-version-record', true),
+           set_config('portfolio_audit.correlation_id', $3, true),
+           set_config('portfolio_audit.causation_id', $3, true),
+           set_config('portfolio_audit.release_id', $3, true),
+           set_config('portfolio_audit.authentication_assertion_digest', '', true)`,
+        [
+          `legal:${row.commit_sha}:${row.doc_type}`,
+          LEGAL_AUDIT_WORKFLOW_REF,
+          row.commit_sha,
+        ],
+      );
+      const result = await client.query(
+        `INSERT INTO portfolio.legal_document_versions
            (doc_type, content, content_hash, commit_sha, committed_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (doc_type, content_hash) DO NOTHING`,
         [
           row.doc_type,
           row.content,
@@ -85,13 +109,10 @@ async function insertWithRetry(
           row.committed_at,
         ],
       );
-      return "inserted";
+      await client.query("COMMIT");
+      return result.rowCount === 0 ? "duplicate" : "inserted";
     } catch (err) {
-      // 23505 = unique_violation. Expected when content matches the prior
-      // recorded version for this doc_type.
-      if ((err as { code?: string }).code === "23505") {
-        return "duplicate";
-      }
+      await client.query("ROLLBACK").catch(() => undefined);
       lastErr = err;
       const delay = BASE_DELAY_MS * 2 ** (attempt - 1);
       console.error(
@@ -111,7 +132,9 @@ async function insertWithRetry(
 }
 
 async function main() {
-  assertProductionMutationAllowed(process.env, "Legal audit recording", [LEGAL_AUDIT_WORKFLOW_REF]);
+  assertProductionMutationAllowed(process.env, "Legal audit recording", [
+    LEGAL_AUDIT_WORKFLOW_REF,
+  ]);
   const commitSha = required("GITHUB_SHA");
   const committedAt = required("GIT_COMMITTED_AT");
   const connectionString = legalAuditDatabaseUrl();
@@ -119,17 +142,28 @@ async function main() {
   const client = new Client({
     ...(process.env.NODE_ENV === "production"
       ? productionSupabaseConnectionConfig({
-        databaseUrl: connectionString,
-        projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
-        supabaseCaCert: process.env.SUPABASE_CA_CERT,
-        expectedRole: "legal_audit_writer",
-      })
-      : postgresConnectionConfig(connectionString, process.env.SUPABASE_CA_CERT)),
+          databaseUrl: connectionString,
+          projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+          supabaseCaCert: process.env.SUPABASE_CA_CERT,
+          expectedCaSha256: process.env.SUPABASE_CA_SHA256,
+          expectedRole: "portfolio_legal_login",
+          capabilityRole: "legal_audit_writer",
+          searchPath: "portfolio, extensions",
+        })
+      : postgresConnectionConfig(
+          connectionString,
+          process.env.SUPABASE_CA_CERT,
+          "portfolio, extensions",
+        )),
   });
 
   await client.connect();
   if (process.env.NODE_ENV === "production") {
-    await assertUnprivilegedDatabaseSession(client, "legal_audit_writer", "Portfolio legal audit");
+    await assertUnprivilegedDatabaseSession(
+      client,
+      "legal_audit_writer",
+      "Portfolio legal audit",
+    );
   }
 
   const legalDir = path.resolve(process.cwd(), "legal");

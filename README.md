@@ -7,7 +7,7 @@ development, and serves the prebuilt SPA in production.
 - Frontend: React 19 + Vite + Tailwind v4 + Wouter routing + TanStack Query
   + Three.js / R3F + GSAP + Framer Motion
 - Backend: Express 5 + Drizzle ORM + Supabase Postgres + strict Admin Dashboard
-  RS256/JWKS identity consumption
+  RS256/JWKS identity consumption + authenticated Google Pub/Sub push projection
 - AI: pluggable LLM provider stack (Gradient primary, Fireworks fallback)
   driving the project-chat agent with tool use and an output evaluator
 - Observability/compliance: GeoIP-gated US-only access, consent clickwrap,
@@ -28,14 +28,15 @@ portfolio/
 │   ├── backend/                 # Express server, agent, auth, integrations
 │   │   ├── data/db.ts           # Drizzle + pg pool
 │   │   └── agent/               # LLM provider, tools, rules, evaluator
-│   ├── scripts/                 # build, seeders, skill clustering, legal recorder
+│   ├── scripts/                 # build, migrations, release tooling, legal recorder
 │   ├── shared/                  # Drizzle schema, types reused by both sides
 │   ├── tests/                   # Playwright: assertions + viewport screenshots
 │   └── migrations/              # Drizzle migrations + raw SQL
 ├── .github/workflows/
 │   ├── ci.yml                   # fork-safe PR verification and image scan
 │   ├── deploy.yml               # merge-SHA image release and coordinated edge cutover
-│   └── legal-audit.yml          # immutable legal-doc audit recording
+│   ├── data-migration.yml       # manual non-destructive legacy staging
+│   └── legal-audit.yml          # immutable legal-version recording
 ├── drizzle.config.ts, vite.config.ts, package.json, tsconfig.json, ...
 ```
 
@@ -74,8 +75,20 @@ Portfolio's Cloudflare edge and origin both accept only Admin's 15-minute RS256 
 HS256 compatibility is rejected. Legacy Portfolio admin routes may edit
 Portfolio-owned presentation fields and local display order, but return
 `CANONICAL_CAREER_READ_ONLY` for canonical profile, project, experience, and
-skill mutations. The disabled compatibility consumer projects Admin-owned
-public career data into Portfolio's local read model.
+skill mutations. Admin's authenticated Pub/Sub push subscription projects
+Admin-owned public career data into Portfolio's local read model at
+`POST /internal/pubsub/career`.
+
+The push route verifies a Google RS256 OIDC token for one exact audience and
+service-account email before parsing the request body. It also requires the exact
+production subscription, standard wrapped Pub/Sub envelope, v1 attributes, and an
+ordering key equal to `aggregate_id`. Inbox claiming, SHA-256 digest comparison,
+aggregate-version enforcement, projection, and checkpointing run in one PostgreSQL
+transaction. A duplicate ID with the same digest is acknowledged as a no-op; a
+different digest is recorded in `career_event_quarantine` and acknowledged. Version
+gaps, stale versions, and transient failures return non-2xx so Pub/Sub can retry or
+dead-letter them. See
+`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\docs\pubsub-career-consumer.md`.
 
 ### AI project chat
 - Per-project system prompt; tools include `ProjectContextTool`,
@@ -89,11 +102,12 @@ public career data into Portfolio's local read model.
 ### Legal-document VCS
 - Files in `/legal/` are the source of truth; the frontend pulls them via
   `/api/legal/*`
-- On every push to protected `main` that touches `legal/**.md`, the `Legal Audit`
-  workflow records sha256-deduped rows in Supabase
+- Every protected-main release calls the exact-SHA `Legal Audit` workflow before
+  database or traffic mutation. It records sha256-deduped rows in Supabase
   `legal_document_versions`. The `legal_document_active_ranges` view
   computes `effective_until` per `doc_type` so you can ask "which version
-  was binding at time T?" forever
+  was binding at time T?" forever. Missing WIF, bundle, role, table, TLS, or
+  insert availability blocks the release
 - See `legal/README.md` for the query/rollback procedure
 
 ## Development
@@ -144,7 +158,7 @@ npm run dev:client   # Vite on port 5000 with /api + /auth proxied to :3000
 | `npm run test:pictures` | Generate viewport screenshots for visual review |
 | `npm run test:pictures:verify` | Verify expected screenshots exist |
 | `npm run db:migrate` | Apply every committed migration to the configured database |
-| `npm run skills:cluster` | Re-cluster skill embeddings and update groups |
+| `npm run db:migrate-legacy-data` | Stage the frozen legacy bridge into an empty private schema; never a cutover or source deletion |
 | `npm run legal:record` | Manually run the legal-audit recorder (normally run by CI) |
 
 ## Production
@@ -184,6 +198,9 @@ NODE_ENV=production
 PORT=8080
 PUBLIC_BASE_URL=https://2jog.dev
 PORTFOLIO_RUNTIME_BUNDLE=<portfolio-runtime-bundle-prod JSON>
+CAREER_PUBSUB_PUSH_AUDIENCE=https://<stable-cloud-run-origin>/internal/pubsub/career
+CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT=<portfolio-push-identity>@personal-brand-501801.iam.gserviceaccount.com
+CAREER_PUBSUB_SUBSCRIPTION=projects/personal-brand-501801/subscriptions/<portfolio-career-subscription>
 ```
 
 The runtime bundle maps `PORTFOLIO_RUNTIME_DATABASE_URL` to the process
@@ -191,12 +208,15 @@ The runtime bundle maps `PORTFOLIO_RUNTIME_DATABASE_URL` to the process
 then verifies `session_user`, `current_user`, inherited role attributes,
 database CREATE, and public-schema CREATE before the server listens. The bundle also
 supplies Admin RS256/JWKS, inference, `SUPABASE_PROJECT_REF`, the Supabase CA,
-and `EDGE_ORIGIN_TOKEN`. It intentionally excludes Google OAuth,
-Kafka, session, and paid ingestion credentials because those integrations are
-not active in the target production runtime. Cloudflare receives the same
+and `EDGE_ORIGIN_TOKEN`. It intentionally excludes Google OAuth, session, and
+paid ingestion credentials because those integrations are not active in the
+target production runtime. The three Pub/Sub values above are nonsecret topology
+and identity allowlists, not secret-bundle fields. Cloudflare receives the same
 credential as `ORIGIN_ACCESS_TOKEN` from the deployment bundle and overwrites
 any client-supplied origin header before proxying. Direct `run.app` requests
-without the exact credential return HTTP 401. The self-contained contract is
+without the exact credential return HTTP 401. The sole exception is the internal
+career push path, which mounts before the Cloudflare gate and independently requires
+the exact Google OIDC identity. The self-contained contract is
 `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\config\secret-schema.prod.json`.
 Infisical remains the human-edited authority; production
 does not fetch Infisical directly. The raw runtime JSON environment value is removed
@@ -213,7 +233,9 @@ and the legacy shared deployment identity/repository are not part of delivery.
 The checked-in `portfolio-edge` Worker owns `2jog.dev` and `www.2jog.dev`; its
 deployment is coordinated with Cloud Run because both sides share the origin
 credential. The previous route owners and Worker version are retained in a
-three-day GitHub artifact so the required 48-hour rollback window is reproducible.
+30-day GitHub artifact together with the exact Cloud Run traffic/tag and IAM
+snapshots and origin-token fingerprints. Manual cleanup is legal-gated and
+requires both 48 elapsed hours and a distinct later successful release.
 
 ## Testing
 
@@ -244,15 +266,94 @@ Tables include: `users`, `projects`, `xyz_bullets`, `bio`, `bio_paragraphs`,
 `admin_policy_acceptance`, and `legal_document_versions`.
 
 Migrations are in `src/migrations/`. CI applies them to disposable Postgres; CD
-runs additive production migrations from the same scanned image digest before
-the zero-traffic candidate deploy. The privileged deploy workflow does not start
+first completes the immutable-SHA legal audit and finalized cutover-evidence
+gates, proves that the pulled service-owned image digest carries the current
+source revision, and only then runs reviewed production migrations from that
+digest before the zero-traffic candidate deploy. The privileged deploy workflow does not start
 localhost Postgres or repeat database integration tests; those are required in PR CI.
 Its deployment bundle carries `MIGRATION_DATABASE_URL` from
 `PORTFOLIO_MIGRATION_DATABASE_URL`; only the digest-pinned migration child
-receives it as `DATABASE_URL`. The legal bundle separately carries
+receives it as `DATABASE_URL`. The migrator applies every private-schema DDL
+from its own checksum ledger; the legacy `public` Drizzle ledger is never
+adopted. The legal bundle separately carries
 `LEGAL_AUDIT_DATABASE_URL` from `PORTFOLIO_LEGAL_AUDIT_DATABASE_URL`,
 authenticating as `legal_audit_writer`. Raw bundle files are mode 0600 and
-deleted immediately after each parser reads them.
+deleted immediately after each parser reads them. A fourth one-time bundle and
+manual `data-migration.yml` workflow isolate the legacy reader from the target
+migrator, require the requested digest to equal repository variable
+`PORTFOLIO_DATA_MIGRATION_IMAGE_DIGEST`, and upload source-retaining count/hash
+evidence. Finalization fetches an RS256 JWS from Admin through Google OIDC and
+verifies the signature plus exact release SHA, image digest, migration-ledger
+digest, snapshot/checkpoint, and reviewed 23-table ownership-manifest digest;
+operator-supplied evidence is rejected. The workflow runs that immutable image read-only, drops every Linux
+capability, enables `no-new-privileges`, and applies bounded process, memory,
+CPU, and temporary-filesystem limits.
+
+The historical `0000` through `0014` files are one checksum-bound
+`empty-target-only` batch. Production accepts that batch only when the private
+Portfolio schema has no object, default privilege, or ledger state; every
+nonempty partial prefix fails before SQL executes. A complete ledger is a no-op.
+Every future migration requires a checksum-bound reviewed classification.
+Unknown classifications fail closed; `data-repair` requires a separate path with
+explicit expected counts, hashes, and a maximum threshold.
+
+The private ledger is not sufficient evidence by itself. On every run, the
+migrator replays the accepted checksum prefix into a transaction-local temporary
+schema and compares deterministic catalog evidence for schema ownership;
+relation persistence, partitions, foreign options, and tablespaces; dropped and
+live column slots; defaults; indexes; constraints; routines; standalone and
+composite types; policies; triggers; rules; extensions; operators and operator
+families/classes; collations; conversions; text-search objects; statistics; and
+object owners. ACL/default-privilege evidence is verified separately against the
+fixed role contract. The migrator verifies again after applying new DDL, then discards the temporary
+schema before commit. PostgreSQL's catalog remains implicitly first; no migration
+path explicitly places `pg_catalog` after a writable schema.
+
+Connected-session checks enforce the database boundary rather than trusting a
+URL or role name. Privilege-free direct logins are verified before `SET ROLE`
+selects a NOLOGIN capability, and post-reconciliation checks run again after
+`RESET ROLE`. They reconcile direct-login, cross-schema, `PUBLIC`, database,
+schema, table, sequence, column, type, `ALL ROUTINES`, ownership, inherited-role,
+and default-privilege access exactly. `portfolio_runtime` and `portfolio_migrator` may inherit the
+shared project's harmless `public` schema `USAGE`, but they cannot read or
+write any public relation, sequence, column, or function; create or own public
+objects; or access a sibling service schema. The target reconciler also removes
+every non-owner grant from Portfolio objects before rebuilding the exact
+runtime/legal matrix; inaccessible sibling-schema `PUBLIC` defaults do not
+become false positives without schema `USAGE`. Both require `extensions` `USAGE`
+without `CREATE`; `vector` and its type must be in `extensions` and owned by
+`postgres`. The migrator alone requires database `TEMPORARY` for its expected
+schema proof. The source-only
+`portfolio_legacy_reader` has `SELECT` on exactly the 23 allowlisted base or
+partitioned tables with `search_path=public`. The sole RLS exception is
+`public.legal_document_versions`, which must have exactly one applicable
+permissive `SELECT` policy named `portfolio_legacy_reader_full_read`, scoped only
+to the reader with `USING (true)` and no `WITH CHECK`; unrelated writer-only
+policies may remain. Every other allowlisted table has RLS disabled. The reader
+has no column writes, unexpected public relations or sequences, executable public
+functions, object ownership, DDL, administrative membership, or sibling-schema
+access. Apply the source-side contract at
+`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\infra\supabase\legacy-reader.sql`
+with the legacy project administrator; it never
+creates or changes a password.
+
+Migration `0016_database_audit_compensation.sql` expands auditing additively for
+the deployed `37abdbd7a15f` baseline. Legacy writes without explicit context are
+temporarily labeled `pre-audit-37abdbd7a15f`; the first successful audited
+release starts the grace clock, and strict rejection is enabled only after 48
+hours and a distinct later successful release.
+
+`src/scripts/legacy-data-migration.ts` is a classified bridge inventory, not an
+ownership declaration. It separates Portfolio-owned, Admin projection, and hybrid
+tables, excludes Resume/control-plane storage, ignores the legacy
+`skills_group.discipline_id` dependency, and preserves the source. Its bootstrap
+result is staged with `cutoverReady: false`. Owned rows still require a write
+fence/final hash; projected and hybrid rows require an Admin snapshot and durable
+event checkpoint. The frozen source column inventory is
+`src/tests/fixtures/legacy-portfolio-schema.ts`. Resume and Portfolio rollback
+windows complete before any public compatibility object is retired. The `vector`
+extension is provisioned only in `extensions`; Portfolio has no embedding or
+clustering mutation script.
 
 ## Runtime ownership
 
@@ -260,9 +361,10 @@ Public browsers and mail clients call `https://2jog.dev` and
 `https://www.2jog.dev`. Portfolio calls Admin's JWKS/public career contracts,
 Supabase PostgreSQL, and optional inference providers. LinkedIn reads persisted
 SQL activity without a provider call; the runtime contains no paid synchronization
-client, activation switch, or provider credential. Kafka compatibility code defaults
-off and has no production credentials. Reintroducing either integration requires a
-reviewed implementation, secret schema, consumer tests, and cost-policy change. It runs as
+client, activation switch, or provider credential. Pub/Sub is the only asynchronous
+runtime transport; no long-lived broker consumer or broker credential remains.
+Reintroducing paid synchronization requires a reviewed implementation, secret schema,
+consumer tests, and cost-policy change. It runs as
 `portfolio--prod` in Cloud
 Run `us-east4`; any public request scales it from zero, with one maximum instance,
 one CPU, 512 MiB memory, and request-based CPU. Rollback moves traffic to the

@@ -3,6 +3,7 @@ import test from "node:test";
 import { parseLegalAuditBundle } from "../../scripts/legal/legal-audit-config";
 import {
   TEST_SUPABASE_CA_CERT,
+  TEST_SUPABASE_CA_SHA256,
   TEST_SUPABASE_PROJECT_REF,
   testSupabaseDatabaseUrl,
 } from "../support/supabase";
@@ -15,16 +16,18 @@ function validLegalAuditBundle() {
       environment: "prod",
       boundary: "legal_audit",
     },
-    LEGAL_AUDIT_DATABASE_URL: testSupabaseDatabaseUrl("legal_audit_writer"),
+    LEGAL_AUDIT_DATABASE_URL: testSupabaseDatabaseUrl("portfolio_legal_login"),
     SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
+    SUPABASE_CA_SHA256: TEST_SUPABASE_CA_SHA256,
     SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
   };
 }
 
 test("legal audit bundle exposes only its writer trust boundary", () => {
   const parsed = parseLegalAuditBundle(JSON.stringify(validLegalAuditBundle()));
-  assert.equal(parsed.LEGAL_AUDIT_DATABASE_URL, testSupabaseDatabaseUrl("legal_audit_writer"));
+  assert.equal(parsed.LEGAL_AUDIT_DATABASE_URL, testSupabaseDatabaseUrl("portfolio_legal_login"));
   assert.equal(parsed.SUPABASE_CA_CERT, TEST_SUPABASE_CA_CERT);
+  assert.equal(parsed.SUPABASE_CA_SHA256, TEST_SUPABASE_CA_SHA256);
   assert.equal(parsed.SUPABASE_PROJECT_REF, TEST_SUPABASE_PROJECT_REF);
 });
 

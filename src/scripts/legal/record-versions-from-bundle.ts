@@ -7,6 +7,7 @@ async function loadDeploymentBundle(filePath: string): Promise<void> {
   const bundle = parseLegalAuditBundle(raw);
   process.env.LEGAL_AUDIT_DATABASE_URL = bundle.LEGAL_AUDIT_DATABASE_URL;
   process.env.SUPABASE_CA_CERT = bundle.SUPABASE_CA_CERT;
+  process.env.SUPABASE_CA_SHA256 = bundle.SUPABASE_CA_SHA256;
   process.env.SUPABASE_PROJECT_REF = bundle.SUPABASE_PROJECT_REF;
 }
 

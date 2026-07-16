@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertCutoverRouteOwners,
   assertRouteOwnership,
   restoreRouteSnapshot,
   selectRouteSnapshot,
@@ -20,11 +21,25 @@ test("route snapshots retain only the exact pre-cutover owners", () => {
   assert.deepEqual(snapshot, {
     schema_version: 1,
     routes: [
-      { pattern: "2jog.dev/*", script: "resume-vcs-cloud-proxy" },
-      { pattern: "www.2jog.dev/*", script: "resume-vcs-cloud-proxy" },
+      { id: "root", pattern: "2jog.dev/*", script: "resume-vcs-cloud-proxy" },
+      { id: "www", pattern: "www.2jog.dev/*", script: "resume-vcs-cloud-proxy" },
     ],
   });
   assert.throws(() => selectRouteSnapshot([], targetPatterns), /missing route/i);
+  assert.doesNotThrow(() => assertCutoverRouteOwners(snapshot, "first"));
+  assert.throws(() => assertCutoverRouteOwners(snapshot, "later"), /route owner/i);
+  assert.doesNotThrow(() => assertCutoverRouteOwners({
+    schema_version: 1,
+    routes: targetPatterns.map((pattern, index) => ({
+      id: `portfolio-${index}`,
+      pattern,
+      script: "portfolio-edge",
+    })),
+  }, "later"));
+  assert.throws(() => selectRouteSnapshot([
+    { id: "root", pattern: "2jog.dev/*", script: "resume-vcs-cloud-proxy" },
+    { id: "www", pattern: "www.2jog.dev/*", script: "unreviewed-worker" },
+  ], targetPatterns), /route owner/i);
 });
 
 test("route restoration updates present routes and recreates missing routes", async () => {
@@ -48,7 +63,7 @@ test("route restoration updates present routes and recreates missing routes", as
 
   await restoreRouteSnapshot(client, {
     schema_version: 1,
-    routes: targetPatterns.map((pattern) => ({ pattern, script: "resume-vcs-cloud-proxy" })),
+    routes: targetPatterns.map((pattern, index) => ({ id: `original-${index}`, pattern, script: "resume-vcs-cloud-proxy" })),
   });
 
   assert.deepEqual(calls, [

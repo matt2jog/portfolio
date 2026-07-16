@@ -6,7 +6,9 @@ if [[ "${NODE_ENV:-}" != "production" \
   || "${GITHUB_ACTIONS:-}" != "true" \
   || "${GITHUB_REPOSITORY:-}" != "matt2jog/portfolio" \
   || "${GITHUB_REF:-}" != "refs/heads/main" \
-  || "${GITHUB_WORKFLOW_REF:-}" != "$EXPECTED_WORKFLOW_REF" ]]; then
+  || "${GITHUB_WORKFLOW_REF:-}" != "$EXPECTED_WORKFLOW_REF" \
+  || ! "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$ \
+  || "${GITHUB_WORKFLOW_SHA:-}" != "${GITHUB_SHA:-}" ]]; then
   echo "Production preflight is allowed only from the exact Portfolio deploy workflow on main." >&2
   exit 2
 fi

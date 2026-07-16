@@ -4,7 +4,9 @@ const DEPLOYMENT_KEYS = [
   "CLOUDFLARE_API_TOKEN",
   "EDGE_ORIGIN_TOKEN",
   "MIGRATION_DATABASE_URL",
+  "SOURCE_FENCE_DATABASE_URL",
   "SUPABASE_CA_CERT",
+  "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
 const OPTIONAL_DEPLOYMENT_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
@@ -15,7 +17,9 @@ export interface PortfolioDeploymentBundle {
   EDGE_ORIGIN_TOKEN: string;
   EDGE_ORIGIN_PREVIOUS_TOKEN?: string;
   MIGRATION_DATABASE_URL: string;
+  SOURCE_FENCE_DATABASE_URL: string;
   SUPABASE_CA_CERT: string;
+  SUPABASE_CA_SHA256: string;
   SUPABASE_PROJECT_REF: string;
 }
 
@@ -88,6 +92,19 @@ export function parseDeploymentBundle(raw: string): PortfolioDeploymentBundle {
       databaseUrl: parsed.MIGRATION_DATABASE_URL as string,
       projectRef: parsed.SUPABASE_PROJECT_REF as string,
       supabaseCaCert: parsed.SUPABASE_CA_CERT as string,
+      expectedCaSha256: parsed.SUPABASE_CA_SHA256 as string,
+      expectedRole: "portfolio_migrator_login",
+      capabilityRole: "portfolio_migrator",
+      searchPath: "portfolio, extensions",
+    });
+    productionSupabaseConnectionConfig({
+      databaseUrl: parsed.SOURCE_FENCE_DATABASE_URL as string,
+      projectRef: parsed.SUPABASE_PROJECT_REF as string,
+      supabaseCaCert: parsed.SUPABASE_CA_CERT as string,
+      expectedCaSha256: parsed.SUPABASE_CA_SHA256 as string,
+      expectedRole: "portfolio_fence_login",
+      capabilityRole: "portfolio_fence_operator",
+      searchPath: "portfolio, extensions",
     });
   } catch (error) {
     throw new Error(
@@ -101,7 +118,9 @@ export function parseDeploymentBundle(raw: string): PortfolioDeploymentBundle {
     EDGE_ORIGIN_TOKEN: parsed.EDGE_ORIGIN_TOKEN as string,
     EDGE_ORIGIN_PREVIOUS_TOKEN: parsed.EDGE_ORIGIN_PREVIOUS_TOKEN as string | undefined,
     MIGRATION_DATABASE_URL: parsed.MIGRATION_DATABASE_URL as string,
+    SOURCE_FENCE_DATABASE_URL: parsed.SOURCE_FENCE_DATABASE_URL as string,
     SUPABASE_CA_CERT: parsed.SUPABASE_CA_CERT as string,
+    SUPABASE_CA_SHA256: parsed.SUPABASE_CA_SHA256 as string,
     SUPABASE_PROJECT_REF: parsed.SUPABASE_PROJECT_REF as string,
   };
 }

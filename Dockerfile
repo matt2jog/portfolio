@@ -11,6 +11,10 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:773a62fbe24a3f8c8b24b16fd59154627f8b406737bc906f83bf1732bc8907dd AS runtime
+ARG VCS_REF
+LABEL org.opencontainers.image.title="portfolio" \
+      org.opencontainers.image.source="https://github.com/matt2jog/portfolio" \
+      org.opencontainers.image.revision="$VCS_REF"
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./

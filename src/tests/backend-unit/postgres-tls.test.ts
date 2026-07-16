@@ -6,6 +6,7 @@ import {
 } from "../../shared/postgres-tls";
 import {
   TEST_SUPABASE_CA_CERT,
+  TEST_SUPABASE_CA_SHA256,
   TEST_SUPABASE_PROJECT_REF,
   testSupabaseDatabaseUrl,
 } from "../support/supabase";
@@ -20,7 +21,17 @@ function testDatabaseUrl(host: string): string {
 test("non-Supabase Postgres keeps its connection string and does not force a private CA", () => {
   assert.deepEqual(
     postgresConnectionConfig("postgresql://localhost:5432/portfolio", undefined),
-    { connectionString: "postgresql://localhost:5432/portfolio", ssl: undefined },
+    { connectionString: "postgresql://localhost:5432/portfolio", ssl: undefined, options: "-c TimeZone=UTC" },
+  );
+  assert.throws(
+    () => postgresConnectionConfig(
+      "postgresql://localhost:5432/portfolio",
+      undefined,
+      "portfolio, extensions",
+      undefined,
+      "portfolio_runtime; RESET ROLE",
+    ),
+    /safe identifier/,
   );
 });
 
@@ -32,6 +43,8 @@ test("Supabase direct and pooler hosts require strict TLS with the supplied CA",
     const config = postgresConnectionConfig(
       databaseUrl,
       TEST_SUPABASE_CA_CERT.replace(/\n/g, "\\n"),
+      undefined,
+      TEST_SUPABASE_CA_SHA256,
     );
     assert.equal(config.ssl?.rejectUnauthorized, true);
     assert.equal(config.ssl?.ca, TEST_SUPABASE_CA_CERT);
@@ -47,20 +60,48 @@ test("Supabase TLS fails closed when the CA is missing or malformed", () => {
 
 test("production Supabase validation binds direct and pooler URLs to one project and role", () => {
   for (const databaseUrl of [
-    testSupabaseDatabaseUrl("portfolio_runtime", { direct: true }),
-    testSupabaseDatabaseUrl("portfolio_runtime"),
-    testSupabaseDatabaseUrl("portfolio_runtime", { direct: true, port: 6543 }),
-    testSupabaseDatabaseUrl("portfolio_runtime", { port: 6543 }),
+    testSupabaseDatabaseUrl("portfolio_runtime_login", { direct: true }),
+    testSupabaseDatabaseUrl("portfolio_runtime_login"),
   ]) {
     const config = productionSupabaseConnectionConfig({
       databaseUrl,
       projectRef: TEST_SUPABASE_PROJECT_REF,
       supabaseCaCert: TEST_SUPABASE_CA_CERT,
-      expectedRole: "portfolio_runtime",
+      expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
+      capabilityRole: "portfolio_runtime",
+      searchPath: "portfolio, extensions",
     });
     assert.equal(config.ssl?.rejectUnauthorized, true);
     assert.equal(config.ssl?.ca, TEST_SUPABASE_CA_CERT);
     assert.doesNotMatch(config.connectionString, /sslmode|sslrootcert/i);
+    assert.equal(
+      config.options,
+      "-c search_path=portfolio,extensions -c TimeZone=UTC",
+    );
+    assert.doesNotMatch(config.options ?? "", /(?:^|\s)-c\s+role=/);
+  }
+});
+
+test("production Supabase validation rejects transaction mode, wrong database, and URL-owned options", () => {
+  for (const databaseUrl of [
+    testSupabaseDatabaseUrl("portfolio_runtime_login", { direct: true, port: 6543 }),
+    testSupabaseDatabaseUrl("portfolio_runtime_login", { port: 6543 }),
+    testSupabaseDatabaseUrl("portfolio_runtime_login").replace(/\/postgres$/, "/portfolio"),
+    `${testSupabaseDatabaseUrl("portfolio_runtime_login")}?options=-c%20search_path%3Dpublic`,
+    `${testSupabaseDatabaseUrl("portfolio_runtime_login")}?sslmode=require`,
+  ]) {
+    assert.throws(
+      () => productionSupabaseConnectionConfig({
+        databaseUrl,
+        projectRef: TEST_SUPABASE_PROJECT_REF,
+        supabaseCaCert: TEST_SUPABASE_CA_CERT,
+        expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+        expectedRole: "portfolio_runtime_login",
+        searchPath: "portfolio, extensions",
+      }),
+      /port 5432|database|query|option|TLS|ssl/i,
+    );
   }
 });
 
@@ -85,7 +126,8 @@ test("production Supabase validation rejects local, private, IP, .local, and arb
         databaseUrl: url,
         projectRef: TEST_SUPABASE_PROJECT_REF,
         supabaseCaCert: TEST_SUPABASE_CA_CERT,
-        expectedRole: "portfolio_runtime",
+        expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+        expectedRole: "portfolio_runtime_login",
       }),
       /Supabase|host|project/i,
       host,
@@ -96,10 +138,11 @@ test("production Supabase validation rejects local, private, IP, .local, and arb
 test("production Supabase validation rejects a different pooler tenant, role, or invalid project ref", () => {
   assert.throws(
     () => productionSupabaseConnectionConfig({
-      databaseUrl: testSupabaseDatabaseUrl("portfolio_runtime", { projectRef: "otherprojectref00000" }),
+      databaseUrl: testSupabaseDatabaseUrl("portfolio_runtime_login", { projectRef: "otherprojectref00000" }),
       projectRef: TEST_SUPABASE_PROJECT_REF,
       supabaseCaCert: TEST_SUPABASE_CA_CERT,
-      expectedRole: "portfolio_runtime",
+      expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
     }),
     /project|username/i,
   );
@@ -108,30 +151,36 @@ test("production Supabase validation rejects a different pooler tenant, role, or
       databaseUrl: testSupabaseDatabaseUrl("postgres"),
       projectRef: TEST_SUPABASE_PROJECT_REF,
       supabaseCaCert: TEST_SUPABASE_CA_CERT,
-      expectedRole: "portfolio_runtime",
+      expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
     }),
     /role|username/i,
   );
   assert.throws(
     () => productionSupabaseConnectionConfig({
-      databaseUrl: testSupabaseDatabaseUrl("portfolio_runtime"),
+      databaseUrl: testSupabaseDatabaseUrl("portfolio_runtime_login"),
       projectRef: "not-a-project-ref",
       supabaseCaCert: TEST_SUPABASE_CA_CERT,
-      expectedRole: "portfolio_runtime",
+      expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
     }),
-    /project ref/i,
+    /project.ref/i,
   );
 });
 
-test("production Supabase validation permits the configured project's migration login when no role is pinned", () => {
+test("production Supabase validation binds the migration URL to portfolio_migrator", () => {
   for (const databaseUrl of [
-    testSupabaseDatabaseUrl("postgres", { direct: true }),
-    testSupabaseDatabaseUrl("postgres"),
+    testSupabaseDatabaseUrl("portfolio_migrator_login", { direct: true }),
+    testSupabaseDatabaseUrl("portfolio_migrator_login"),
   ]) {
     assert.doesNotThrow(() => productionSupabaseConnectionConfig({
       databaseUrl,
       projectRef: TEST_SUPABASE_PROJECT_REF,
       supabaseCaCert: TEST_SUPABASE_CA_CERT,
+      expectedCaSha256: TEST_SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_migrator_login",
+      capabilityRole: "portfolio_migrator",
+      searchPath: "portfolio, extensions",
     }));
   }
 });

@@ -160,10 +160,8 @@ async function replaceProjectBullets(
   projectId: string,
   bullets: ProjectEventData["bullets"],
 ): Promise<void> {
-  // Not wrapped in a transaction (v1): a crash between the delete and the insert leaves
-  // the project bulletless until the next event for this id arrives. Idempotent replay
-  // (compacted-topic bootstrap, or a later Upserted) heals it; not closed here to avoid
-  // widening this module's dependency on drizzle's transaction API for a rare window.
+  // The Pub/Sub consumer supplies a transaction-scoped Drizzle handle, so replacing the
+  // aggregate's bullets is committed atomically with the project, inbox, and checkpoint.
   await db.delete(xyzBullets).where(eq(xyzBullets.projectId, projectId));
 
   const rows = (bullets ?? [])

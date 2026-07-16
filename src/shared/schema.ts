@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgTable, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgSchema, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
+const portfolioSchema = pgSchema("portfolio");
+
+export const users = portfolioSchema.table("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   googleSub: text("google_sub").notNull().unique(),
@@ -19,7 +21,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-export const projects = pgTable("projects", {
+export const projects = portfolioSchema.table("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   category: text("category").notNull(),
@@ -33,11 +35,12 @@ export const projects = pgTable("projects", {
   aiSystemPrompt: text("ai_system_prompt"),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
 });
 
-export const aiModels = pgTable("ai_models", {
+export const aiModels = portfolioSchema.table("ai_models", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   label: text("label").notNull(),
   modelId: text("model_id").notNull().unique(),
@@ -48,39 +51,45 @@ export const aiModels = pgTable("ai_models", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const xyzBullets = pgTable("xyz_bullets", {
+export const xyzBullets = portfolioSchema.table("xyz_bullets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull(),
   bulletText: text("bullet_text").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const bio = pgTable("bio", {
+export const bio = portfolioSchema.table("bio", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   headline: text("headline"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const bioParagraphs = pgTable("bio_paragraphs", {
+export const bioParagraphs = portfolioSchema.table("bio_paragraphs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   bioId: varchar("bio_id").notNull(),
   content: text("content").notNull(),
   position: integer("position").notNull().default(0),
 });
 
-export const skillsGroup = pgTable("skills_group", {
+export const skillsGroup = portfolioSchema.table("skills_group", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const allSkills = pgTable("all_skills", {
+export const allSkills = portfolioSchema.table("all_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   groupingId: varchar("grouping_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   embedding: vector("embedding", { dimensions: 768 }),
   embeddingModel: text("embedding_model"),
 });
-export const portfolioSkills = pgTable("portfolio_skills", {
+export const portfolioSkills = portfolioSchema.table("portfolio_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "cascade" }),
   position: integer("position").notNull().default(0),
@@ -88,7 +97,7 @@ export const portfolioSkills = pgTable("portfolio_skills", {
   archivedBy: varchar("archived_by"),
 });
 
-export const auditLogs = pgTable("audit_logs", {
+export const auditLogs = portfolioSchema.table("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   action: text("action").notNull(),
@@ -96,7 +105,7 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const session = pgTable("session", {
+export const session = portfolioSchema.table("session", {
   sid: varchar("sid").primaryKey(),
   sess: jsonb("sess").notNull(),
   expire: timestamp("expire").notNull(),
@@ -154,7 +163,7 @@ export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pi
 
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
 
-export const githubTimelineEvents = pgTable("github_timeline_events", {
+export const githubTimelineEvents = portfolioSchema.table("github_timeline_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   extId: varchar("ext_id").notNull().unique(), // GitHub event ID
   type: text("type").notNull(), // commit, pr, repo
@@ -169,7 +178,7 @@ export const githubTimelineEvents = pgTable("github_timeline_events", {
 
 export const insertGithubTimelineEventSchema = createInsertSchema(githubTimelineEvents).omit({ id: true, createdAt: true });
 
-export const linkedinTimelineEvents = pgTable("linkedin_timeline_events", {
+export const linkedinTimelineEvents = portfolioSchema.table("linkedin_timeline_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   extId: varchar("ext_id").notNull().unique(),
   type: text("type").notNull(), // post, repost, article
@@ -184,7 +193,7 @@ export const linkedinTimelineEvents = pgTable("linkedin_timeline_events", {
 
 export const insertLinkedinTimelineEventSchema = createInsertSchema(linkedinTimelineEvents).omit({ id: true, createdAt: true });
 
-export const personalInformation = pgTable("personal_information", {
+export const personalInformation = portfolioSchema.table("personal_information", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   title: text("title").notNull(),
@@ -203,7 +212,7 @@ export const personalInformation = pgTable("personal_information", {
 export const insertPersonalInformationSchema = createInsertSchema(personalInformation).omit({ id: true, updatedAt: true });
 export const updatePersonalInformationSchema = insertPersonalInformationSchema.partial();
 
-export const adminPolicyAcceptance = pgTable(
+export const adminPolicyAcceptance = portfolioSchema.table(
   "admin_policy_acceptance",
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -251,7 +260,7 @@ export type AiModel = typeof aiModels.$inferSelect;
 // Portfolio-local read-model table for Admin-owned public career data. Declaring it here
 // does not transfer canonical ownership to Portfolio; only the disabled compatibility
 // projector may update canonical fields, while Portfolio keeps local display order.
-export const education = pgTable("education", {
+export const education = portfolioSchema.table("education", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   school: text("school").notNull(),
   location: text("location").notNull(),
@@ -264,7 +273,7 @@ export const education = pgTable("education", {
 
 export type Education = typeof education.$inferSelect;
 
-export const experiences = pgTable("experiences", {
+export const experiences = portfolioSchema.table("experiences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   role: text("role").notNull(),
   company: text("company").notNull(),
@@ -275,6 +284,7 @@ export const experiences = pgTable("experiences", {
   isActive: boolean("is_active").notNull().default(false),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const insertExperienceSchema = createInsertSchema(experiences).pick({
@@ -290,7 +300,7 @@ export const insertExperienceSchema = createInsertSchema(experiences).pick({
 export const updateExperienceSchema = insertExperienceSchema.partial();
 export type DbExperience = typeof experiences.$inferSelect;
 
-export const legalDocumentVersions = pgTable(
+export const legalDocumentVersions = portfolioSchema.table(
   "legal_document_versions",
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -313,7 +323,7 @@ export type DbLegalDocumentVersion = typeof legalDocumentVersions.$inferSelect;
 
 // ─── Browser Tracking ────────────────────────────────────────────────────────
 
-export const browserTracking = pgTable("browser_tracking", {
+export const browserTracking = portfolioSchema.table("browser_tracking", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   hashedUuid: text("hashed_uuid").notNull().unique(),
   trEn: text("tr_en"),
@@ -322,7 +332,7 @@ export const browserTracking = pgTable("browser_tracking", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const browserTrackingIps = pgTable(
+export const browserTrackingIps = portfolioSchema.table(
   "browser_tracking_ips",
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -334,7 +344,7 @@ export const browserTrackingIps = pgTable(
   (t) => [uniqueIndex("browser_tracking_ips_uuid_ip_idx").on(t.hashedUuid, t.ip)],
 );
 
-export const browserRequestLogs = pgTable("browser_request_logs", {
+export const browserRequestLogs = portfolioSchema.table("browser_request_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   hashedUuid: text("hashed_uuid").notNull(),
   ip: text("ip"),
@@ -346,7 +356,7 @@ export const browserRequestLogs = pgTable("browser_request_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const ipRateLogs = pgTable("ip_rate_logs", {
+export const ipRateLogs = portfolioSchema.table("ip_rate_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ip: text("ip").notNull(),
   method: text("method").notNull(),
@@ -364,7 +374,7 @@ export type IpRateLog = typeof ipRateLogs.$inferSelect;
 
 // ─── Welcome Messages (Personalization) ──────────────────────────────────────
 
-export const welcomeMessages = pgTable("welcome_messages", {
+export const welcomeMessages = portfolioSchema.table("welcome_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: text("slug").notNull().unique(),
   label: text("label").notNull(),

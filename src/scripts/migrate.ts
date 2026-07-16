@@ -1,17 +1,30 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import {
   postgresConnectionConfig,
   productionSupabaseConnectionConfig,
 } from "../shared/postgres-tls";
+import { applyPortfolioMigrations, loadMigrationPlan } from "./migration-ledger";
+import { withMigrationTransitionPolicy } from "./migration-transition-policy";
 import { assertProductionMutationAllowed } from "./production-execution-guard";
+import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-session";
+
+function migrationsFolder(): string {
+  if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
+  const containerFolder = path.resolve(process.cwd(), "migrations");
+  if (existsSync(path.join(containerFolder, "meta", "_journal.json"))) return containerFolder;
+  return path.resolve(process.cwd(), "src", "migrations");
+}
 
 async function main(): Promise<void> {
-  assertProductionMutationAllowed(process.env, "Portfolio database migration");
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
+  if (process.env.NODE_ENV === "production") {
+    assertProductionMutationAllowed(process.env, "Portfolio database migration");
+  } else if (!process.env.TEST_DATABASE_URL || databaseUrl !== process.env.TEST_DATABASE_URL) {
+    throw new Error("Non-production migration is allowed only against the exact TEST_DATABASE_URL");
+  }
 
   const pool = new Pool({
     ...(process.env.NODE_ENV === "production"
@@ -19,17 +32,40 @@ async function main(): Promise<void> {
         databaseUrl,
         projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
         supabaseCaCert: process.env.SUPABASE_CA_CERT,
+        expectedCaSha256: process.env.SUPABASE_CA_SHA256,
+        expectedRole: "portfolio_migrator_login",
+        capabilityRole: "portfolio_migrator",
+        searchPath: "portfolio, extensions",
       })
-      : postgresConnectionConfig(databaseUrl, process.env.SUPABASE_CA_CERT)),
+      : postgresConnectionConfig(
+        databaseUrl,
+        process.env.SUPABASE_CA_CERT,
+        "portfolio, extensions",
+      )),
     max: 1,
   });
 
+  const client = await pool.connect();
   try {
-    await migrate(drizzle(pool), {
-      migrationsFolder: process.env.MIGRATIONS_DIR || path.resolve(process.cwd(), "migrations"),
-    });
-    console.log("Portfolio migrations complete.");
+    if (process.env.NODE_ENV !== "production") {
+      await client.query("SET portfolio.test_admin_migration = 'on'");
+    }
+    if (process.env.NODE_ENV === "production") {
+      await assertPortfolioMigratorBootstrapSession(client);
+    }
+    const plan = loadMigrationPlan(migrationsFolder());
+    const result = await withMigrationTransitionPolicy(
+      client,
+      plan,
+      () => applyPortfolioMigrations(client, plan, {
+        allowSchemaBootstrap: process.env.NODE_ENV !== "production",
+      }),
+    );
+    console.log(
+      `Portfolio migrations complete: adopted=${result.adopted} applied=${result.applied} total=${result.total}.`,
+    );
   } finally {
+    client.release();
     await pool.end();
   }
 }

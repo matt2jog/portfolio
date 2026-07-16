@@ -8,11 +8,15 @@ const RUNTIME_KEYS = [
   "ADMIN_IDENTITY_AUDIENCE",
   "ADMIN_IDENTITY_ISSUER",
   "ADMIN_IDENTITY_JWKS_URL",
+  "CAREER_PUBSUB_PUSH_AUDIENCE",
+  "CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT",
+  "CAREER_PUBSUB_SUBSCRIPTION",
   "DATABASE_URL",
   "EDGE_ORIGIN_TOKEN",
   "FIREWORKS_AI_TOKEN",
   "GRADIENT_AI_TOKEN",
   "SUPABASE_CA_CERT",
+  "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
 const OPTIONAL_RUNTIME_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
@@ -20,6 +24,8 @@ const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] a
 const ADMIN_AUTHORITY = "https://admin.2jog.dev";
 const ADMIN_AUDIENCE = "2jog-services";
 const ADMIN_JWKS_URL = `${ADMIN_AUTHORITY}/.well-known/jwks.json`;
+const PUBSUB_SERVICE_ACCOUNT = /^[a-z0-9][a-z0-9-]{2,62}@[a-z0-9-]+\.iam\.gserviceaccount\.com$/;
+const PUBSUB_SUBSCRIPTION = /^projects\/[a-z][a-z0-9-]{4,28}[a-z0-9]\/subscriptions\/[A-Za-z][A-Za-z0-9._~+%-]{2,254}$/;
 
 interface RuntimeBundleMetadata {
   schema_version: number;
@@ -107,16 +113,41 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
   if (target.ADMIN_IDENTITY_JWKS_URL !== ADMIN_JWKS_URL) {
     throw new Error(`Portfolio runtime bundle ADMIN_IDENTITY_JWKS_URL must match the shared JWKS endpoint`);
   }
+  let pushAudience: URL;
+  try {
+    pushAudience = new URL(target.CAREER_PUBSUB_PUSH_AUDIENCE ?? "");
+  } catch {
+    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_AUDIENCE must be an absolute HTTPS URL");
+  }
+  if (
+    pushAudience.protocol !== "https:"
+    || pushAudience.username
+    || pushAudience.password
+    || pushAudience.search
+    || pushAudience.hash
+    || pushAudience.pathname !== "/internal/pubsub/career"
+  ) {
+    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_AUDIENCE must be the exact HTTPS career push endpoint");
+  }
+  if (!PUBSUB_SERVICE_ACCOUNT.test(target.CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT ?? "")) {
+    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT must be an exact Google service-account email");
+  }
+  if (!PUBSUB_SUBSCRIPTION.test(target.CAREER_PUBSUB_SUBSCRIPTION ?? "")) {
+    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_SUBSCRIPTION must be an exact Pub/Sub subscription resource");
+  }
   try {
     productionSupabaseConnectionConfig({
       databaseUrl: target.DATABASE_URL ?? "",
       projectRef: target.SUPABASE_PROJECT_REF ?? "",
       supabaseCaCert: target.SUPABASE_CA_CERT,
-      expectedRole: "portfolio_runtime",
+      expectedCaSha256: target.SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
+      capabilityRole: "portfolio_runtime",
+      searchPath: "portfolio, extensions",
     });
   } catch (error) {
     throw new Error(
-      "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, and SUPABASE_CA_CERT must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
+      "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
       { cause: error },
     );
   }

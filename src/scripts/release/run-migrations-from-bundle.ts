@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { parseDeploymentBundle } from "./deployment-config";
 import { assertProductionMutationAllowed } from "../production-execution-guard";
 import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
+import { assertLocalPortfolioImageProvenance } from "./image-provenance";
 
 async function main(): Promise<void> {
   assertProductionMutationAllowed(process.env, "Digest-pinned database migration");
@@ -10,6 +11,7 @@ async function main(): Promise<void> {
   if (!bundlePath || !imageDigestUri.includes("@sha256:")) {
     throw new Error("A deployment bundle path and digest-pinned image URI are required");
   }
+  assertLocalPortfolioImageProvenance(imageDigestUri, process.env.GITHUB_SHA ?? "");
 
   const raw = await readAndDeleteBundle(bundlePath);
   const bundle = parseDeploymentBundle(raw);
@@ -20,6 +22,8 @@ async function main(): Promise<void> {
     "GITHUB_REPOSITORY",
     "GITHUB_REF",
     "GITHUB_WORKFLOW_REF",
+    "GITHUB_SHA",
+    "GITHUB_WORKFLOW_SHA",
   ] as const;
   const child = spawn(
     "docker",
@@ -31,6 +35,8 @@ async function main(): Promise<void> {
       "--env",
       "SUPABASE_CA_CERT",
       "--env",
+      "SUPABASE_CA_SHA256",
+      "--env",
       "SUPABASE_PROJECT_REF",
       ...productionContextKeys.flatMap((key) => process.env[key] === undefined ? [] : ["--env", key]),
       imageDigestUri,
@@ -41,6 +47,7 @@ async function main(): Promise<void> {
         ...process.env,
         DATABASE_URL: bundle.MIGRATION_DATABASE_URL,
         SUPABASE_CA_CERT: bundle.SUPABASE_CA_CERT,
+        SUPABASE_CA_SHA256: bundle.SUPABASE_CA_SHA256,
         SUPABASE_PROJECT_REF: bundle.SUPABASE_PROJECT_REF,
       },
       stdio: "inherit",

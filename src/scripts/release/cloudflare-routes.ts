@@ -9,6 +9,7 @@ export interface CloudflareWorkerRoute {
 }
 
 export interface RouteOwner {
+  id?: string;
   pattern: string;
   script: string;
 }
@@ -25,6 +26,8 @@ export interface CloudflareRouteClient {
 }
 
 const TARGET_PATTERNS = ["2jog.dev/*", "www.2jog.dev/*"] as const;
+const FIRST_CUTOVER_OWNER = "resume-vcs-cloud-proxy";
+const LATER_CUTOVER_OWNER = "portfolio-edge";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -50,9 +53,27 @@ export function selectRouteSnapshot(
   const selected = patterns.map((pattern) => {
     const route = routes.find((item) => item.pattern === pattern);
     if (!route?.script) throw new Error(`Missing route owner for ${pattern}`);
-    return { pattern, script: route.script };
+    return { id: route.id, pattern, script: route.script };
   });
-  return { schema_version: 1, routes: selected };
+  const snapshot: RouteSnapshot = { schema_version: 1, routes: selected };
+  const owners = new Set(snapshot.routes.map((route) => route.script));
+  if (
+    owners.size !== 1
+    || ![FIRST_CUTOVER_OWNER, LATER_CUTOVER_OWNER].includes(snapshot.routes[0]?.script ?? "")
+  ) {
+    throw new Error("Cloudflare Portfolio route owner drift is not an approved first or later cutover state");
+  }
+  return snapshot;
+}
+
+export function assertCutoverRouteOwners(snapshot: RouteSnapshot, phase: "first" | "later"): void {
+  const expected = phase === "first" ? FIRST_CUTOVER_OWNER : LATER_CUTOVER_OWNER;
+  if (
+    snapshot.routes.length !== TARGET_PATTERNS.length
+    || TARGET_PATTERNS.some((pattern) => !snapshot.routes.some((route) => route.pattern === pattern && route.script === expected))
+  ) {
+    throw new Error(`Unexpected Cloudflare route owner for ${phase} Portfolio cutover`);
+  }
 }
 
 export function assertRouteOwnership(
@@ -101,7 +122,10 @@ function parseSnapshot(raw: string): RouteSnapshot {
     if (!isRecord(route) || typeof route.pattern !== "string" || typeof route.script !== "string") {
       throw new Error("Route snapshot contains an invalid route");
     }
-    return { pattern: route.pattern, script: route.script };
+    if (typeof route.id !== "string" || route.id.length === 0) {
+      throw new Error("Route snapshot is missing its original route id");
+    }
+    return { id: route.id, pattern: route.pattern, script: route.script };
   });
   if (routes.length !== TARGET_PATTERNS.length) throw new Error("Route snapshot is incomplete");
   for (const pattern of TARGET_PATTERNS) {
@@ -146,11 +170,17 @@ class HttpCloudflareRouteClient implements CloudflareRouteClient {
   }
 
   public async update(id: string, route: RouteOwner): Promise<void> {
-    await this.request(`/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(route) });
+    await this.request(`/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify({ pattern: route.pattern, script: route.script }),
+    });
   }
 
   public async create(route: RouteOwner): Promise<void> {
-    await this.request("", { method: "POST", body: JSON.stringify(route) });
+    await this.request("", {
+      method: "POST",
+      body: JSON.stringify({ pattern: route.pattern, script: route.script }),
+    });
   }
 }
 

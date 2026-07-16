@@ -1,7 +1,9 @@
 import { rootCertificates } from "node:tls";
+import { certificateSha256 } from "../../shared/postgres-tls";
 
-export const TEST_SUPABASE_PROJECT_REF = "abcdefghijklmnopqrst";
+export const TEST_SUPABASE_PROJECT_REF = "qvbpgvazqfyhwjsfulsb";
 export const TEST_SUPABASE_CA_CERT = rootCertificates[0];
+export const TEST_SUPABASE_CA_SHA256 = certificateSha256(TEST_SUPABASE_CA_CERT);
 
 export function testSupabaseDatabaseUrl(
   role: string,

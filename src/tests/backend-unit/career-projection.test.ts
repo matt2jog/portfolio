@@ -519,7 +519,7 @@ test("parseEnvelope: parses a plain JSON envelope", () => {
   assert.equal(envelope!.aggregate_id, "exp-1");
 });
 
-test("parseEnvelope: strips a Confluent/Karapace magic-byte + schema-id prefix before parsing", () => {
+test("parseEnvelope: rejects obsolete schema-registry framing", () => {
   const json = JSON.stringify({
     event_id: "e2",
     event_type: "ProjectUpserted",
@@ -531,9 +531,7 @@ test("parseEnvelope: strips a Confluent/Karapace magic-byte + schema-id prefix b
   });
   const framed = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x00, 0x07]), Buffer.from(json)]);
 
-  const envelope = parseEnvelope(framed);
-  assert.ok(envelope);
-  assert.equal(envelope!.event_id, "e2");
+  assert.equal(parseEnvelope(framed), null);
 });
 
 test("parseEnvelope: returns null for a tombstone (null value)", () => {

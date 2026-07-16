@@ -3,6 +3,7 @@ import test from "node:test";
 import { parseDeploymentBundle } from "../../scripts/release/deployment-config";
 import {
   TEST_SUPABASE_CA_CERT,
+  TEST_SUPABASE_CA_SHA256,
   TEST_SUPABASE_PROJECT_REF,
   testSupabaseDatabaseUrl,
 } from "../support/supabase";
@@ -19,10 +20,12 @@ function validDeploymentBundle() {
       boundary: "deployment",
     },
     CLOUDFLARE_API_TOKEN: CLOUDFLARE_TOKEN,
-    MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("postgres", { direct: true }),
+    DATABASE_ADMIN_URL: testSupabaseDatabaseUrl("postgres", { direct: true }),
+    MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("portfolio_migrator_login", { direct: true }),
     EDGE_ORIGIN_TOKEN: EDGE_TOKEN,
     EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN,
     SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
+    SUPABASE_CA_SHA256: TEST_SUPABASE_CA_SHA256,
     SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
   };
 }
@@ -32,11 +35,12 @@ test("deployment bundle accepts only the typed Portfolio deployment boundary", (
   assert.equal(parsed.CLOUDFLARE_API_TOKEN, CLOUDFLARE_TOKEN);
   assert.equal(
     parsed.MIGRATION_DATABASE_URL,
-    testSupabaseDatabaseUrl("postgres", { direct: true }),
+    testSupabaseDatabaseUrl("portfolio_migrator_login", { direct: true }),
   );
   assert.equal(parsed.EDGE_ORIGIN_TOKEN, EDGE_TOKEN);
   assert.equal(parsed.EDGE_ORIGIN_PREVIOUS_TOKEN, PREVIOUS_EDGE_TOKEN);
   assert.equal(parsed.SUPABASE_CA_CERT, TEST_SUPABASE_CA_CERT);
+  assert.equal(parsed.SUPABASE_CA_SHA256, TEST_SUPABASE_CA_SHA256);
   assert.equal(parsed.SUPABASE_PROJECT_REF, TEST_SUPABASE_PROJECT_REF);
 });
 
@@ -92,7 +96,7 @@ test("deployment bundle enforces token length and the scoped Supabase migration 
 
   const crossProjectDatabase = {
     ...validDeploymentBundle(),
-    MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("postgres", {
+    MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("portfolio_migrator_login", {
       direct: true,
       projectRef: "otherprojectref00000",
     }),
@@ -100,6 +104,15 @@ test("deployment bundle enforces token length and the scoped Supabase migration 
   assert.throws(
     () => parseDeploymentBundle(JSON.stringify(crossProjectDatabase)),
     /MIGRATION_DATABASE_URL|Supabase|project/i,
+  );
+
+  const adminDatabase = {
+    ...validDeploymentBundle(),
+    MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("postgres", { direct: true }),
+  };
+  assert.throws(
+    () => parseDeploymentBundle(JSON.stringify(adminDatabase)),
+    /MIGRATION_DATABASE_URL|role|username/i,
   );
 
   const invalidCa = { ...validDeploymentBundle(), SUPABASE_CA_CERT: "not-a-certificate" };

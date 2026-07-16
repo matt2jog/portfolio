@@ -3,6 +3,7 @@ import { productionSupabaseConnectionConfig } from "../../shared/postgres-tls";
 const LEGAL_AUDIT_KEYS = [
   "LEGAL_AUDIT_DATABASE_URL",
   "SUPABASE_CA_CERT",
+  "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
 const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
@@ -10,6 +11,7 @@ const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] a
 export interface PortfolioLegalAuditBundle {
   LEGAL_AUDIT_DATABASE_URL: string;
   SUPABASE_CA_CERT: string;
+  SUPABASE_CA_SHA256: string;
   SUPABASE_PROJECT_REF: string;
 }
 
@@ -53,7 +55,10 @@ export function parseLegalAuditBundle(raw: string): PortfolioLegalAuditBundle {
       databaseUrl: parsed.LEGAL_AUDIT_DATABASE_URL as string,
       projectRef: parsed.SUPABASE_PROJECT_REF as string,
       supabaseCaCert: parsed.SUPABASE_CA_CERT as string,
-      expectedRole: "legal_audit_writer",
+      expectedCaSha256: parsed.SUPABASE_CA_SHA256 as string,
+      expectedRole: "portfolio_legal_login",
+      capabilityRole: "legal_audit_writer",
+      searchPath: "portfolio, extensions",
     });
   } catch (error) {
     throw new Error(
@@ -64,6 +69,7 @@ export function parseLegalAuditBundle(raw: string): PortfolioLegalAuditBundle {
   return {
     LEGAL_AUDIT_DATABASE_URL: parsed.LEGAL_AUDIT_DATABASE_URL as string,
     SUPABASE_CA_CERT: parsed.SUPABASE_CA_CERT as string,
+    SUPABASE_CA_SHA256: parsed.SUPABASE_CA_SHA256 as string,
     SUPABASE_PROJECT_REF: parsed.SUPABASE_PROJECT_REF as string,
   };
 }
