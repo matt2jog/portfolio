@@ -476,6 +476,7 @@ test("production container is reproducible, unprivileged, and excludes local bui
 
 test("fork-safe pull request CI exercises coverage, integration, UI, build, and the exact image", () => {
   const workflow = read(".github/workflows/ci.yml");
+  const uiConfig = read("src/tests/ui-test/playwright.config.ts");
   const edgePackage = read("infra/cloudflare/portfolio-edge/package.json");
   const edgeVitest = read("infra/cloudflare/portfolio-edge/vitest.config.ts");
 
@@ -502,6 +503,11 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
   assert.match(workflow, /scanners:\s*['"]?secret/);
   assert.match(workflow, /severity:\s*['"]?CRITICAL/);
   assert.match(workflow, /pgvector\/pgvector:pg17@sha256:[0-9a-f]{64}/);
+  assert.match(
+    uiConfig,
+    /timeout:\s*90_000[\s\S]*navigationTimeout:\s*60_000/,
+    "the parallel Vite UI suite needs enough cold-start navigation budget",
+  );
   assert.match(edgePackage, /"test:coverage"/);
   for (const metric of ["lines", "branches", "functions", "statements"]) {
     assert.match(edgeVitest, new RegExp(`${metric}:\\s*70`));
