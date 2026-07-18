@@ -1,4 +1,4 @@
-# 2jog.dev — personal brand portfolio
+# 2jog.dev â€” personal brand portfolio
 
 A full-stack personal-brand portfolio site. Single deployable: an Express
 backend on port 3000 that serves API routes, runs the Vite dev server in
@@ -18,50 +18,51 @@ development, and serves the prebuilt SPA in production.
 
 ```
 portfolio/
-├── legal/                       # source of truth for binding legal docs
-│   ├── PRIVACY_POLICY.md
-│   ├── TERMS_OF_USE.md
-│   ├── TRACKING_NOTICE_AND_CONSENT.md
-│   └── README.md                # audit-log + workflow docs
-├── src/
-│   ├── client/                  # Vite + React SPA (index.html, src/)
-│   ├── backend/                 # Express server, agent, auth, integrations
-│   │   ├── data/db.ts           # Drizzle + pg pool
-│   │   └── agent/               # LLM provider, tools, rules, evaluator
-│   ├── scripts/                 # build, migrations, release tooling, legal recorder
-│   ├── shared/                  # Drizzle schema, types reused by both sides
-│   ├── tests/                   # Playwright: assertions + viewport screenshots
-│   └── migrations/              # Drizzle migrations + raw SQL
-├── .github/workflows/
-│   ├── ci.yml                   # fork-safe PR verification and image scan
-│   ├── deploy.yml               # merge-SHA image release and coordinated edge cutover
-│   ├── data-migration.yml       # manual non-destructive legacy staging
-│   └── legal-audit.yml          # immutable legal-version recording
-├── drizzle.config.ts, vite.config.ts, package.json, tsconfig.json, ...
+â”œâ”€â”€ legal/                       # source of truth for binding legal docs
+â”‚   â”œâ”€â”€ PRIVACY_POLICY.md
+â”‚   â”œâ”€â”€ TERMS_OF_USE.md
+â”‚   â”œâ”€â”€ TRACKING_NOTICE_AND_CONSENT.md
+â”‚   â””â”€â”€ README.md                # audit-log + workflow docs
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ client/                  # Vite + React SPA (index.html, src/)
+â”‚   â”œâ”€â”€ backend/                 # Express server, agent, auth, integrations
+â”‚   â”‚   â”œâ”€â”€ data/db.ts           # Drizzle + pg pool
+â”‚   â”‚   â””â”€â”€ agent/               # LLM provider, tools, rules, evaluator
+â”‚   â”œâ”€â”€ scripts/                 # build, migrations, release tooling, legal recorder
+â”‚   â”œâ”€â”€ shared/                  # Drizzle schema, types reused by both sides
+â”‚   â”œâ”€â”€ tests/                   # Playwright: assertions + viewport screenshots
+â”‚   â””â”€â”€ migrations/              # Drizzle migrations + raw SQL
+â”œâ”€â”€ .github/workflows/
+â”‚   â”œâ”€â”€ ci.yml                   # fork-safe PR verification and image scan
+â”‚   â”œâ”€â”€ release-image.yml         # sole build, scan, and immutable digest approval
+â”‚   â”œâ”€â”€ deploy.yml                # approved-digest release and coordinated edge cutover
+â”‚   â”œâ”€â”€ data-migration.yml       # manual non-destructive legacy staging
+â”‚   â””â”€â”€ legal-audit.yml          # immutable legal-version recording
+â”œâ”€â”€ drizzle.config.ts, vite.config.ts, package.json, tsconfig.json, ...
 ```
 
-Vite path aliases: `@/*` → `src/client/src/*`, `@shared/*` → `src/shared/*`,
-`@backend/*` → `src/backend/*`.
+Vite path aliases: `@/*` â†’ `src/client/src/*`, `@shared/*` â†’ `src/shared/*`,
+`@backend/*` â†’ `src/backend/*`.
 
 ## Features
 
 ### Public pages
-- **Home (`/`)** — 3D business card, animated "FULL STACK ENGINEER" hero,
+- **Home (`/`)** â€” 3D business card, animated "FULL STACK ENGINEER" hero,
   skills constellation, first-visit intro animation gated by localStorage
-- **Portfolio (`/portfolio`)** — cube-style paginated project cards;
+- **Portfolio (`/portfolio`)** â€” cube-style paginated project cards;
   per-project chat at `/portfolio/:projectId/chat` powered by the AI agent
-- **Tree (`/tree`)** — carousel of "linktree"-style cards
-- **About (`/about`)** — bio card + experience timeline
-- **Activity (`/activity`)** — unified feed of GitHub activity + LinkedIn
+- **Tree (`/tree`)** â€” carousel of "linktree"-style cards
+- **About (`/about`)** â€” bio card + experience timeline
+- **Activity (`/activity`)** â€” unified feed of GitHub activity + LinkedIn
   posts/reposts/articles, with cached ingestion in the backend
-- **Legal (`/privacy`, `/terms`, `/tracking`)** — Markdown rendered from
+- **Legal (`/privacy`, `/terms`, `/tracking`)** â€” Markdown rendered from
   `legal/*.md` via the backend, with a side TOC layout
 
 ### Cross-cutting UX
-- **Consent banner** — clickwrap with jurisdiction detection, hidden on
+- **Consent banner** â€” clickwrap with jurisdiction detection, hidden on
   legal pages, respects browser-level Global Privacy Control
-- **LogRocket bridge** — only attaches identifying data after consent
-- **US-only geoblocking** — `ENFORCE_US_ONLY=true` returns HTTP 451 outside
+- **LogRocket bridge** â€” only attaches identifying data after consent
+- **US-only geoblocking** â€” `ENFORCE_US_ONLY=true` returns HTTP 451 outside
   the US; localhost/private IPs always allowed; static assets exempt
 
 ### Admin (`/admin`, Google OAuth)
@@ -96,7 +97,7 @@ dead-letter them. See
   `GitHubCommitsTool`, `GitHubIssuestool`
 - Output evaluator with up-to-N rewrite attempts; mermaid diagrams are
   validated before sending
-- Provider fallback: Gradient → Fireworks with a per-model 1-hour
+- Provider fallback: Gradient â†’ Fireworks with a per-model 1-hour
   rate-limit cooldown
 
 ### Legal-document VCS
@@ -138,7 +139,7 @@ npm run dev
 
 This starts the Express server on `PORT` (default 3000) with `tsx watch`.
 The server mounts Vite as middleware in development, so the frontend is
-served at the same origin — open <http://localhost:3000>.
+served at the same origin â€” open <http://localhost:3000>.
 
 If you want to run only the frontend against an already-running backend on
 port 3000:
@@ -169,7 +170,7 @@ npm run build
 ```
 
 `src/scripts/build.ts` does two things:
-1. `vite build` → emits the SPA to `dist/public/`
+1. `vite build` â†’ emits the SPA to `dist/public/`
 2. `esbuild` bundles the server into `dist/index.cjs` and the immutable-image
    migration entry point into `dist/migrate.cjs` (CJS,
    minified, with an allowlist of deps bundled inline to reduce cold-start
@@ -227,7 +228,7 @@ created from `.env.example`; it never reads the root union environment file.
 
 `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\CI_SETUP.md`
 is the operational source for fork-safe `main` PR CI, repository-bound WIF,
-the dedicated Artifact Registry, digest-pinned zero-traffic candidates,
+the dedicated Artifact Registry, a release-image run handoff that is verified by exact SHA and retained artifact before a digest-pinned zero-traffic candidate,
 custom/raw smoke checks, ten-minute observation, and causal rollback. Cloud Build
 and the legacy shared deployment identity/repository are not part of delivery.
 The checked-in `portfolio-edge` Worker owns `2jog.dev` and `www.2jog.dev`; its
@@ -241,19 +242,19 @@ requires both 48 elapsed hours and a distinct later successful release.
 
 Tests live under `src/tests/`:
 
-- `src/tests/ui-test/` — Playwright functional assertions (consent
+- `src/tests/ui-test/` â€” Playwright functional assertions (consent
   recording, etc.). `npm run test:ui` runs these against a Vite dev server
   it spawns on `127.0.0.1:5000`. Add `-- --headed` for headed execution and
   set `PLAYWRIGHT_SLOW_MO_MS` to add a human-viewable delay between actions.
   Two workers run by default to keep cold Vite startup reliable; override
   that with `PLAYWRIGHT_WORKERS` when the host has additional capacity.
-- `src/tests/ui-artifacts/` — Playwright viewport screenshots at desktop
-  (1440×900) and mobile (390×844). Output goes to
+- `src/tests/ui-artifacts/` â€” Playwright viewport screenshots at desktop
+  (1440Ã—900) and mobile (390Ã—844). Output goes to
   `src/tests/ui-artifacts/{desktop,mobile}/` (gitignored except
   `.gitkeep`). `npm run test:pictures` to regenerate.
-- `src/tests/backend-unit/` — secretless Node `node:test` suite covering core
+- `src/tests/backend-unit/` â€” secretless Node `node:test` suite covering core
   behavior and delivery policy. `npm run test:backend-unit`.
-- `src/tests/backend-integration/` — database connectivity/schema checks against
+- `src/tests/backend-integration/` â€” database connectivity/schema checks against
   an isolated pgvector/Postgres database. `npm run test:backend-integration`.
 
 ## Database
@@ -267,7 +268,7 @@ Tables include: `users`, `projects`, `xyz_bullets`, `bio`, `bio_paragraphs`,
 
 Migrations are in `src/migrations/`. CI applies them to disposable Postgres; CD
 first completes the immutable-SHA legal audit and finalized cutover-evidence
-gates, proves that the pulled service-owned image digest carries the current
+gates, consumes only the successful release-image workflow artifact for the exact current SHA, proves that the pulled service-owned image digest carries the current
 source revision, and only then runs reviewed production migrations from that
 digest before the zero-traffic candidate deploy. The privileged deploy workflow does not start
 localhost Postgres or repeat database integration tests; those are required in PR CI.

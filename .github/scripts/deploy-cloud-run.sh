@@ -392,7 +392,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --tag="${candidate_tag}" \
   --quiet
 
-gcloud beta run services update "$SERVICE_NAME" \
+gcloud run services update "$SERVICE_NAME" \
   --project "$GCP_PROJECT_ID" \
   --region "$GCP_REGION" \
   --min=0 \

@@ -26,7 +26,7 @@ test("production mutation depends on the reusable legal audit gate", () => {
   const release = jobBlock(deploy, "release");
 
   assert.match(gate, /uses:\s*\.\/\.github\/workflows\/legal-audit\.yml/);
-  assert.match(gate, /source_sha:\s*\$\{\{\s*github\.sha\s*\}\}/);
+  assert.match(gate, /source_sha:\s*\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/);
   assert.match(prepare, /needs:\s*legal_audit/);
   assert.match(release, /needs:\s*prepare_release/);
 });

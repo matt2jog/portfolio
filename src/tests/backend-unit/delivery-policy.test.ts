@@ -518,7 +518,7 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   const workflow = read(".github/workflows/deploy.yml");
   const release = read(".github/scripts/deploy-cloud-run.sh");
 
-  assert.match(workflow, /push:\s*\n\s*branches:\s*\[main\]/);
+  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
   assert.match(workflow, /personal-brand-github\/providers\/portfolio-main/);
   assert.match(
     workflow,
@@ -528,22 +528,19 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
     workflow,
     /us-east4-docker\.pkg\.dev\/personal-brand-501801\/portfolio\/portfolio/,
   );
-  assert.match(
-    workflow,
-    /IMAGE_URI:\s*\$\{\{ env\.IMAGE_REPOSITORY \}\}:\$\{\{ github\.sha \}\}/,
-  );
-  assert.match(workflow, /docker push/);
-  assert.match(workflow, /@\$\{IMAGE_DIGEST\}/);
+  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
+  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/);
+  assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
+  assert.doesNotMatch(workflow, /docker build/);
+  assert.doesNotMatch(workflow, /docker push/);
   assert.match(workflow, /run-database-release-from-bundle\.ts/);
   assert.match(
     workflow,
     /run-deployment-command\.ts[^\n]+deploy-cloud-run\.sh/,
   );
   assert.match(workflow, /steps\.image\.outputs\.uri/);
-  assert.ok(
-    workflow.indexOf("Trivy") < workflow.indexOf("docker push"),
-    "the image must be scanned before push",
-  );
+
   assert.match(
     workflow,
     /RUNTIME_BUNDLE_VERSION:\s*\$\{\{ vars\.PORTFOLIO_RUNTIME_BUNDLE_VERSION \}\}/,
@@ -564,15 +561,15 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.doesNotMatch(workflow, /secrets versions access latest/);
   assert.ok(
     workflow.indexOf("Validate exact secret bundle versions") <
-      workflow.indexOf("Build immutable merge-SHA image"),
-    "bundle versions must be pinned and validated before the production image is built",
+      workflow.indexOf("Consume the one approved immutable image handoff"),
+    "bundle versions must be pinned and validated before migration or traffic mutation",
   );
   assert.match(workflow, /Preflight production dependencies/);
   assert.match(workflow, /preflight-release\.sh/);
   assert.ok(
     workflow.indexOf("Preflight production dependencies") <
-      workflow.indexOf("Build immutable merge-SHA image"),
-    "Cloud Run, IAM, and Cloudflare dependencies must be read-verified before build, push, or migration",
+      workflow.indexOf("Consume the one approved immutable image handoff"),
+    "Cloud Run, IAM, and Cloudflare dependencies must be read-verified before image consumption or migration",
   );
 
   assert.match(release, /--no-traffic/);
@@ -585,7 +582,8 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.match(release, /current_revision.*candidate_revision/s);
   assert.match(release, /rollback_url/s);
   assert.match(release, /imageDigest.*IMAGE_DIGEST/s);
-  assert.match(release, /gcloud beta run services update "\$SERVICE_NAME"/);
+  assert.match(release, /gcloud run services update "\$SERVICE_NAME"/);
+  assert.doesNotMatch(release, /gcloud beta run services update/);
   assert.match(release, /--min=0/);
   assert.match(release, /--max=1/);
   assert.match(release, /--cpu-throttling/);
@@ -933,4 +931,19 @@ test("legal audit delivery verifies TLS and keeps its history view under invoker
     migration,
     /REVOKE ALL ON legal_document_active_ranges FROM PUBLIC/i,
   );
+});
+
+test("deployment consumes the exact approved release-image run without rebuilding", () => {
+  const workflow = read(".github/workflows/deploy.yml");
+  const release = read(".github/scripts/deploy-cloud-run.sh");
+
+  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
+  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/);
+  assert.match(workflow, /ref:\s*\$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
+  assert.doesNotMatch(workflow, /docker build/);
+  assert.doesNotMatch(workflow, /docker push/);
+  assert.match(release, /gcloud run services update "\$SERVICE_NAME"/);
+  assert.doesNotMatch(release, /gcloud beta run services update/);
 });
