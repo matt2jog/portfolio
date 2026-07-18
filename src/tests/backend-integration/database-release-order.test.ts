@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { Client } from 'pg';
 import { applyPortfolioMigrations, loadMigrationPlan } from '../../scripts/migration-ledger';
@@ -18,11 +19,20 @@ import { postgresConnectionConfig } from '../../shared/postgres-tls';
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required for database release integration tests');
 
+const preMigrationSql = readFileSync(
+  path.resolve(process.cwd(), 'infra', 'supabase', 'portfolio-pre-migration.sql'),
+  'utf8',
+);
+const provisioningSql = readFileSync(
+  path.resolve(process.cwd(), 'infra', 'supabase', 'portfolio-role-acls.sql'),
+  'utf8',
+);
+
 function identifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-test('the production database wrapper executes the clean bootstrap contract in deploy order', async () => {
+test('the production database wrapper uses only the pre-bootstrapped migrator boundary', async () => {
   const base = new URL(databaseUrl);
   const databaseName = `portfolio_release_${randomUUID().replaceAll('-', '')}`;
   const adminUrl = new URL(base);
@@ -40,15 +50,29 @@ test('the production database wrapper executes the clean bootstrap contract in d
     await targetAdmin.connect();
     await targetAdmin.query('CREATE SCHEMA extensions AUTHORIZATION postgres');
     await targetAdmin.query('CREATE EXTENSION vector WITH SCHEMA extensions');
+    await targetAdmin.query(preMigrationSql);
+    await targetAdmin.query(`ALTER ROLE portfolio_migrator_login PASSWORD '${password}'`);
+
+    const bootstrapLoginUrl = new URL(targetUrl);
+    bootstrapLoginUrl.username = 'portfolio_migrator_login';
+    bootstrapLoginUrl.password = password;
+    const bootstrapMigrator = new Client(postgresConnectionConfig(
+      bootstrapLoginUrl.toString(), undefined, 'portfolio, extensions', undefined, 'portfolio_migrator',
+    ));
+    await bootstrapMigrator.connect();
+    try {
+      await assertPortfolioMigratorBootstrapSession(bootstrapMigrator);
+      await applyPortfolioMigrations(
+        bootstrapMigrator,
+        loadMigrationPlan(path.resolve('src/migrations')),
+        { allowSchemaBootstrap: false },
+      );
+    } finally {
+      await bootstrapMigrator.end();
+    }
+    await targetAdmin.query(provisioningSql);
 
     const dependencies: DatabaseReleaseDependencies = {
-      async executeAdministratorSql(filename, sql) {
-        events.push(filename);
-        await targetAdmin!.query(sql);
-        if (filename === 'portfolio-pre-migration.sql') {
-          await targetAdmin!.query(`ALTER ROLE portfolio_migrator_login PASSWORD '${password}'`);
-        }
-      },
       async runMigrationsFromBundle() {
         events.push('digest-pinned-migrations');
         const loginUrl = new URL(targetUrl);
@@ -59,12 +83,7 @@ test('the production database wrapper executes the clean bootstrap contract in d
         ));
         await migrator.connect();
         try {
-          await assertPortfolioMigratorBootstrapSession(migrator);
-          await applyPortfolioMigrations(
-            migrator,
-            loadMigrationPlan(path.resolve('src/migrations')),
-            { allowSchemaBootstrap: false },
-          );
+          await assertPortfolioMigratorDatabaseSession(migrator);
         } finally {
           await migrator.end();
         }
@@ -91,9 +110,7 @@ test('the production database wrapper executes the clean bootstrap contract in d
       dependencies,
     );
     assert.deepEqual(events, [
-      'portfolio-pre-migration.sql',
       'digest-pinned-migrations',
-      'portfolio-role-acls.sql',
       'post-acl-session-proof',
     ]);
     assert.equal((await targetAdmin.query(
