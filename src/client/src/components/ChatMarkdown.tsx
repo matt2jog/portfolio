@@ -320,6 +320,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
       <div
         ref={viewportRef}
+        data-testid="mermaid-viewport"
         className="relative h-[clamp(240px,38vh,420px)] overflow-hidden rounded border border-white/5 bg-black/20 select-none touch-none md:h-[clamp(280px,42vh,520px)]"
         onPointerDown={(event) => {
           event.preventDefault();

@@ -7,7 +7,6 @@ import {
   TRACKER_COOKIE_NAME,
   parseCookies,
   generateHashedUuid,
-  getRequestTrackerUuid,
   makeTrackingIpCacheKey,
 } from "./tracking-utils";
 
@@ -70,10 +69,7 @@ export function requestLogMiddleware(req: Request, res: Response, next: NextFunc
   if (!uuid) return next();
 
   const start = Date.now();
-  const ip =
-    (req.headers["x-client-ip"] as string | undefined) ||
-    extractClientIp(req) ||
-    undefined;
+  const ip = extractClientIp(req) || undefined;
 
   res.on("finish", () => {
     isUuidTracked(uuid).then((tracked) => {
@@ -141,10 +137,7 @@ export async function upsertTrEn(uuid: string, trEn: string): Promise<void> {
 export function ipRateLogMiddleware(req: Request, res: Response, next: NextFunction) {
   if (!req.path.startsWith("/api")) return next();
 
-  const ip =
-    (req.headers["x-client-ip"] as string | undefined) ||
-    extractClientIp(req) ||
-    undefined;
+  const ip = extractClientIp(req) || undefined;
 
   if (!ip) return next();
 

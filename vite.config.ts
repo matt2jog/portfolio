@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import istanbul from "vite-plugin-istanbul";
 import { metaImagesPlugin } from "./vite-plugin-meta-images";
 
 export default defineConfig({
@@ -16,6 +17,17 @@ export default defineConfig({
     ...(process.env.NODE_ENV !== "production" ? [runtimeErrorOverlay()] : []),
     tailwindcss(),
     metaImagesPlugin(),
+    ...(process.env.VITE_COVERAGE === "1"
+      ? [
+          istanbul({
+            include: ["src/client/src/**/*.{ts,tsx}"],
+            exclude: ["node_modules", "src/tests/**"],
+            extension: [".ts", ".tsx"],
+            requireEnv: false,
+            forceBuildInstrument: true,
+          }),
+        ]
+      : []),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [

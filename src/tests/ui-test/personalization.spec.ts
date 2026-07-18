@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, seedBrowserState } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState } from "../support/mock-api";
+
+registerClientCoverage();
 
 const FORCE_SHOW_KEY = "__intro_force_show";
 const WELCOME_SLUG_KEY = "__intro_welcome_slug";
@@ -92,20 +94,39 @@ test("intro does NOT show when force-show flag is absent and TTL is active", asy
 
 // ── Admin personalization panel ───────────────────────────────────────────────
 
-test("admin personalization tab is visible and shows welcome messages list", async ({ page }) => {
+test("admin exposes only Portfolio-owned presentation surfaces", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByTestId("admin-tab-personalization").click();
+  await expect(page.getByText("Canonical career content is managed in Admin Dashboard.")).toBeVisible();
+  await expect(page.getByTestId("admin-tab-project-presentation")).toBeVisible();
+  await expect(page.getByTestId("admin-tab-skill-presentation")).toBeVisible();
+  await expect(page.getByTestId("admin-tab-personalization")).toBeVisible();
+  await expect(page.getByTestId("admin-tab-bio")).toHaveCount(0);
+  await expect(page.getByTestId("admin-tab-projects")).toHaveCount(0);
+  await expect(page.getByTestId("admin-tab-skills")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Welcome Messages" })).toBeVisible();
   await expect(page.getByTestId("admin-personalization-panel")).toBeVisible();
+});
+
+test("project and skill tabs expose presentation controls without canonical editors", async ({ page }) => {
+  await setup(page);
+  await page.goto("/admin");
+
+  await page.getByTestId("admin-tab-project-presentation").click();
+  await expect(page.getByRole("heading", { name: "Project presentation" })).toBeVisible();
+  await expect(page.getByText("Create and edit canonical projects in Admin Dashboard.")).toBeVisible();
+
+  await page.getByTestId("admin-tab-skill-presentation").click();
+  await expect(page.getByRole("heading", { name: "Skill presentation" })).toBeVisible();
+  await expect(page.getByText("Create and rename canonical skills in Admin Dashboard.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /add all_skill/i })).toHaveCount(0);
 });
 
 test("admin personalization panel renders message cards from mock data", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
-  await page.getByTestId("admin-tab-personalization").click();
 
   await expect(page.getByText("Test Org Visit")).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Acme Corp Visit")).toBeVisible();
@@ -114,7 +135,6 @@ test("admin personalization panel renders message cards from mock data", async (
 test("clicking + New Message opens the create dialog", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
-  await page.getByTestId("admin-tab-personalization").click();
   await page.getByTestId("create-welcome-message").click();
 
   await expect(page.getByTestId("welcome-label-input")).toBeVisible();
@@ -125,7 +145,6 @@ test("clicking + New Message opens the create dialog", async ({ page }) => {
 test("save button is disabled when form fields are empty", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
-  await page.getByTestId("admin-tab-personalization").click();
   await page.getByTestId("create-welcome-message").click();
 
   const saveBtn = page.getByTestId("save-welcome-message");
@@ -136,7 +155,6 @@ test("copy URL button copies the welcome URL to clipboard", async ({ page, conte
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await setup(page);
   await page.goto("/admin");
-  await page.getByTestId("admin-tab-personalization").click();
 
   // Click the copy URL link for the first message card
   const copyBtn = page.getByText("copy URL").first();

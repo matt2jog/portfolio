@@ -3,26 +3,34 @@
  *
  * Idempotent: the unique(doc_type, content_hash) constraint means re-runs on
  * unchanged content insert nothing. Intended to be called from a GitHub
- * Actions workflow that triggers on push to the main branch when legal/**.md
- * changes. Failing the workflow blocks future merges (the workflow is
- * a required status check on the main branch).
+ * Actions workflow that triggers on a protected-main push when legal/**.md
+ * changes. The workflow never rewrites or pushes legal source.
  *
- * Connects as the dedicated `legal_audit_writer` Postgres role, which has
- * INSERT-only privilege on legal_document_versions. The connection is built
- * by swapping the credentials of the existing DATABASE_URL with that role's
- * username/password — so we only need one extra secret in CI.
+ * Connects through the dedicated legal-audit login and SET ROLE
+ * `legal_audit_writer`,
+ * which has INSERT-only privilege on legal_document_versions.
  *
  * Env required:
- *   DATABASE_URL                   — full Postgres URL; host/port/db are reused
- *   LEGAL_AUDIT_WRITE_ROLE_PASSWORD — password for the legal_audit_writer role
- *   GITHUB_SHA                     — commit sha (set by GitHub Actions)
- *   GIT_COMMITTED_AT               — ISO-8601 commit timestamp (workflow computes)
+ *   LEGAL_AUDIT_DATABASE_URL       - scoped legal_audit_writer Postgres URL
+ *   SUPABASE_CA_CERT               - CA used for verified Supabase TLS
+ *   SUPABASE_PROJECT_REF           - exact Supabase project reference
+ *   GITHUB_SHA                     - commit sha (set by GitHub Actions)
+ *   GIT_COMMITTED_AT               - ISO-8601 commit timestamp (workflow computes)
  */
 
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Client } from "pg";
+import {
+  postgresConnectionConfig,
+  productionSupabaseConnectionConfig,
+} from "../../shared/postgres-tls";
+import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
+import {
+  assertProductionMutationAllowed,
+  LEGAL_AUDIT_WORKFLOW_REF,
+} from "../production-execution-guard";
 
 const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "privacy", filename: "PRIVACY_POLICY.md" },
@@ -30,7 +38,6 @@ const DOCS: Array<{ docType: string; filename: string }> = [
   { docType: "tracking", filename: "TRACKING_NOTICE_AND_CONSENT.md" },
 ];
 
-const WRITER_ROLE = "legal_audit_writer";
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1_000;
 
@@ -50,21 +57,11 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildWriterConnectionString(): string {
-  const base = required("DATABASE_URL");
-  const password = required("LEGAL_AUDIT_WRITE_ROLE_PASSWORD");
-  const url = new URL(base);
-  // Supavisor pooler hosts (`*.pooler.supabase.com`) require the tenant
-  // identifier baked into the username as `<role>.<project_ref>`. The
-  // original username is `postgres.<project_ref>`, so preserve that suffix
-  // when swapping in the writer role. Direct-connection hosts don't use
-  // this convention, so only apply it when the username actually has a dot.
-  const originalUser = decodeURIComponent(url.username);
-  const dotIndex = originalUser.indexOf(".");
-  const tenantSuffix = dotIndex >= 0 ? originalUser.slice(dotIndex) : "";
-  url.username = `${WRITER_ROLE}${tenantSuffix}`;
-  url.password = encodeURIComponent(password);
-  return url.toString();
+function legalAuditDatabaseUrl(): string {
+  const scopedUrl = process.env.LEGAL_AUDIT_DATABASE_URL;
+  if (scopedUrl) return scopedUrl;
+  if (process.env.NODE_ENV !== "production") return required("DATABASE_URL");
+  throw new Error("Missing required env var: LEGAL_AUDIT_DATABASE_URL");
 }
 
 async function insertWithRetry(
@@ -80,10 +77,30 @@ async function insertWithRetry(
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL TIME ZONE 'UTC'");
       await client.query(
-        `INSERT INTO legal_document_versions
+        `SELECT
+           set_config('portfolio_audit.request_id', $1, true),
+           set_config('portfolio_audit.trace_id', $1, true),
+           set_config('portfolio_audit.actor_kind', 'service', true),
+           set_config('portfolio_audit.actor_id', $2, true),
+           set_config('portfolio_audit.operation', 'legal-version-record', true),
+           set_config('portfolio_audit.correlation_id', $3, true),
+           set_config('portfolio_audit.causation_id', $3, true),
+           set_config('portfolio_audit.release_id', $3, true),
+           set_config('portfolio_audit.authentication_assertion_digest', '', true)`,
+        [
+          `legal:${row.commit_sha}:${row.doc_type}`,
+          LEGAL_AUDIT_WORKFLOW_REF,
+          row.commit_sha,
+        ],
+      );
+      const result = await client.query(
+        `INSERT INTO portfolio.legal_document_versions
            (doc_type, content, content_hash, commit_sha, committed_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (doc_type, content_hash) DO NOTHING`,
         [
           row.doc_type,
           row.content,
@@ -92,13 +109,10 @@ async function insertWithRetry(
           row.committed_at,
         ],
       );
-      return "inserted";
+      await client.query("COMMIT");
+      return result.rowCount === 0 ? "duplicate" : "inserted";
     } catch (err) {
-      // 23505 = unique_violation. Expected when content matches the prior
-      // recorded version for this doc_type.
-      if ((err as { code?: string }).code === "23505") {
-        return "duplicate";
-      }
+      await client.query("ROLLBACK").catch(() => undefined);
       lastErr = err;
       const delay = BASE_DELAY_MS * 2 ** (attempt - 1);
       console.error(
@@ -118,17 +132,39 @@ async function insertWithRetry(
 }
 
 async function main() {
+  assertProductionMutationAllowed(process.env, "Legal audit recording", [
+    LEGAL_AUDIT_WORKFLOW_REF,
+  ]);
   const commitSha = required("GITHUB_SHA");
   const committedAt = required("GIT_COMMITTED_AT");
-  const connectionString = buildWriterConnectionString();
+  const connectionString = legalAuditDatabaseUrl();
 
-  const sslRequired = connectionString.includes("supabase.com");
   const client = new Client({
-    connectionString,
-    ssl: sslRequired ? { rejectUnauthorized: false } : undefined,
+    ...(process.env.NODE_ENV === "production"
+      ? productionSupabaseConnectionConfig({
+          databaseUrl: connectionString,
+          projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+          supabaseCaCert: process.env.SUPABASE_CA_CERT,
+          expectedCaSha256: process.env.SUPABASE_CA_SHA256,
+          expectedRole: "portfolio_legal_login",
+          capabilityRole: "legal_audit_writer",
+          searchPath: "portfolio, extensions",
+        })
+      : postgresConnectionConfig(
+          connectionString,
+          process.env.SUPABASE_CA_CERT,
+          "portfolio, extensions",
+        )),
   });
 
   await client.connect();
+  if (process.env.NODE_ENV === "production") {
+    await assertUnprivilegedDatabaseSession(
+      client,
+      "legal_audit_writer",
+      "Portfolio legal audit",
+    );
+  }
 
   const legalDir = path.resolve(process.cwd(), "legal");
   let inserted = 0;

@@ -18,7 +18,7 @@ export interface AgentConfig {
   provider: LLMProvider;
   /** Model ID passed to the provider on every completion call */
   modelId: string;
-  /** System prompt — injected as first message */
+  /** System prompt - injected as first message */
   systemPrompt: string;
   /** Tools the agent can invoke */
   tools?: Tool[];
@@ -90,13 +90,13 @@ export class Agent {
   ): Promise<ChatMessage[]> {
     const seed: ChatMessage[] = [];
     for (const call of calls) {
-      const fakeId = `prime_${call.name}_${Date.now()}`;
+      const syntheticToolCallId = `prime_${call.name}_${Date.now()}`;
       const result = await this.executeTool({
-        id: fakeId,
+        id: syntheticToolCallId,
         type: "function",
         function: { name: call.name, arguments: JSON.stringify(call.args) },
       }, parentRun);
-      // Skip failed tool calls — injecting error results causes the model to
+      // Skip failed tool calls - injecting error results causes the model to
       // hallucinate when the system prompt implies the data was loaded.
       try {
         const parsed = JSON.parse(result);
@@ -105,9 +105,9 @@ export class Agent {
       seed.push({
         role: "assistant",
         content: null,
-        tool_calls: [{ id: fakeId, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } }],
+        tool_calls: [{ id: syntheticToolCallId, type: "function", function: { name: call.name, arguments: JSON.stringify(call.args) } }],
       });
-      seed.push({ role: "tool", content: result, tool_call_id: fakeId });
+      seed.push({ role: "tool", content: result, tool_call_id: syntheticToolCallId });
     }
     return seed;
   }
@@ -323,7 +323,7 @@ export class Agent {
       return JSON.stringify({ error: "Invalid tool arguments JSON" });
     }
 
-    // Name is just the tool name — no model prefix needed
+    // Name is just the tool name - no model prefix needed
     const toolRun = createRun({
       name: call.function.name,
       runType: "tool",

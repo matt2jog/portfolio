@@ -1,213 +1,71 @@
-# CI setup
+# Portfolio GitHub delivery
 
-One-time configuration for the GitHub Actions workflows in
-`.github/workflows/`. After this, every PR runs lint + typecheck + tests,
-and every push to `prod` rewrites legal-doc dates and records an audit row
-in Supabase.
+Portfolio delivery is owned by GitHub Actions in `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\.github\workflows`. Cloud Build and `gcloud builds submit` are prohibited.
 
-## Workflows in this repo
+## Workflows
 
-| Workflow | Triggers | What it needs |
-|---|---|---|
-| `ui-test.yml` | PR + push to `main`/`prod` | Nothing extra — pure code-only checks |
-| `ui-artifacts.yml` | PR + push to `main`/`prod` | Nothing extra — uploads screenshots as an artifact |
-| `backend-unit.yml` | PR + push to `main`/`prod` | `DATABASE_URL` (and `SUPABASE_CA_CERT` if Supabase) |
-| `legal-audit.yml` | Push to `prod` touching `legal/**.md` | `DATABASE_URL`, `LEGAL_AUDIT_WRITE_ROLE_PASSWORD`, repo **Contents: Read & write** for `GITHUB_TOKEN` |
+- `ci.yml` runs only for `pull_request` targeting `main` (plus manual dispatch). It has `contents: read`, receives no repository secrets, and is safe for public forks. It installs dependencies, lints, type-checks, enforces 70% lines/branches/functions/statements, migrates ephemeral pgvector/Postgres, runs backend integration and Playwright UI tests, builds the app and production image, then scans that exact image with Trivy. Critical vulnerabilities and any detected secret block; High vulnerabilities and image misconfiguration are reported.
+- `deploy.yml` runs on `main` pushes (plus manual dispatch from `main`). It relies on required PR CI for disposable Postgres migration/integration coverage and does not start localhost Postgres or export a local `DATABASE_URL`. The immutable merge-SHA image carries OCI source/revision labels and is pulled back by digest so provenance is proved before use. The exact-SHA reusable legal audit and finalized cutover-evidence gates both succeed before the first database mutation. Only then does the workflow run the migration bundle and release the digest from `us-east4-docker.pkg.dev/personal-brand-501801/portfolio`.
+- `legal-audit.yml` uses its exact-workflow-bound identity and reads only `portfolio-legal-audit-bundle-prod`. It binds the selected Supabase CA to its configured SHA-256 fingerprint, records the checked-in legal Markdown without rewriting or pushing to the protected branch, and receives the immutable workflow SHA explicitly.
+- `data-migration.yml` is manual and uses the separately bound `portfolio-data-migration-main` identity. Finalization fetches a compact RS256 JWS directly from Admin with Google OIDC; Portfolio verifies Admin's JWKS signature and exact release SHA, image digest, migration-ledger digest, snapshot/checkpoint, and reviewed 23-table ownership-manifest digest before copying any row. Operator-supplied cutover JSON is not accepted.
+- `release-cleanup.yml` is manual, legal-gated, and uses two successful release records. It removes only rollback state that is at least 48 hours old, has a distinct later successful release, and is no longer serving or tagged.
 
-## 1. Repository secrets
+All third-party actions are pinned to reviewed full commit SHAs.
 
-GitHub → repo → **Settings → Secrets and variables → Actions → New
-repository secret**. Add each of the following. Names must match exactly.
+## Release path
 
-### For `backend-unit.yml`
-- **`DATABASE_URL`** — Postgres connection string for the read-only test
-  user. Example: `postgres://test_ro:<pwd>@<host>:5432/postgres?sslmode=require`
-- **`SUPABASE_CA_CERT`** *(optional)* — the Supabase root CA, with literal
-  `\n` in place of newlines so it fits in a single-line secret. Only
-  required if your DB rejects connections without verified TLS.
+The deploy workflow requires exact positive-integer versions in repository variables `PORTFOLIO_RUNTIME_BUNDLE_VERSION` and `PORTFOLIO_DEPLOYMENT_BUNDLE_VERSION`. The legal workflow independently requires `PORTFOLIO_LEGAL_AUDIT_BUNDLE_VERSION`; data migration requires `PORTFOLIO_DATA_MIGRATION_BUNDLE_VERSION` and a reviewed current-SHA image digest. Each workflow validates its selected payload before performing work. Every access writes a mode-0600 temporary file; the consuming parser reads and deletes it before spawning the migration, preflight, release, cleanup, or legal process, with an always-run cleanup as crash recovery. Production never fetches Infisical directly.
 
-### For `legal-audit.yml`
-- **`DATABASE_URL`** — reused from above. The recorder parses out the
-  host/port/db and swaps in the writer role's credentials, so we don't
-  need a second URL.
-- **`LEGAL_AUDIT_WRITE_ROLE_PASSWORD`** — password for the
-  `legal_audit_writer` Postgres role (see §3). The role has
-  `INSERT`-only privilege on `legal_document_versions` and **no** SELECT,
-  so a leaked password cannot read past versions or touch any other
-  table. Rotate with `ALTER ROLE legal_audit_writer PASSWORD '...';`.
+`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\.github\scripts\deploy-cloud-run.sh`:
 
-> **Anon key is intentionally not used.** Supabase anon JWTs are designed
-> to be public (they ship in client apps), so they're a weak boundary even
-> behind RLS. A dedicated DB role with one verb on one table is a real
-> least-privilege credential and can be revoked instantly with
-> `DROP ROLE legal_audit_writer` without touching anything else.
+1. Captures the complete Cloud Run traffic/tag state, IAM policy, current and previous origin-token fingerprints, active edge version, and exact route IDs/owners before changing state.
+2. Verifies the current custom domains and raw Cloud Run service URL with the deployment-bundle origin credential.
+3. Tags the current 100% revision as `rollback`, then deploys the digest-pinned candidate with zero traffic and a candidate tag.
+4. Verifies the candidate accepts only the exact edge credential and returns HTTP 401 without it.
+5. Promotes the candidate while it accepts both the current and immediately previous edge credential, then verifies the existing Worker still reaches it.
+6. Snapshots the exact current owners of `2jog.dev/*` and `www.2jog.dev/*`, rotates `portfolio-edge` to the current credential, and smokes custom, both raw Cloud Run aliases, and candidate URLs for at least 600 seconds.
+7. Automatically rolls back only when the candidate still owns 100% traffic, its recorded image digest matches the release digest, and the previous tagged revision independently passes its authenticated smoke check. The previous Worker version and exact route owners are restored first while the candidate still accepts them; Cloud Run then restores the complete prior traffic/tag and IAM snapshots with concurrency checks.
 
-## 2. Workflow permissions
+The prior revision, Worker version, route-owner snapshot, IAM/traffic state, and previous origin token remain retained through a distinct later successful release and for at least 48 hours. The non-secret rollback state is uploaded for 30 days. The cleanup workflow revalidates that the prior revision/version is neither serving nor tagged before deleting only that retained state. On the first split from `resume-vcs-cloud-proxy`, rollback restores that Worker's two Portfolio routes; later releases use the retained Portfolio Worker version. Do not delete `resume-vcs-cloud-proxy` until the Portfolio and Resume grace gates both pass.
 
-GitHub → repo → **Settings → Actions → General → Workflow permissions**:
+Migration `0016_database_audit_compensation.sql` is additive against deployed baseline `37abdbd7a15f`: missing legacy audit context is labeled `pre-audit-37abdbd7a15f` during compatibility. The first successful audited release starts the grace clock; strict context enforcement contracts only after 48 hours and a distinct later successful release.
 
-- Select **Read and write permissions** (or keep the default and rely on
-  the per-workflow `permissions:` block — `legal-audit.yml` declares
-  `contents: write` already).
-- Tick **Allow GitHub Actions to create and approve pull requests** only
-  if you intend to use it elsewhere; the legal audit only pushes commits.
+## Required infrastructure
 
-The `legal-audit` workflow uses the built-in `GITHUB_TOKEN` for its
-push-back commit (committed as `github-actions[bot]`). No PAT needed.
+- Workload Identity provider: `projects/601853536613/locations/global/workloadIdentityPools/personal-brand-github/providers/portfolio-main`.
+- Deployment identity: `portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com`, bound with GitHub's direct-workflow `workflow_ref` claim only to numeric GitHub repository ID `1145321973`, `refs/heads/main`, and `matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main`.
+- Legal-audit identity: `portfolio-legal-audit@personal-brand-501801.iam.gserviceaccount.com`, bound directly through `portfolio-legal-audit-main` or through one exact reusable-caller provider: `portfolio-legal-reusable-main` for deploy, `portfolio-legal-data-migration-main` for data migration, and `portfolio-legal-release-cleanup-main` for cleanup. Every reusable provider binds both its caller `workflow_ref` and the legal workflow `job_workflow_ref`; the identity can read only `portfolio-legal-audit-bundle-prod`.
+- Data-migration identity: `portfolio-data-migration@personal-brand-501801.iam.gserviceaccount.com`, bound only to `matt2jog/portfolio/.github/workflows/data-migration.yml@refs/heads/main`. Repository variables pin Admin's cutover URL and Cloud Run OIDC audience; Admin must grant this identity invocation of the evidence endpoint.
+- Release-cleanup identity: `portfolio-release-cleanup@personal-brand-501801.iam.gserviceaccount.com`, bound through `portfolio-release-cleanup-main` only to `matt2jog/portfolio/.github/workflows/release-cleanup.yml@refs/heads/main`. It can read the deployment bundle and remove only the retained Cloud Run, Cloudflare, origin-token, and GitHub artifact state validated by the cleanup workflow.
+- Runtime identity: `portfolio-runtime@personal-brand-501801.iam.gserviceaccount.com`.
+- Artifact Registry repository: `us-east4-docker.pkg.dev/personal-brand-501801/portfolio`.
+- Secret Manager bundles: exact repository-variable-selected versions of `portfolio-runtime-bundle-prod`, `portfolio-deployment-bundle-prod`, `portfolio-legal-audit-bundle-prod`, and `portfolio-data-migration-bundle-prod`, synchronized from Infisical by the root workspace workflow. Their database sources are separately scoped; every database boundary carries `PORTFOLIO_SUPABASE_PROJECT_REF`, the verified Supabase CA, and its exact SHA-256 fingerprint. Runtime and deployment contain the same generated `EDGE_ORIGIN_TOKEN`; during rotation both may also contain the immediately previous token until cleanup passes. The deployment Cloudflare output is sourced only from `PORTFOLIO_CLOUDFLARE_API_TOKEN`. No human edits any copy in GCP or Cloudflare.
+- Database-role prerequisite: direct logins are privilege-free and `SET ROLE` into NOLOGIN capabilities after the physical session is verified. After `RESET ROLE`, startup and post-migration reconciliation inspect direct-login, cross-schema, `PUBLIC`, table, sequence, column, type, `ALL ROUTINES`, owner, default-privilege, and inherited-role access. `legal_audit_writer` remains INSERT-only on `legal_document_versions`; the migration capability alone owns Portfolio DDL.
+- Runtime scope excludes dormant Google OAuth/Kafka values and the paid Apify token. Stored LinkedIn rows remain readable, but provider synchronization is disabled in production until its cost and schema are explicitly re-approved.
+- Cloud Run: `portfolio--prod` in `us-east4`, request-based CPU, minimum zero, maximum one, one CPU, 512 MiB.
+- Cloudflare DNS: proxied records for both `2jog.dev` and `www.2jog.dev` must exist before release. The deployment identity needs only the scoped Worker script, route, and secret permissions used by the release scripts; DNS changes are a separate reviewed operation.
 
-## 3. Supabase setup
+No GitHub repository secret is required by pull-request CI. Do not add a fallback JSON service-account key, broad Workload Identity provider, shared deployment identity, or `latest` runtime secret reference.
 
-### a. Apply the migration
+## Branch protection
 
-Open Supabase → **SQL Editor** → paste the contents of
-`src/migrations/0005_legal_document_versions.sql` and run.
+Protect `main`, require linear history and the `CI / verify` check, disallow direct pushes, and keep required reviewer count at zero. PR #87 targets `main` and must remain there for this CI path to run.
 
-That creates the `legal_document_versions` table, the
-`legal_document_active_ranges` view, the unique-hash + `doc_type` CHECK
-constraints, and enables RLS.
+## Local verification
 
-### b. Create the dedicated writer role
+From `C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio` run:
 
-```sql
-CREATE ROLE legal_audit_writer LOGIN PASSWORD '<strong-random>' NOINHERIT;
-GRANT USAGE ON SCHEMA public TO legal_audit_writer;
-GRANT INSERT ON legal_document_versions TO legal_audit_writer;
-
-DROP POLICY IF EXISTS legal_document_versions_anon_insert ON legal_document_versions;
-CREATE POLICY legal_audit_writer_insert
-  ON legal_document_versions
-  FOR INSERT
-  TO legal_audit_writer
-  WITH CHECK (true);
+```powershell
+npm ci
+npm run lint
+npm run check
+npm run build
+npm run test:backend-unit
+npm run test:coverage
+npm run test:client-coverage
+npm --prefix infra/cloudflare/portfolio-edge run test:coverage
+npm --prefix infra/cloudflare/portfolio-edge run check
+docker build --tag portfolio-local:verify .
 ```
 
-Stash the password in your password manager and as the
-`LEGAL_AUDIT_WRITE_ROLE_PASSWORD` GitHub secret. **This has been done
-for this project — skip if already in place.**
-
-### c. Verify the role has nothing else
-
-```sql
-SELECT table_name, privilege_type
-FROM information_schema.role_table_grants
-WHERE grantee = 'legal_audit_writer';
-```
-
-Should return exactly one row: `legal_document_versions / INSERT`. If you
-see SELECT/UPDATE/DELETE or any other table, revoke them.
-
-### d. Optional: a separate read-only role for `backend-unit.yml`
-
-If you don't want CI tests pointed at your prod DB, provision another
-Postgres user with `CONNECT` + `USAGE` + `SELECT` on the public schema
-only, and use its connection string for the `DATABASE_URL` secret.
-
-## 4. Branch protection rules
-
-GitHub → repo → **Settings → Branches → Branch protection rules**.
-
-### `prod` (production branch)
-Create / edit the rule for `prod` and tick:
-- **Require a pull request before merging**
-- **Require status checks to pass before merging**, and select:
-  - `UI Test / ui-test`
-  - `UI Artifacts / artifacts`
-  - `Backend Unit / backend-unit`
-  - `Legal Audit / audit` — **critical for legal compliance**. If
-    Supabase is down, this fails and blocks merges. That's intentional.
-- **Require branches to be up to date before merging**
-- **Restrict who can push to matching branches** — limit to repo admins
-- **Do not allow bypassing the above settings**
-- Leave **Allow force pushes** disabled
-
-The `github-actions[bot]` commit on `prod` (legal date update with
-`[skip ci]`) is a direct push from the workflow's `GITHUB_TOKEN`; branch
-protection allows it as long as bypass isn't explicitly blocked for
-Actions.
-
-### `main` (working branch, if you use one)
-Same as `prod` minus the Legal Audit check (since `legal-audit.yml` only
-runs on `prod` pushes).
-
-## 5. Required env vars in `.env` for local parity
-
-The workflows read everything from secrets. To run the equivalent locally:
-
-```
-# backend-unit (npm run test:backend-unit)
-DATABASE_URL=postgres://...
-
-# legal-audit (npm run legal:record — rarely needed locally)
-DATABASE_URL=postgres://...                  # same as above
-LEGAL_AUDIT_WRITE_ROLE_PASSWORD=...          # already in .env
-GITHUB_SHA=$(git rev-parse HEAD)
-GIT_COMMITTED_AT=$(git show -s --format=%cI HEAD)
-```
-
-`record-versions.ts` builds the writer connection string by reusing the
-host/port/db from `DATABASE_URL` and swapping in `legal_audit_writer` +
-the password. `GITHUB_SHA` and `GIT_COMMITTED_AT` are set automatically
-by the workflow; a local run needs them on the command line.
-
-## 6. Artifact storage
-
-`ui-artifacts.yml` uploads `src/tests/ui-artifacts/{desktop,mobile}/` to a
-build artifact named **`ui-artifacts`**. Defaults:
-
-- **Retention**: 90 days (GitHub default; change in repo Settings →
-  Actions → General → Artifact and log retention)
-- **Size limit**: 500 MB per artifact (GitHub default)
-- **Access**: anyone with read access to the repo, via the workflow run's
-  Summary page
-
-If you want longer retention or off-GitHub storage, swap the
-`actions/upload-artifact@v4` step for a push to S3/GCS — but for visual
-review during PR triage, the built-in artifact is plenty.
-
-The audit log itself lives in Supabase, not in GitHub artifacts.
-
-## 7. First-time sanity check
-
-Once secrets and protections are in place:
-
-1. Open a throwaway PR that touches `legal/PRIVACY_POLICY.md` (e.g.,
-   change a punctuation mark).
-2. Confirm `UI Test`, `UI Artifacts`, and `Backend Unit` checks pass on
-   the PR.
-3. Merge to `prod`.
-4. Watch `Legal Audit` run: it should rewrite the dates, push a follow-up
-   `chore(legal): update Last Updated / Effective Date [skip ci]` commit,
-   then insert one row into `legal_document_versions`.
-5. In Supabase SQL Editor (using your normal owner/service-role
-   connection — not the writer role, which has no SELECT):
-   ```sql
-   SELECT doc_type, committed_at, left(content_hash, 12) AS hash
-   FROM legal_document_versions
-   ORDER BY recorded_at DESC LIMIT 5;
-   ```
-   You should see one new row for `privacy`. The other docs weren't
-   touched, so even if the recorder tried, the unique-hash constraint
-   would make them no-ops — and the workflow only sed-rewrites changed
-   files anyway.
-
-## 8. If `legal-audit` keeps failing
-
-- **`28P01` / authentication failed**: wrong
-  `LEGAL_AUDIT_WRITE_ROLE_PASSWORD`. Rotate with
-  `ALTER ROLE legal_audit_writer PASSWORD '...'` and update the secret.
-- **`42501` / permission denied for table legal_document_versions**:
-  GRANT or POLICY missing. Re-run §3b.
-- **`23505` / duplicate key value violates unique constraint**: not a
-  failure — duplicate hash means the content is unchanged from the last
-  recorded version. The recorder logs this as `unchanged` and exits 0.
-- **`ENOTFOUND` / host unreachable**: `DATABASE_URL` host is wrong, or
-  the network blocks egress from GitHub runners. Supabase pooler hosts
-  are usually `<project>.pooler.supabase.com` — make sure you're using
-  the direct-connection host, not the pooler, since the writer role logs
-  in directly.
-- **Push step fails with 403**: workflow `contents: write` permission
-  isn't granted. Check §2.
-- **Loop: the bot's commit re-triggers the workflow**: the `if:` guard
-  on the `audit` job checks `github.event.head_commit.author.name !=
-  'github-actions[bot]'`. If you fork the workflow and change the bot
-  identity, update that condition.
+Backend integration tests require an isolated pgvector/Postgres database through `TEST_DATABASE_URL`; never point them at production. CI provisions its own disposable database and applies `npm run db:migrate` before the integration suite.

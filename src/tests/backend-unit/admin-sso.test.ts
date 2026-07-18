@@ -8,9 +8,26 @@ process.env.ADMIN_IDENTITY_ISSUER = "https://admin.2jog.dev";
 process.env.ADMIN_IDENTITY_AUDIENCE = "2jog-services";
 process.env.ADMIN_IDENTITY_JWKS_URL = "https://admin.2jog.dev/.well-known/jwks.json";
 process.env.PUBLIC_BASE_URL = "https://2jog.dev";
-process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
+const testDatabaseUrl = new URL("postgresql://localhost:5432/test");
+testDatabaseUrl.username = "test";
+testDatabaseUrl.password = "test";
+process.env.DATABASE_URL ||= testDatabaseUrl.toString();
 
-const { buildAdminLoginUrl, normalizePortfolioReturn, verifyAdminIdentity } = await import("../../backend/auth");
+const {
+  buildAdminLoginUrl,
+  normalizePortfolioReturn,
+  selectSingleAdminIdentityMatch,
+  verifyAdminIdentity,
+} = await import("../../backend/auth");
+
+test("local Admin identity reconciliation rejects duplicate subject/email rows", () => {
+  assert.throws(
+    () => selectSingleAdminIdentityMatch([{ id: "subject-row" }, { id: "email-row" }]),
+    /conflicting rows/i,
+  );
+  assert.equal(selectSingleAdminIdentityMatch([{ id: "single-row" }])?.id, "single-row");
+  assert.equal(selectSingleAdminIdentityMatch([]), undefined);
+});
 
 test("legacy Admin return targets preserve an exact local path and query", () => {
   assert.equal(
@@ -54,4 +71,20 @@ test("shared Admin identity pins RS256 issuer audience and required claims", asy
     .setExpirationTime(now + 900)
     .sign(privateKey);
   await assert.rejects(() => verifyAdminIdentity(wrongAudience, keys));
+});
+
+test("shared Admin identity rejects HS256 even when a legacy symmetric key is supplied", async () => {
+  const secret = new TextEncoder().encode(["legacy", "symmetric", "key", "rejected"].join("-"));
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({ email: "matthewtujague@gmail.com", role: "admin" })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: "legacy-hs256" })
+    .setIssuer("https://admin.2jog.dev")
+    .setAudience("2jog-services")
+    .setSubject("google-sub")
+    .setJti("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 900)
+    .sign(secret);
+
+  await assert.rejects(() => verifyAdminIdentity(token, async () => secret));
 });

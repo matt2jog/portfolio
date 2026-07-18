@@ -1,0 +1,96 @@
+# Root workflow-template/WIF handoff only. Live provider and IAM are provisioned
+# by the parent repository; this service workflow intentionally fails closed.
+name: One-Time Database Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_release_run_id:
+        description: Successful release-image workflow run for this exact main SHA
+        required: true
+        type: string
+      confirmation:
+        description: Enter BOOTSTRAP_PORTFOLIO_DATABASE
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+concurrency:
+  group: portfolio-database-bootstrap
+  cancel-in-progress: false
+
+env:
+  NODE_ENV: production
+  GCP_PROJECT_ID: personal-brand-501801
+  DATABASE_BOOTSTRAP_SECRET_NAME: portfolio-database-bootstrap-bundle-prod
+  DATABASE_BOOTSTRAP_BUNDLE_VERSION: ${{ vars.PORTFOLIO_DATABASE_BOOTSTRAP_BUNDLE_VERSION }}
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/personal-brand-github/providers/portfolio-database-bootstrap-main
+  DATABASE_BOOTSTRAP_SERVICE_ACCOUNT: portfolio-database-bootstrap@personal-brand-501801.iam.gserviceaccount.com
+  DATABASE_BOOTSTRAP_WORKFLOW_REF: matt2jog/portfolio/.github/workflows/database-bootstrap.yml@refs/heads/main
+  GITHUB_WORKFLOW_SHA: ${{ github.sha }}
+
+jobs:
+  bootstrap:
+    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Check out exact main commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked tooling
+        run: npm ci --include=dev
+      - name: Fail closed unless the one-time request is exact
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          IMAGE_RELEASE_RUN_ID: ${{ inputs.image_release_run_id }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "BOOTSTRAP_PORTFOLIO_DATABASE"
+          [[ "$IMAGE_RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$DATABASE_BOOTSTRAP_BUNDLE_VERSION" =~ ^[1-9][0-9]*$ ]]
+      - name: Authenticate exact bootstrap-only WIF identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DATABASE_BOOTSTRAP_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+      - name: Consume the exact approved image handoff
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_RELEASE_RUN_ID: ${{ inputs.image_release_run_id }}
+        run: |
+          set -euo pipefail
+          record_file="${RUNNER_TEMP}/portfolio-release-image.json"
+          image_uri="$(bash .github/scripts/fetch-release-image.sh "$IMAGE_RELEASE_RUN_ID" "$GITHUB_SHA" "$record_file")"
+          gcloud auth configure-docker us-east4-docker.pkg.dev --quiet
+          docker pull "$image_uri"
+          npx tsx src/scripts/release/image-provenance.ts "$image_uri" "$GITHUB_SHA"
+          echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
+      - name: Create roles/schema, rotate all logins, migrate, and reconcile exact ACLs
+        env:
+          IMAGE_DIGEST_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          set -euo pipefail
+          bundle_file="${RUNNER_TEMP}/portfolio-database-bootstrap-bundle.json"
+          install -m 600 /dev/null "$bundle_file"
+          gcloud secrets versions access "$DATABASE_BOOTSTRAP_BUNDLE_VERSION" --secret "$DATABASE_BOOTSTRAP_SECRET_NAME" --project "$GCP_PROJECT_ID" > "$bundle_file"
+          npx tsx src/scripts/release/run-database-bootstrap-from-bundle.ts "$bundle_file" "$IMAGE_DIGEST_URI"
+      - name: Remove bootstrap material
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/portfolio-database-bootstrap-bundle.json" "${RUNNER_TEMP}/portfolio-release-image.json"

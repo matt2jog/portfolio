@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+export { registerClientCoverage } from "./client-coverage";
 import {
   adminFixtures,
   aiModelsFixture,
@@ -16,6 +17,37 @@ import {
 } from "./fixtures";
 
 type JsonValue = unknown;
+
+const richChatResponse =
+  "# Mocked 20B welcome response\n\n" +
+  "I can discuss **architecture**, _tradeoffs_, and `implementation details` for this project.<br>\n\n" +
+  "> The response is deterministic and provider-free.\n\n" +
+  "- API boundary\n- persistence contract\n- deployment flow\n\n" +
+  "1. Build\n2. Scan\n3. Deploy\n\n" +
+  "| Layer | Responsibility |\n| --- | --- |\n| Edge | Authentication |\n| Origin | Project data |\n\n" +
+  "```ts\nconst deployment = { scaleToZero: true };\n```\n\n" +
+  "```mermaid\ngraph TD\n  Edge[Edge] --> Origin[Origin]\n```\n\n" +
+  "```mermaid\nthis is not a valid diagram ???\n```\n\n" +
+  "---\n\n" +
+  "## References\n\n" +
+  "[Read the public portfolio](https://2jog.dev/portfolio).";
+
+const richChatStream =
+  "event: tool_call\n" +
+  `data: ${JSON.stringify({ name: "lookup_project", args: { projectId: "project-1" } })}\n\n` +
+  "event: tool_call\n" +
+  "data: not-json\n\n" +
+  "event: agent_phase\n" +
+  `data: ${JSON.stringify({ phase: "diagramming" })}\n\n` +
+  "event: evaluator\n" +
+  `data: ${JSON.stringify({ status: "reviewing" })}\n\n` +
+  "event: agent_phase\n" +
+  `data: ${JSON.stringify({ phase: "refining" })}\n\n` +
+  "event: message\n" +
+  `data: ${JSON.stringify({ choices: [{ delta: { content: "Streamed prefix." } }] })}\n\n` +
+  "event: assistant_message\n" +
+  `data: ${JSON.stringify({ content: richChatResponse })}\n\n` +
+  "data: [DONE]\n\n";
 
 function shouldMockDbBackedEndpoints() {
   return process.env.E2E_DATA_MODE !== "hybrid";
@@ -35,6 +67,7 @@ async function mockDbRoute(page: Page, url: string, body: JsonValue) {
 }
 
 export async function installMockApi(page: Page) {
+  await page.route("**/api/admin/**", (route) => fulfillJson(route, { ok: true }));
   await page.route("**/api/public/geoip", (route) =>
     fulfillJson(route, { ip: "127.0.0.1", country_code: "US" }),
   );
@@ -53,6 +86,7 @@ export async function installMockApi(page: Page) {
   await page.route("**/api/legal/tracking", (route) => fulfillJson(route, legalDocFixture));
 
   await mockDbRoute(page, "**/api/public/personal-information", personalInformationFixture);
+  await mockDbRoute(page, "**/api/public/bio", adminFixtures.bio);
   await mockDbRoute(page, "**/api/public/experiences", experienceFixture);
   await mockDbRoute(page, "**/api/skills-constellation", skillsConstellationFixture);
   await mockDbRoute(page, "**/api/public/skills", skillsConstellationFixture);
@@ -70,13 +104,7 @@ export async function installMockApi(page: Page) {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache",
       },
-      body:
-        `event: assistant_message\n` +
-        `data: ${JSON.stringify({
-          content:
-            "Mocked 20B welcome response. I can discuss architecture, tradeoffs, and implementation details for this project.",
-        })}\n\n` +
-        `data: [DONE]\n\n`,
+      body: richChatStream,
     }),
   );
 

@@ -154,12 +154,12 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
               {/* Name / Title */}
               <div className="text-center w-full z-10 flex flex-col items-center">
                 <h1 className="font-semibold text-white text-[24px] leading-none drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] uppercase whitespace-nowrap">
-                  {info?.name || "Matthew Tujague"}
+                  {info?.name || <span data-testid="personal-information-empty">Personal information is not configured.</span>}
                 </h1>
                 <h2 className="text-[#e2e2e2] font-sans tracking-[0.15em] text-[10px] uppercase font-light mt-4 mb-5 text-center leading-[1.6]">
-                  {info?.title || "Software Engineer"}
+                  {info?.title || "Title not configured"}
                   <br />
-                  <span className="text-[8px] text-[#00FFFF]/80">{info?.location || "NJ-NY-PA"}</span>
+                  <span className="text-[8px] text-[#00FFFF]/80">{info?.location || "Location not configured"}</span>
                 </h2>
 
                 {/* Divider */}
@@ -173,16 +173,20 @@ export default function BusinessCard({ isOpen = false }: BusinessCardProps) {
 
               {/* Contact Info — grid for perfect icon alignment */}
               <div className="z-10 w-full max-w-[220px] mx-auto">
-                <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 text-[11px] text-gray-300 items-center">
-                  <Phone size={14} className="text-[#00FFFF] opacity-70" />
-                  <a href={`tel:${info?.phone || "7326393889"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.phoneFormatted || "(732) 639-3889"}</a>
+                {info ? (
+                  <div className="grid grid-cols-[16px_1fr] gap-x-3 gap-y-4 text-[11px] text-gray-300 items-center">
+                    <Phone size={14} className="text-[#00FFFF] opacity-70" />
+                    <a href={`tel:${info.phone}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info.phoneFormatted}</a>
 
-                  <Mail size={14} className="text-[#00FFFF] opacity-70" />
-                  <a href={`mailto:${info?.email || "matthew@2jog.dev"}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.email || "matthew@2jog.dev"}</a>
+                    <Mail size={14} className="text-[#00FFFF] opacity-70" />
+                    <a href={`mailto:${info.email}`} onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info.email}</a>
 
-                  <Globe size={14} className="text-[#00FFFF] opacity-70" />
-                  <a href={info?.portfolioUrl || "https://2jog.dev"} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info?.portfolioUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') || "2jog.dev"}</a>
-                </div>
+                    <Globe size={14} className="text-[#00FFFF] opacity-70" />
+                    <a href={info.portfolioUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="tracking-widest hover:text-[#00FFFF] transition-colors">{info.portfolioUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a>
+                  </div>
+                ) : (
+                  <div className="text-center font-mono text-[10px] uppercase tracking-widest text-gray-500">Contact details are not configured.</div>
+                )}
               </div>
             </div>
           </div>

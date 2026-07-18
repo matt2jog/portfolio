@@ -17,7 +17,7 @@ import {
 } from "../../backend/consumers/career-projection";
 import { parseEnvelope } from "../../backend/consumers/career-events-types";
 
-// ── mock db ───────────────────────────────────────────────────────────────────
+// ---- recording adapter/double ------------------------------------------------
 //
 // Records every insert/update/delete call the projection logic makes so tests can
 // assert exactly which columns were written, without touching a real Postgres pool.
@@ -150,6 +150,36 @@ test("projectExperience: ExperienceDeleted deletes the row by id (no bullets tou
   assert.equal(calls[0].table, experiences);
 });
 
+test("projectExperience: missing optional fields map to stable projection defaults", async () => {
+  const { db, calls } = createMockDb();
+
+  await projectExperience(
+    db,
+    {
+      event_id: "e-defaults",
+      event_type: "ExperienceUpserted",
+      aggregate_id: "exp-defaults",
+      occurred_at: "2026-01-01T00:00:00Z",
+      actor: "human",
+      sequence: 1,
+      data: { id: "exp-defaults", role: "Engineer", company: "Acme" },
+    },
+    silentLogger(),
+  );
+
+  assert.deepEqual(calls[0].values, {
+    id: "exp-defaults",
+    role: "Engineer",
+    company: "Acme",
+    location: "Remote",
+    duration: "",
+    description: "",
+    technologies: [],
+    isActive: false,
+    position: 0,
+  });
+});
+
 test("projectExperience: tombstone (data: null without an explicit Deleted event_type) also deletes", async () => {
   const { db, calls } = createMockDb();
 
@@ -173,7 +203,7 @@ test("projectExperience: tombstone (data: null without an explicit Deleted event
 
 // ── project projection (+ bullets) ───────────────────────────────────────────
 
-test("projectProject: upsert writes content fields, a category placeholder only in values (never in the update set), and replaces bullets by id", async () => {
+test("projectProject: upsert writes content fields, a category sentinel only in values (never in the update set), and replaces bullets by id", async () => {
   const { db, calls } = createMockDb();
 
   await projectProject(
@@ -449,7 +479,7 @@ test("projectSkill: SkillConceptDeleted logs a warning only — no all_skills de
 
 // ── profile projection (no-op) ────────────────────────────────────────────────
 
-test("projectProfile: is a no-op that never throws (portfolio owns personal_information)", () => {
+test("projectProfile: legacy payload is a no-op pending Admin's generated projection schema", () => {
   const debugMessages: string[] = [];
   assert.doesNotThrow(() =>
     projectProfile(
@@ -489,7 +519,7 @@ test("parseEnvelope: parses a plain JSON envelope", () => {
   assert.equal(envelope!.aggregate_id, "exp-1");
 });
 
-test("parseEnvelope: strips a Confluent/Karapace magic-byte + schema-id prefix before parsing", () => {
+test("parseEnvelope: rejects obsolete schema-registry framing", () => {
   const json = JSON.stringify({
     event_id: "e2",
     event_type: "ProjectUpserted",
@@ -501,13 +531,12 @@ test("parseEnvelope: strips a Confluent/Karapace magic-byte + schema-id prefix b
   });
   const framed = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x00, 0x07]), Buffer.from(json)]);
 
-  const envelope = parseEnvelope(framed);
-  assert.ok(envelope);
-  assert.equal(envelope!.event_id, "e2");
+  assert.equal(parseEnvelope(framed), null);
 });
 
 test("parseEnvelope: returns null for a tombstone (null value)", () => {
   assert.equal(parseEnvelope(null), null);
+  assert.equal(parseEnvelope(Buffer.alloc(0)), null);
 });
 
 test("parseEnvelope: returns null for malformed JSON instead of throwing", () => {
@@ -518,4 +547,5 @@ test("parseEnvelope: returns null for malformed JSON instead of throwing", () =>
 test("parseEnvelope: returns null when required envelope fields are missing", () => {
   const raw = Buffer.from(JSON.stringify({ foo: "bar" }));
   assert.equal(parseEnvelope(raw), null);
+  assert.equal(parseEnvelope(Buffer.from("[]")), null);
 });
