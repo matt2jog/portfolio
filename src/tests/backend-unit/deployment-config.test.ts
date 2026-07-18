@@ -20,8 +20,8 @@ function validDeploymentBundle() {
       boundary: "deployment",
     },
     CLOUDFLARE_API_TOKEN: CLOUDFLARE_TOKEN,
-    DATABASE_ADMIN_URL: testSupabaseDatabaseUrl("postgres", { direct: true }),
     MIGRATION_DATABASE_URL: testSupabaseDatabaseUrl("portfolio_migrator_login", { direct: true }),
+    SOURCE_FENCE_DATABASE_URL: testSupabaseDatabaseUrl("portfolio_fence_login", { direct: true }),
     EDGE_ORIGIN_TOKEN: EDGE_TOKEN,
     EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN,
     SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
@@ -36,6 +36,10 @@ test("deployment bundle accepts only the typed Portfolio deployment boundary", (
   assert.equal(
     parsed.MIGRATION_DATABASE_URL,
     testSupabaseDatabaseUrl("portfolio_migrator_login", { direct: true }),
+  );
+  assert.equal(
+    parsed.SOURCE_FENCE_DATABASE_URL,
+    testSupabaseDatabaseUrl("portfolio_fence_login", { direct: true }),
   );
   assert.equal(parsed.EDGE_ORIGIN_TOKEN, EDGE_TOKEN);
   assert.equal(parsed.EDGE_ORIGIN_PREVIOUS_TOKEN, PREVIOUS_EDGE_TOKEN);

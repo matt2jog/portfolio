@@ -44,7 +44,11 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
       new RegExp(`FOR ROLE ${owner}[\\s\\S]*REVOKE USAGE ON TYPES FROM PUBLIC`),
     );
   }
-  assert.doesNotMatch(pre, /CREATE TABLE|CREATE FUNCTION|CREATE VIEW/);
+  assert.match(pre, /CREATE TABLE IF NOT EXISTS public\.portfolio_source_write_fence_control/);
+  assert.doesNotMatch(
+    pre,
+    /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\s+(?!IF\s+NOT\s+EXISTS\s+public\.portfolio_source_write_fence_control\b)/im,
+  );
   assert.match(pre, /CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator/);
   assert.match(pre, /SET timezone TO 'UTC'/i);
   assert.match(post, /pg_default_acl/);
@@ -66,21 +70,24 @@ test("production session verification proves login, SET ROLE, capability, and RE
   assert.match(session, /current_setting\('TimeZone'\)/);
 });
 
-test("deploy executes legal and cutover gates before bootstrap, migration, post-ACL, then candidate", () => {
+test("bootstrap owns administrator reconciliation while deploy gates the migrator-only release", () => {
   const workflow = read(".github/workflows/deploy.yml");
+  const bootstrap = read("src/scripts/release/run-database-bootstrap-from-bundle.ts");
   const databaseRelease = read("src/scripts/release/run-database-release-from-bundle.ts");
 
-  assert.match(databaseRelease, /portfolio-pre-migration\.sql/);
-  assert.match(databaseRelease, /run-migrations-from-bundle/);
-  assert.match(databaseRelease, /portfolio-role-acls\.sql/);
+  assert.match(bootstrap, /portfolio-pre-migration\.sql/);
+  assert.match(bootstrap, /runMigrationsFromBundle/);
+  assert.match(bootstrap, /portfolio-role-acls\.sql/);
   assert.ok(
-    databaseRelease.lastIndexOf("portfolio-pre-migration.sql")
-      < databaseRelease.indexOf("run-migrations-from-bundle"),
+    bootstrap.indexOf("await actions.executeAdministratorSql(\"portfolio-pre-migration.sql\"")
+      < bootstrap.indexOf("await actions.runMigrationsFromBundle"),
   );
   assert.ok(
-    databaseRelease.lastIndexOf("run-migrations-from-bundle")
-      < databaseRelease.lastIndexOf("portfolio-role-acls.sql"),
+    bootstrap.indexOf("await actions.runMigrationsFromBundle")
+      < bootstrap.indexOf("await actions.executeAdministratorSql(\"portfolio-role-acls.sql\""),
   );
+  assert.match(databaseRelease, /runMigrationsFromBundle/);
+  assert.doesNotMatch(databaseRelease, /portfolio-pre-migration\.sql|portfolio-role-acls\.sql/);
   assert.match(workflow, /prepare_release:/);
   assert.match(workflow, /prepare_release:[\s\S]+needs:\s*legal_audit/);
   assert.match(workflow, /release:[\s\S]+needs:\s*prepare_release/);
