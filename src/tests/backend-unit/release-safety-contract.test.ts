@@ -12,6 +12,7 @@ function read(relativePath: string): string {
 test("database bootstrap separates privilege-free logins from NOLOGIN capabilities", () => {
   const pre = read("infra/supabase/portfolio-pre-migration.sql");
   const post = read("infra/supabase/portfolio-role-acls.sql");
+  const legacyReader = read("infra/supabase/legacy-reader.sql");
 
   for (const login of [
     "portfolio_runtime_login",
@@ -54,6 +55,24 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
   assert.match(post, /pg_default_acl/);
   assert.match(post, /aclexplode/);
   assert.match(post, /PUBLIC/);
+
+  for (const reconciler of [pre, legacyReader]) {
+    assert.doesNotMatch(
+      reconciler,
+      /^\s*ALTER\s+ROLE\b(?:(?!;)[\s\S])*\b(?:SUPERUSER|NOSUPERUSER|BYPASSRLS|NOBYPASSRLS|CREATEDB|NOCREATEDB|CREATEROLE|NOCREATEROLE|REPLICATION|NOREPLICATION)\b/im,
+    );
+    assert.match(reconciler, /FROM pg_catalog\.pg_roles/);
+    assert.match(reconciler, /rolcanlogin/);
+    assert.match(reconciler, /rolinherit/);
+    assert.match(reconciler, /rolsuper/);
+    assert.match(reconciler, /rolbypassrls/);
+    assert.match(reconciler, /rolcreatedb/);
+    assert.match(reconciler, /rolcreaterole/);
+    assert.match(reconciler, /rolreplication/);
+    assert.match(reconciler, /prohibited role attributes/);
+    assert.match(reconciler, /cardinality\(alter_clauses\) > 0/);
+    assert.match(reconciler, /'ALTER ROLE %I %s'/);
+  }
 });
 
 test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {

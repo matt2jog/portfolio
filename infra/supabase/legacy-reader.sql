@@ -17,10 +17,86 @@ BEGIN
 END
 $$;
 
-ALTER ROLE portfolio_legacy_reader_login
-  LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_legacy_reader
-  NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
+DO $role_attributes$
+DECLARE
+  expected record;
+  actual record;
+  alter_clauses text[];
+BEGIN
+  FOR expected IN
+    SELECT role_name, can_login, inherits
+    FROM (VALUES
+      ('portfolio_legacy_reader_login', true, false),
+      ('portfolio_legacy_reader', false, false)
+    ) AS contract(role_name, can_login, inherits)
+  LOOP
+    SELECT
+      catalog_role.rolcanlogin,
+      catalog_role.rolinherit,
+      catalog_role.rolsuper,
+      catalog_role.rolbypassrls,
+      catalog_role.rolcreatedb,
+      catalog_role.rolcreaterole,
+      catalog_role.rolreplication
+    INTO actual
+    FROM pg_catalog.pg_roles catalog_role
+    WHERE catalog_role.rolname = expected.role_name;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Portfolio legacy reader role % is missing', expected.role_name;
+    END IF;
+    IF actual.rolsuper OR actual.rolbypassrls OR actual.rolcreatedb
+       OR actual.rolcreaterole OR actual.rolreplication THEN
+      RAISE EXCEPTION
+        'Portfolio legacy reader role % has prohibited role attributes; break-glass superuser repair is required before reconciliation',
+        expected.role_name
+        USING ERRCODE = '42501';
+    END IF;
+
+    alter_clauses := ARRAY[]::text[];
+    IF actual.rolcanlogin IS DISTINCT FROM expected.can_login THEN
+      alter_clauses := pg_catalog.array_append(
+        alter_clauses,
+        CASE WHEN expected.can_login THEN 'LOGIN' ELSE 'NOLOGIN' END
+      );
+    END IF;
+    IF actual.rolinherit IS DISTINCT FROM expected.inherits THEN
+      alter_clauses := pg_catalog.array_append(
+        alter_clauses,
+        CASE WHEN expected.inherits THEN 'INHERIT' ELSE 'NOINHERIT' END
+      );
+    END IF;
+    IF pg_catalog.cardinality(alter_clauses) > 0 THEN
+      EXECUTE pg_catalog.format(
+        'ALTER ROLE %I %s',
+        expected.role_name,
+        pg_catalog.array_to_string(alter_clauses, ' ')
+      );
+    END IF;
+
+    SELECT
+      catalog_role.rolcanlogin,
+      catalog_role.rolinherit,
+      catalog_role.rolsuper,
+      catalog_role.rolbypassrls,
+      catalog_role.rolcreatedb,
+      catalog_role.rolcreaterole,
+      catalog_role.rolreplication
+    INTO actual
+    FROM pg_catalog.pg_roles catalog_role
+    WHERE catalog_role.rolname = expected.role_name;
+    IF NOT FOUND
+       OR actual.rolcanlogin IS DISTINCT FROM expected.can_login
+       OR actual.rolinherit IS DISTINCT FROM expected.inherits
+       OR actual.rolsuper OR actual.rolbypassrls OR actual.rolcreatedb
+       OR actual.rolcreaterole OR actual.rolreplication THEN
+      RAISE EXCEPTION
+        'Portfolio legacy reader role % does not match its exact attribute contract',
+        expected.role_name;
+    END IF;
+  END LOOP;
+END
+$role_attributes$;
 
 DO $$
 DECLARE

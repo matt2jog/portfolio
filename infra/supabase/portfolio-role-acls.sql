@@ -633,19 +633,33 @@ DECLARE
 BEGIN
   IF EXISTS (
     SELECT 1
-    FROM pg_roles login
-    WHERE login.rolname IN (
-      'portfolio_runtime_login', 'portfolio_migrator_login',
-      'portfolio_legal_login', 'portfolio_legacy_reader_login',
-      'portfolio_fence_login'
-    )
-      AND (
-        NOT login.rolcanlogin OR login.rolinherit OR login.rolsuper
-        OR login.rolbypassrls OR login.rolcreatedb OR login.rolcreaterole
-        OR login.rolreplication
-      )
+    FROM (VALUES
+      ('portfolio_runtime_login', true, false),
+      ('portfolio_migrator_login', true, false),
+      ('portfolio_legal_login', true, false),
+      ('portfolio_legacy_reader_login', true, false),
+      ('portfolio_fence_login', true, false),
+      ('portfolio_runtime', false, false),
+      ('portfolio_migrator', false, false),
+      ('legal_audit_writer', false, false),
+      ('portfolio_audit_owner', false, false),
+      ('portfolio_compensation_operator', false, false),
+      ('portfolio_legacy_reader', false, false),
+      ('portfolio_fence_operator', false, false),
+      ('portfolio_fence_owner', false, false)
+    ) AS contract(role_name, can_login, inherits)
+    LEFT JOIN pg_roles managed_role
+      ON managed_role.rolname = contract.role_name
+    WHERE managed_role.oid IS NULL
+      OR managed_role.rolcanlogin IS DISTINCT FROM contract.can_login
+      OR managed_role.rolinherit IS DISTINCT FROM contract.inherits
+      OR managed_role.rolsuper
+      OR managed_role.rolbypassrls
+      OR managed_role.rolcreatedb
+      OR managed_role.rolcreaterole
+      OR managed_role.rolreplication
   ) THEN
-    RAISE EXCEPTION 'Portfolio LOGIN role attributes are not privilege-free';
+    RAISE EXCEPTION 'Portfolio managed role attributes are not exact and privilege-free';
   END IF;
 
   IF EXISTS (

@@ -65,32 +65,99 @@ BEGIN
 END
 $$;
 
-ALTER ROLE portfolio_runtime_login LOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_migrator_login LOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_legal_login LOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_legacy_reader_login LOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_fence_login LOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_runtime NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_migrator NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE legal_audit_writer NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_audit_owner NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_compensation_operator NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_legacy_reader NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_fence_operator NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
-ALTER ROLE portfolio_fence_owner NOLOGIN
-  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
+-- Supabase's managed postgres role has CREATEROLE but is intentionally not a
+-- true superuser. Merely mentioning SUPERUSER/NOSUPERUSER in ALTER ROLE is
+-- therefore forbidden. Existing privileged roles require explicit break-glass
+-- repair; ordinary LOGIN and INHERIT drift can be reconciled safely.
+DO $role_attributes$
+DECLARE
+  expected record;
+  actual record;
+  alter_clauses text[];
+BEGIN
+  FOR expected IN
+    SELECT role_name, can_login, inherits
+    FROM (VALUES
+      ('portfolio_runtime_login', true, false),
+      ('portfolio_migrator_login', true, false),
+      ('portfolio_legal_login', true, false),
+      ('portfolio_legacy_reader_login', true, false),
+      ('portfolio_fence_login', true, false),
+      ('portfolio_runtime', false, false),
+      ('portfolio_migrator', false, false),
+      ('legal_audit_writer', false, false),
+      ('portfolio_audit_owner', false, false),
+      ('portfolio_compensation_operator', false, false),
+      ('portfolio_legacy_reader', false, false),
+      ('portfolio_fence_operator', false, false),
+      ('portfolio_fence_owner', false, false)
+    ) AS contract(role_name, can_login, inherits)
+  LOOP
+    SELECT
+      catalog_role.rolcanlogin,
+      catalog_role.rolinherit,
+      catalog_role.rolsuper,
+      catalog_role.rolbypassrls,
+      catalog_role.rolcreatedb,
+      catalog_role.rolcreaterole,
+      catalog_role.rolreplication
+    INTO actual
+    FROM pg_catalog.pg_roles catalog_role
+    WHERE catalog_role.rolname = expected.role_name;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Portfolio role % is missing after role creation', expected.role_name;
+    END IF;
+    IF actual.rolsuper OR actual.rolbypassrls OR actual.rolcreatedb
+       OR actual.rolcreaterole OR actual.rolreplication THEN
+      RAISE EXCEPTION
+        'Portfolio role % has prohibited role attributes; break-glass superuser repair is required before bootstrap',
+        expected.role_name
+        USING ERRCODE = '42501';
+    END IF;
+
+    alter_clauses := ARRAY[]::text[];
+    IF actual.rolcanlogin IS DISTINCT FROM expected.can_login THEN
+      alter_clauses := pg_catalog.array_append(
+        alter_clauses,
+        CASE WHEN expected.can_login THEN 'LOGIN' ELSE 'NOLOGIN' END
+      );
+    END IF;
+    IF actual.rolinherit IS DISTINCT FROM expected.inherits THEN
+      alter_clauses := pg_catalog.array_append(
+        alter_clauses,
+        CASE WHEN expected.inherits THEN 'INHERIT' ELSE 'NOINHERIT' END
+      );
+    END IF;
+    IF pg_catalog.cardinality(alter_clauses) > 0 THEN
+      EXECUTE pg_catalog.format(
+        'ALTER ROLE %I %s',
+        expected.role_name,
+        pg_catalog.array_to_string(alter_clauses, ' ')
+      );
+    END IF;
+
+    SELECT
+      catalog_role.rolcanlogin,
+      catalog_role.rolinherit,
+      catalog_role.rolsuper,
+      catalog_role.rolbypassrls,
+      catalog_role.rolcreatedb,
+      catalog_role.rolcreaterole,
+      catalog_role.rolreplication
+    INTO actual
+    FROM pg_catalog.pg_roles catalog_role
+    WHERE catalog_role.rolname = expected.role_name;
+    IF NOT FOUND
+       OR actual.rolcanlogin IS DISTINCT FROM expected.can_login
+       OR actual.rolinherit IS DISTINCT FROM expected.inherits
+       OR actual.rolsuper OR actual.rolbypassrls OR actual.rolcreatedb
+       OR actual.rolcreaterole OR actual.rolreplication THEN
+      RAISE EXCEPTION 'Portfolio role % does not match its exact attribute contract', expected.role_name;
+    END IF;
+  END LOOP;
+END
+$role_attributes$;
 
 DO $$
 DECLARE

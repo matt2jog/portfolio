@@ -30,6 +30,36 @@ const provisioningSql = readFileSync(
   path.resolve(process.cwd(), "infra", "supabase", "portfolio-role-acls.sql"),
   "utf8",
 );
+const legacyReaderSql = readFileSync(
+  path.resolve(process.cwd(), "infra", "supabase", "legacy-reader.sql"),
+  "utf8",
+);
+
+const managedPortfolioRoles = [
+  ["portfolio_runtime_login", true],
+  ["portfolio_migrator_login", true],
+  ["portfolio_legal_login", true],
+  ["portfolio_legacy_reader_login", true],
+  ["portfolio_fence_login", true],
+  ["portfolio_runtime", false],
+  ["portfolio_migrator", false],
+  ["legal_audit_writer", false],
+  ["portfolio_audit_owner", false],
+  ["portfolio_compensation_operator", false],
+  ["portfolio_legacy_reader", false],
+  ["portfolio_fence_operator", false],
+  ["portfolio_fence_owner", false],
+] as const;
+
+function roleReconciliationSql(sql: string, source: string): string {
+  const normalized = sql.replaceAll("\r\n", "\n");
+  const start = normalized.indexOf("DO $$");
+  const end = normalized.indexOf("\nDO $$\nDECLARE\n  edge record;", start + 1);
+  if (start < 0 || end < 0) {
+    throw new Error("Could not isolate " + source + " role reconciliation SQL");
+  }
+  return normalized.slice(start, end);
+}
 
 function roleUrl(role: string, password: string): string {
   const url = new URL(databaseUrl);
@@ -74,6 +104,61 @@ async function dropRoleIfPresent(admin: Client, role: string): Promise<void> {
   await admin.query(`REASSIGN OWNED BY ${identifier} TO postgres`);
   await admin.query(`DROP OWNED BY ${identifier}`);
   await admin.query(`DROP ROLE ${identifier}`);
+}
+
+async function runAsSessionAuthorization(
+  admin: Client,
+  role: string,
+  sql: string,
+): Promise<void> {
+  await admin.query(
+    "SET SESSION AUTHORIZATION " + quotePostgresIdentifier(role),
+  );
+  try {
+    await admin.query(sql);
+  } finally {
+    await admin.query("RESET SESSION AUTHORIZATION").catch(() => undefined);
+  }
+}
+
+async function assertManagedRoleAttributes(admin: Client): Promise<void> {
+  const result = await admin.query<{
+    roleName: string;
+    canLogin: boolean;
+    inherits: boolean;
+    isSuperuser: boolean;
+    canCreateDatabase: boolean;
+    canCreateRole: boolean;
+    canReplicate: boolean;
+    bypassesRls: boolean;
+  }>(`
+    SELECT
+      rolname AS "roleName",
+      rolcanlogin AS "canLogin",
+      rolinherit AS inherits,
+      rolsuper AS "isSuperuser",
+      rolcreatedb AS "canCreateDatabase",
+      rolcreaterole AS "canCreateRole",
+      rolreplication AS "canReplicate",
+      rolbypassrls AS "bypassesRls"
+    FROM pg_roles
+    WHERE rolname = ANY($1::text[])
+    ORDER BY rolname
+  `, [managedPortfolioRoles.map(([role]) => role)]);
+  assert.equal(result.rowCount, managedPortfolioRoles.length);
+  const expectedLogin = new Map<string, boolean>(managedPortfolioRoles);
+  for (const role of result.rows) {
+    assert.deepEqual(role, {
+      roleName: role.roleName,
+      canLogin: expectedLogin.get(role.roleName),
+      inherits: false,
+      isSuperuser: false,
+      canCreateDatabase: false,
+      canCreateRole: false,
+      canReplicate: false,
+      bypassesRls: false,
+    });
+  }
 }
 
 async function assertPermissionDenied(
@@ -125,6 +210,86 @@ async function restoreDisposableMigrationBaseline(): Promise<void> {
     await pool.end();
   }
 }
+
+test("managed-Supabase bootstrap rejects privileged ALTER and is exact-role idempotent", async () => {
+  const admin = new Client({ connectionString: databaseUrl });
+  const managedAdmin = "portfolio_fake_managed_postgres";
+  const exactStateObserver = "portfolio_fake_role_observer";
+  const preRoleSql = roleReconciliationSql(
+    preMigrationSql,
+    "pre-migration",
+  );
+  const readerRoleSql = roleReconciliationSql(
+    legacyReaderSql,
+    "legacy-reader",
+  );
+
+  try {
+    await admin.connect();
+    await admin.query("DROP SCHEMA IF EXISTS portfolio CASCADE");
+    for (const [role] of managedPortfolioRoles) {
+      await dropRoleIfPresent(admin, role);
+    }
+    await dropRoleIfPresent(admin, managedAdmin);
+    await dropRoleIfPresent(admin, exactStateObserver);
+    await admin.query(
+      "CREATE ROLE " + quotePostgresIdentifier(managedAdmin)
+        + " LOGIN CREATEROLE NOINHERIT",
+    );
+    await admin.query(
+      "CREATE ROLE " + quotePostgresIdentifier(exactStateObserver)
+        + " LOGIN NOINHERIT",
+    );
+
+    // This role models Supabase's managed postgres: it can create ordinary
+    // roles, but PostgreSQL rejects any ALTER that mentions SUPERUSER.
+    await runAsSessionAuthorization(admin, managedAdmin, preRoleSql);
+    await assertManagedRoleAttributes(admin);
+
+    // A caller with no role-management authority can replay an exact contract,
+    // proving the bootstrap does not issue CREATE or ALTER when nothing drifted.
+    await runAsSessionAuthorization(admin, exactStateObserver, preRoleSql);
+    await runAsSessionAuthorization(admin, exactStateObserver, readerRoleSql);
+
+    await admin.query(
+      "ALTER ROLE portfolio_runtime_login NOLOGIN INHERIT",
+    );
+    await runAsSessionAuthorization(admin, managedAdmin, preRoleSql);
+    await assertManagedRoleAttributes(admin);
+
+    await admin.query(
+      "ALTER ROLE portfolio_legacy_reader_login NOLOGIN INHERIT",
+    );
+    await runAsSessionAuthorization(admin, managedAdmin, readerRoleSql);
+    await assertManagedRoleAttributes(admin);
+
+    await admin.query("ALTER ROLE portfolio_legacy_reader CREATEROLE");
+    await assert.rejects(
+      runAsSessionAuthorization(admin, managedAdmin, readerRoleSql),
+      /portfolio_legacy_reader.*prohibited role attributes/i,
+    );
+    await admin.query("ALTER ROLE portfolio_legacy_reader NOCREATEROLE");
+
+    await admin.query("ALTER ROLE portfolio_runtime_login CREATEDB");
+    await assert.rejects(
+      runAsSessionAuthorization(admin, managedAdmin, preRoleSql),
+      /portfolio_runtime_login.*prohibited role attributes/i,
+    );
+    await admin.query("ALTER ROLE portfolio_runtime_login NOCREATEDB");
+  } finally {
+    if (admin.connectionParameters.database) {
+      await admin.query("RESET SESSION AUTHORIZATION").catch(() => undefined);
+      await admin.query("DROP SCHEMA IF EXISTS portfolio CASCADE").catch(() => undefined);
+      for (const [role] of managedPortfolioRoles) {
+        await dropRoleIfPresent(admin, role).catch(() => undefined);
+      }
+      await dropRoleIfPresent(admin, managedAdmin).catch(() => undefined);
+      await dropRoleIfPresent(admin, exactStateObserver).catch(() => undefined);
+      await restoreDisposableMigrationBaseline();
+    }
+    await admin.end().catch(() => undefined);
+  }
+});
 
 test("provisioned migrator reruns migrations and runtime/legal roles enforce exact ACLs", async () => {
   const admin = new Client({ connectionString: databaseUrl });
