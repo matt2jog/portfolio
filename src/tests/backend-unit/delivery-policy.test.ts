@@ -514,6 +514,20 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
   }
 });
 
+test("release-image security gates block only Critical vulnerabilities and all detected secrets", () => {
+  const workflow = read(".github/workflows/release-image.yml");
+
+  assert.doesNotMatch(workflow, /scanners:\s*vuln,secret/);
+  assert.match(
+    workflow,
+    /name:\s*Block Critical vulnerabilities[\s\S]*?scanners:\s*vuln[\s\S]*?severity:\s*CRITICAL[\s\S]*?exit-code:\s*["']1["']/,
+  );
+  assert.match(
+    workflow,
+    /name:\s*Block detected secrets[\s\S]*?scanners:\s*secret[\s\S]*?severity:\s*UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL[\s\S]*?exit-code:\s*["']1["']/,
+  );
+});
+
 test("main delivery uses repository-bound WIF, a dedicated registry, digest pinning, and causal rollback", () => {
   const workflow = read(".github/workflows/deploy.yml");
   const release = read(".github/scripts/deploy-cloud-run.sh");

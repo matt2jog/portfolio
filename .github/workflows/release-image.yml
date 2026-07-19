@@ -64,12 +64,22 @@ jobs:
           severity: HIGH
           format: table
           exit-code: "0"
-      - name: Block Critical vulnerabilities and secrets
+      - name: Block Critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
-          scanners: vuln,secret
+          scanners: vuln
+          severity: CRITICAL
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+      - name: Block detected secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          scanners: secret
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           format: table
           exit-code: "1"
