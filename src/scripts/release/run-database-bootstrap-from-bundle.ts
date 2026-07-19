@@ -1,0 +1,212 @@
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { Client } from "pg";
+import { readAndDeleteBundle } from "../../shared/ephemeral-bundle";
+import { productionSupabaseConnectionConfig } from "../../shared/postgres-tls";
+import {
+  assertPortfolioLegacyReaderDatabaseSession,
+  assertPortfolioMigratorDatabaseSession,
+  assertUnprivilegedDatabaseSession,
+} from "../../shared/postgres-session";
+import { PORTFOLIO_DATA_TABLES } from "../legacy-data-migration";
+import {
+  assertProductionMutationAllowed,
+  DATABASE_BOOTSTRAP_WORKFLOW_REF,
+} from "../production-execution-guard";
+import {
+  parseDatabaseBootstrapBundle,
+  type PortfolioDatabaseBootstrapBundle,
+} from "./database-bootstrap-config";
+import { assertLocalPortfolioImageProvenance } from "./image-provenance";
+
+const IMAGE_PATTERN = /^us-east4-docker\.pkg\.dev\/personal-brand-501801\/portfolio\/portfolio@sha256:[a-f0-9]{64}$/;
+const PRE_MIGRATION_SQL = "infra/supabase/portfolio-pre-migration.sql";
+const POST_MIGRATION_SQL = "infra/supabase/portfolio-role-acls.sql";
+const LOGIN_URLS = [
+  ["portfolio_runtime_login", "RUNTIME_DATABASE_URL"],
+  ["portfolio_migrator_login", "MIGRATION_DATABASE_URL"],
+  ["portfolio_legal_login", "LEGAL_AUDIT_DATABASE_URL"],
+  ["portfolio_legacy_reader_login", "LEGACY_READER_DATABASE_URL"],
+  ["portfolio_fence_login", "SOURCE_FENCE_DATABASE_URL"],
+] as const;
+
+export interface DatabaseBootstrapDependencies {
+  executeAdministratorSql(filename: string, sql: string): Promise<void>;
+  rotateLoginPassword(role: string, password: string): Promise<void>;
+  runMigrationsFromBundle(bundle: PortfolioDatabaseBootstrapBundle, imageDigestUri: string): Promise<void>;
+  verifyScopedBoundaries(bundle: PortfolioDatabaseBootstrapBundle): Promise<void>;
+}
+
+function connectionConfig(
+  bundle: PortfolioDatabaseBootstrapBundle,
+  databaseUrl: string,
+  expectedRole: string,
+  capabilityRole?: string,
+  searchPath: "portfolio, extensions" | "public" = "portfolio, extensions",
+) {
+  return productionSupabaseConnectionConfig({
+    databaseUrl,
+    projectRef: bundle.SUPABASE_PROJECT_REF,
+    supabaseCaCert: bundle.SUPABASE_CA_CERT,
+    expectedCaSha256: bundle.SUPABASE_CA_SHA256,
+    expectedRole,
+    capabilityRole,
+    searchPath,
+  });
+}
+
+async function spawnMigrations(
+  bundle: PortfolioDatabaseBootstrapBundle,
+  imageDigestUri: string,
+): Promise<void> {
+  const contextKeys = [
+    "NODE_ENV", "GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_REF",
+    "GITHUB_WORKFLOW_REF", "GITHUB_SHA", "GITHUB_WORKFLOW_SHA",
+  ] as const;
+  const child = spawn("docker", [
+    "run", "--rm", "--pull=never", "--read-only", "--cap-drop=ALL",
+    "--security-opt=no-new-privileges", "--pids-limit=128", "--memory=1g", "--cpus=2",
+    "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+    "--env", "DATABASE_URL", "--env", "SUPABASE_CA_CERT", "--env", "SUPABASE_CA_SHA256",
+    "--env", "SUPABASE_PROJECT_REF",
+    ...contextKeys.flatMap((key) => process.env[key] === undefined ? [] : ["--env", key]),
+    imageDigestUri,
+    "dist/migrate.cjs",
+  ], {
+    env: {
+      ...process.env,
+      DATABASE_URL: bundle.MIGRATION_DATABASE_URL,
+      SUPABASE_CA_CERT: bundle.SUPABASE_CA_CERT,
+      SUPABASE_CA_SHA256: bundle.SUPABASE_CA_SHA256,
+      SUPABASE_PROJECT_REF: bundle.SUPABASE_PROJECT_REF,
+    },
+    stdio: "inherit",
+    shell: false,
+  });
+  const code = await new Promise<number>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (value) => resolve(value ?? 1));
+  });
+  if (code !== 0) throw new Error(`Database-bootstrap migration container exited with code ${code}`);
+}
+
+async function withClient(
+  config: ReturnType<typeof connectionConfig>,
+  action: (client: Client) => Promise<void>,
+): Promise<void> {
+  const client = new Client(config);
+  await client.connect();
+  try {
+    await action(client);
+  } finally {
+    await client.end();
+  }
+}
+
+function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): DatabaseBootstrapDependencies {
+  const adminConfig = connectionConfig(bundle, bundle.DATABASE_ADMIN_URL, "postgres");
+  return {
+    async executeAdministratorSql(_filename, sql) {
+      await withClient(adminConfig, async (client) => { await client.query(sql); });
+    },
+    async rotateLoginPassword(role, password) {
+      if (!LOGIN_URLS.some(([expected]) => expected === role)) throw new Error("Unreviewed Portfolio login role rotation");
+      await withClient(adminConfig, async (client) => {
+        const generated = await client.query<{ statement: string }>(
+          `SELECT format('ALTER ROLE %I PASSWORD %L', $1::text, $2::text) AS statement`,
+          [role, password],
+        );
+        const statement = generated.rows[0]?.statement;
+        if (!statement) throw new Error("Portfolio login password rotation statement was not generated");
+        await client.query(statement);
+      });
+    },
+    runMigrationsFromBundle: spawnMigrations,
+    async verifyScopedBoundaries(value) {
+      await withClient(connectionConfig(value, value.RUNTIME_DATABASE_URL, "portfolio_runtime_login", "portfolio_runtime"), async (client) => {
+        await assertUnprivilegedDatabaseSession(client, "portfolio_runtime", "Portfolio runtime bootstrap proof");
+      });
+      await withClient(connectionConfig(value, value.MIGRATION_DATABASE_URL, "portfolio_migrator_login", "portfolio_migrator"), async (client) => {
+        await assertPortfolioMigratorDatabaseSession(client);
+      });
+      await withClient(connectionConfig(value, value.LEGAL_AUDIT_DATABASE_URL, "portfolio_legal_login", "legal_audit_writer"), async (client) => {
+        await assertUnprivilegedDatabaseSession(client, "legal_audit_writer", "Portfolio legal bootstrap proof");
+      });
+      await withClient(connectionConfig(value, value.LEGACY_READER_DATABASE_URL, "portfolio_legacy_reader_login", "portfolio_legacy_reader", "public"), async (client) => {
+        await assertPortfolioLegacyReaderDatabaseSession(client, PORTFOLIO_DATA_TABLES);
+      });
+      await withClient(connectionConfig(value, value.SOURCE_FENCE_DATABASE_URL, "portfolio_fence_login", "portfolio_fence_operator"), async (client) => {
+        await client.query("RESET ROLE");
+        const login = await client.query<{ sessionUser: string; currentUser: string }>(
+          `SELECT session_user AS "sessionUser", current_user AS "currentUser"`,
+        );
+        if (login.rows[0]?.sessionUser !== "portfolio_fence_login" || login.rows[0]?.currentUser !== "portfolio_fence_login") {
+          throw new Error("Portfolio source-fence LOGIN boundary is invalid");
+        }
+        await client.query("SET ROLE portfolio_fence_operator");
+        const capability = await client.query<{ currentUser: string; activate: boolean; abort: boolean; commit: boolean }>(`
+          SELECT current_user AS "currentUser",
+            has_function_privilege(current_user, 'public.activate_portfolio_source_write_fence(text,integer)', 'EXECUTE') AS activate,
+            has_function_privilege(current_user, 'public.abort_portfolio_source_write_fence(text)', 'EXECUTE') AS abort,
+            has_function_privilege(current_user, 'public.commit_portfolio_source_write_fence(text)', 'EXECUTE') AS commit
+        `);
+        if (
+          capability.rows[0]?.currentUser !== "portfolio_fence_operator"
+          || !capability.rows[0].activate
+          || !capability.rows[0].abort
+          || !capability.rows[0].commit
+        ) throw new Error("Portfolio source-fence capability boundary is invalid");
+        await client.query("RESET ROLE");
+      });
+    },
+  };
+}
+
+function passwordFromUrl(databaseUrl: string): string {
+  try {
+    const password = decodeURIComponent(new URL(databaseUrl).password);
+    if (!password) throw new Error("missing");
+    return password;
+  } catch {
+    throw new Error("Portfolio database-bootstrap scoped URL contains an invalid password");
+  }
+}
+
+export async function runDatabaseBootstrap(
+  bundle: PortfolioDatabaseBootstrapBundle,
+  imageDigestUri: string,
+  dependencies?: DatabaseBootstrapDependencies,
+): Promise<void> {
+  if (!IMAGE_PATTERN.test(imageDigestUri)) throw new Error("An exact Portfolio image digest is required for database bootstrap");
+  const actions = dependencies ?? productionDependencies(bundle);
+  const pre = await readFile(path.resolve(process.cwd(), PRE_MIGRATION_SQL), "utf8");
+  const post = await readFile(path.resolve(process.cwd(), POST_MIGRATION_SQL), "utf8");
+  await actions.executeAdministratorSql("portfolio-pre-migration.sql", pre);
+  for (const [role, key] of LOGIN_URLS) {
+    await actions.rotateLoginPassword(role, passwordFromUrl(bundle[key]));
+  }
+  await actions.runMigrationsFromBundle(bundle, imageDigestUri);
+  await actions.executeAdministratorSql("portfolio-role-acls.sql", post);
+  await actions.verifyScopedBoundaries(bundle);
+}
+
+async function main(): Promise<void> {
+  assertProductionMutationAllowed(
+    process.env,
+    "Portfolio one-time database bootstrap",
+    [DATABASE_BOOTSTRAP_WORKFLOW_REF],
+  );
+  const [bundlePath, imageDigestUri] = process.argv.slice(2);
+  if (!bundlePath || !imageDigestUri) throw new Error("A database-bootstrap bundle and exact image digest are required");
+  assertLocalPortfolioImageProvenance(imageDigestUri, process.env.GITHUB_SHA ?? "");
+  const bundle = parseDatabaseBootstrapBundle(await readAndDeleteBundle(bundlePath));
+  await runDatabaseBootstrap(bundle, imageDigestUri);
+}
+
+if (process.argv[1]?.endsWith("run-database-bootstrap-from-bundle.ts")) {
+  void main().catch((error) => {
+    console.error(error instanceof Error ? error.message : "Portfolio database bootstrap failed");
+    process.exit(1);
+  });
+}

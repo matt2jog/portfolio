@@ -1,11 +1,17 @@
 import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
 import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn } from "./tracking";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
-import { detectCountryFromIP, extractClientIp } from "./geoip";
+import {
+  allSkillPresentationUpdateSchema,
+  canonicalCareerMutationRejected,
+  isForeignKeyViolation,
+  projectPresentationUpdateSchema,
+} from "./career-authority";
+import { extractClientCountry, extractClientIp, isLocalIp } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
@@ -13,26 +19,17 @@ import {
   allSkills,
   bio,
   bioParagraphs,
-  insertBioSchema,
-  insertAllSkillSchema,
   insertPortfolioSkillSchema,
-  insertProjectSchema,
   insertSkillsGroupSchema,
   portfolioSkills,
   projects,
   skillsGroup,
-  updateProjectSchema,
-  updateAllSkillSchema,
   updatePortfolioSkillSchema,
   updateSkillsGroupSchema,
   auditLogs,
   xyzBullets,
   personalInformation,
-  insertPersonalInformationSchema,
-  updatePersonalInformationSchema,
   experiences,
-  insertExperienceSchema,
-  updateExperienceSchema,
   aiModels,
   welcomeMessages,
   insertWelcomeMessageSchema,
@@ -54,6 +51,10 @@ import {
   ProjectContextTool,
 } from "./agent/tools";
 import { PORTFOLIO_CHAT_RULES } from "./agent/rules";
+import {
+  buildChatOwnerContext,
+  buildPublicPersonalInformationResponse,
+} from "./personal-information";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
@@ -93,7 +94,7 @@ async function getAiProvider(): Promise<LLMProvider | undefined> {
     return _aiProvider;
   }
 
-  // Build the gradient → fireworks model ID map from the DB
+  // Build the gradient-to-fireworks model ID map from the DB
   const rows = await db
     .select({ modelId: aiModels.modelId, fireworksModelId: aiModels.fireworksModelId })
     .from(aiModels)
@@ -115,7 +116,7 @@ async function getAiProvider(): Promise<LLMProvider | undefined> {
   return _aiProvider;
 }
 const promptSuggestionsCache = new Map<string, PromptSuggestion[]>();
-// Deduplicates concurrent requests for the same cache key → single LLM call
+// Deduplicates concurrent requests for the same cache key to a single LLM call
 const promptSuggestionsInflight = new Map<string, Promise<PromptSuggestion[]>>();
 
 function writeSseAssistantMessage(res: Response, content: string) {
@@ -234,7 +235,7 @@ export async function registerRoutes(
   // ========== GEOLOCATION ==========
   app.get("/api/public/geoip", async (req, res) => {
     const ip = extractClientIp(req);
-    const countryCode = detectCountryFromIP(ip || "");
+    const countryCode = isLocalIp(ip) ? "US" : extractClientCountry(req);
     res.json({ ip, country_code: countryCode });
   });
 
@@ -589,9 +590,10 @@ export async function registerRoutes(
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
 
-    const generalInformation = personalInfo
-      ? `\n\nGeneral information: The project/portfolio owner is ${personalInfo.name}. Contact: ${personalInfo.email} | ${personalInfo.phoneFormatted} | ${personalInfo.linkedinUrl}`
-      : `\n\nGeneral information: The project/portfolio owner is Matthew Tujague. Contact: matthew@2jog.dev | (732) 639-3889 | https://linkedin.com/in/matthewtujague`;
+    const owner = buildChatOwnerContext(personalInfo);
+    const generalInformation = owner
+      ? `\n\nGeneral information: The project/portfolio owner is ${owner.name}. Contact: ${owner.email} | ${owner.phone} | ${owner.linkedinUrl}`
+      : "\n\nOwner information is not configured. Do not invent or infer the creator's identity, contact details, or links.";
 
     const basePrompt = project.aiSystemPrompt
       || `You are an AI assistant for the project "${project.title}". Full project details have been loaded into this conversation as tool results — refer to them. Use the GitHub tools to fetch repository details and dig deeper whenever a question requires verified source-level information. Be professional yet conversational.`;
@@ -628,17 +630,14 @@ export async function registerRoutes(
       tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
-    const ownerName = personalInfo?.name ?? "Matthew Tujague";
-    const ownerEmail = personalInfo?.email ?? "matthew@2jog.dev";
-    const ownerPhone = personalInfo?.phone ?? "+17326393889";
-    const ownerLinkedin = personalInfo?.linkedinUrl ?? "https://linkedin.com/in/matthewtujague";
-    const ownerGithub = personalInfo?.githubUrl ?? "https://github.com/binimal101";
-    const ownerPortfolio = personalInfo?.portfolioUrl ?? "https://2jog.dev/";
+    const welcomeOwnerInstruction = owner
+      ? ` Then naturally introduce its creator, ${owner.name}, and invite the visitor to reach out: email ${owner.email}, phone ${owner.phone}, LinkedIn ${owner.linkedinUrl}.`
+      : " Do not invent or infer the creator's identity or contact details because owner information is not configured.";
 
     const userMessages: Array<{ role: "user" | "assistant"; content: string }> = welcome
       ? [{
         role: "user",
-        content: `[WELCOME] Greet this visitor with a single short paragraph — no lists, no headers. First, give a crisp ~20-word description of this project as you would pitch it to a non-technical hiring manager: what it does and why it matters. Then naturally introduce its creator, ${ownerName}, and invite the visitor to reach out: email ${ownerEmail}, phone ${ownerPhone}, LinkedIn ${ownerLinkedin}.`,
+        content: `[WELCOME] Greet this visitor with a single short paragraph — no lists, no headers. First, give a crisp ~20-word description of this project as you would pitch it to a non-technical hiring manager: what it does and why it matters.${welcomeOwnerInstruction}`,
       }]
       : messages.slice(-20).map((m: any) => ({
         role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
@@ -701,15 +700,7 @@ export async function registerRoutes(
           content: `Project Details: ${JSON.stringify(project)}\n\n[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.`,
         }];
         const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any, chatRun ?? undefined)).trim() || project.description;
-        const welcomeMessages = buildWelcomeMessages({
-          aiSummary,
-          ownerName,
-          ownerEmail,
-          ownerPhone,
-          ownerLinkedin,
-          ownerGithub,
-          ownerPortfolio,
-        });
+        const welcomeMessages = buildWelcomeMessages({ aiSummary, owner });
         writeSseAssistantMessages(res, welcomeMessages);
         
         if (chatRun) {
@@ -778,7 +769,7 @@ export async function registerRoutes(
       const evalStatus = randomEvaluatorStatus();
       writeSseEvaluatorStatus(res, evalStatus);
 
-      // Run evaluator and capture result for tracing — never let it break the response
+      // Run evaluator and capture result for tracing - never let it break the response
       let evalResult = await evaluateResponse({
         response: responseContent,
         userMessages,
@@ -960,28 +951,11 @@ export async function registerRoutes(
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
 
-    // Fallbacks if no data exists yet (before seed)
-    res.json(row || {
-      name: "Matthew Tujague",
-      title: "Software Engineer",
-      location: "NJ-NY-PA",
-      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
-      email: "matthew@2jog.dev",
-      phone: "+17326393889",
-      phoneFormatted: "(732) 639-3889",
-      linkedinUrl: "https://linkedin.com/in/matthewtujague",
-      githubUrl: "https://github.com/binimal101",
-      devpostUrl: "https://devpost.com/",
-      portfolioUrl: "https://2jog.dev/",
-    });
+    res.json(buildPublicPersonalInformationResponse(row));
   });
 
   app.get("/api/public/ip", (req, res) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const ip = Array.isArray(forwarded)
-      ? forwarded[0]
-      : forwarded?.split(",")[0]?.trim() || req.ip;
-    res.json({ ip });
+    res.json({ ip: extractClientIp(req) });
   });
 
   // ========== BROWSER TRACKING ==========
@@ -989,10 +963,7 @@ export async function registerRoutes(
     const uuid = getRequestTrackerUuid(req);
     if (!uuid) return res.status(400).json({ error: "No tracking cookie present" });
 
-    const ip =
-      (req.headers["x-client-ip"] as string | undefined) ||
-      extractClientIp(req) ||
-      undefined;
+    const ip = extractClientIp(req) || undefined;
 
     await registerTrackedUuid(uuid, ip);
     return res.json({ ok: true });
@@ -1016,40 +987,12 @@ export async function registerRoutes(
     res.json(await hydrateProjectsWithBullets(rows));
   });
 
-  app.post("/api/admin/projects", requireAdmin, async (req, res) => {
-    const parsed = insertProjectSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-    const projectBullets = normalizeBullets(req.body?.xyzBullets);
-
-    const [maxRow] = await db
-      .select({ max: sql<number>`max(${projects.position})` })
-      .from(projects);
-    const nextPos = (maxRow?.max ?? 0) + 1;
-
-    const [created] = await db
-      .insert(projects)
-      .values({ ...parsed.data, position: nextPos })
-      .returning();
-
-    if (projectBullets.length > 0) {
-      await db.insert(xyzBullets).values(
-        projectBullets.map((bulletText) => ({
-          projectId: created.id,
-          bulletText,
-        })),
-      );
-    }
-
-    invalidateProjectsCache();
-    await logAudit(req, "project.create", { ...created, xyzBullets: projectBullets });
-    res.json({ ...created, xyzBullets: projectBullets });
-  });
+  app.post("/api/admin/projects", requireAdmin, canonicalCareerMutationRejected);
 
   app.put("/api/admin/projects/:id", requireAdmin, async (req, res) => {
     const projectId = routeId(req.params.id);
-    const parsed = updateProjectSchema.safeParse(req.body);
+    const parsed = projectPresentationUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
-    const projectBullets = normalizeBullets(req.body?.xyzBullets);
 
     const [updated] = await db
       .update(projects)
@@ -1061,33 +1004,13 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Project not found" });
     }
 
-    await db.delete(xyzBullets).where(eq(xyzBullets.projectId, projectId));
-    if (projectBullets.length > 0) {
-      await db.insert(xyzBullets).values(
-        projectBullets.map((bulletText) => ({
-          projectId,
-          bulletText,
-        })),
-      );
-    }
-
     invalidateProjectsCache();
-    await logAudit(req, "project.update", { id: projectId, ...parsed.data, xyzBullets: projectBullets });
-    res.json({ ...updated, xyzBullets: projectBullets });
+    await logAudit(req, "project.presentation.update", { id: projectId, ...parsed.data });
+    const [hydrated] = await hydrateProjectsWithBullets([updated]);
+    res.json(hydrated);
   });
 
-  app.delete("/api/admin/projects/:id", requireAdmin, async (req, res) => {
-    const projectId = routeId(req.params.id);
-    await db.update(projects)
-      .set({
-        deletedAt: new Date(),
-        archivedBy: req.user?.id
-      })
-      .where(eq(projects.id, projectId));
-    invalidateProjectsCache();
-    await logAudit(req, "project.archive", { id: projectId });
-    res.json({ ok: true });
-  });
+  app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected);
 
   app.post("/api/admin/projects/reorder", requireAdmin, async (req, res) => {
     const order = Array.isArray(req.body?.order) ? req.body.order : [];
@@ -1118,90 +1041,13 @@ export async function registerRoutes(
     const [row] = await db.select().from(personalInformation)
       .orderBy(desc(personalInformation.updatedAt))
       .limit(1);
-    res.json(row || {
-      name: "Matthew Tujague",
-      title: "Software Engineer",
-      location: "NJ-NY-PA",
-      shortBio: "Based in Middletown NJ with ties to all of the tri-state, this engineer prefers to scale large systems that promote REAL value.",
-      email: "matthew@2jog.dev",
-      phone: "+17326393889",
-      phoneFormatted: "(732) 639-3889",
-      linkedinUrl: "https://linkedin.com/in/matthewtujague",
-      githubUrl: "https://github.com/binimal101",
-      devpostUrl: "https://devpost.com/",
-      portfolioUrl: "https://2jog.dev/",
-    });
+    res.json(buildPublicPersonalInformationResponse(row));
   });
 
-  app.put("/api/admin/personal-information", requireAdmin, async (req, res) => {
-    const parsed = insertPersonalInformationSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
+  app.put("/api/admin/personal-information", requireAdmin, canonicalCareerMutationRejected);
 
-    const [existing] = await db.select().from(personalInformation).limit(1);
-
-    let result;
-    if (existing) {
-      [result] = await db.update(personalInformation)
-        .set({ ...parsed.data, updatedAt: new Date() })
-        .where(eq(personalInformation.id, existing.id))
-        .returning();
-    } else {
-      [result] = await db.insert(personalInformation).values(parsed.data).returning();
-    }
-
-    await logAudit(req, "personalInformation.update", parsed.data);
-    res.json(result);
-  });
-
-  app.post("/api/admin/bio", requireAdmin, async (req, res) => {
-    const parsed = insertBioSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const { paragraphs: paragraphTexts, ...bioData } = parsed.data;
-    const [result] = await db.insert(bio).values(bioData).returning();
-
-    if (paragraphTexts && paragraphTexts.length > 0) {
-      await db.insert(bioParagraphs).values(
-        paragraphTexts.map((content, index) => ({
-          bioId: result.id,
-          content,
-          position: index,
-        }))
-      );
-    }
-
-    const savedParagraphs = await db.select().from(bioParagraphs)
-      .where(eq(bioParagraphs.bioId, result.id))
-      .orderBy(asc(bioParagraphs.position));
-
-    await logAudit(req, "bio.create", parsed.data);
-    res.json({ ...result, paragraphs: savedParagraphs });
-  });
-
-  app.put("/api/admin/bio", requireAdmin, async (req, res) => {
-    const parsed = insertBioSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const { paragraphs: paragraphTexts, ...bioData } = parsed.data;
-    const [result] = await db.insert(bio).values(bioData).returning();
-
-    if (paragraphTexts && paragraphTexts.length > 0) {
-      await db.insert(bioParagraphs).values(
-        paragraphTexts.map((content, index) => ({
-          bioId: result.id,
-          content,
-          position: index,
-        }))
-      );
-    }
-
-    const savedParagraphs = await db.select().from(bioParagraphs)
-      .where(eq(bioParagraphs.bioId, result.id))
-      .orderBy(asc(bioParagraphs.position));
-
-    await logAudit(req, "bio.update", parsed.data);
-    res.json({ ...result, paragraphs: savedParagraphs });
-  });
+  app.post("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected);
+  app.put("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected);
 
   app.get("/api/admin/bio/versions", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(bio)
@@ -1215,58 +1061,8 @@ export async function registerRoutes(
     res.json(hydrated);
   });
 
-  app.post("/api/admin/bio/:id/restore", requireAdmin, async (req, res) => {
-    const bioVersionId = routeId(req.params.id);
-    const [version] = await db.select().from(bio)
-      .where(eq(bio.id, bioVersionId))
-      .limit(1);
-
-    if (!version) {
-      return res.status(404).json({ message: "Bio version not found" });
-    }
-
-    const [restored] = await db.insert(bio).values({
-      headline: version.headline,
-    }).returning();
-
-    const oldParagraphs = await db.select().from(bioParagraphs)
-      .where(eq(bioParagraphs.bioId, bioVersionId))
-      .orderBy(asc(bioParagraphs.position));
-
-    if (oldParagraphs.length > 0) {
-      await db.insert(bioParagraphs).values(
-        oldParagraphs.map((p) => ({
-          bioId: restored.id,
-          content: p.content,
-          position: p.position,
-        }))
-      );
-    }
-
-    const restoredParagraphs = await db.select().from(bioParagraphs)
-      .where(eq(bioParagraphs.bioId, restored.id))
-      .orderBy(asc(bioParagraphs.position));
-
-    await logAudit(req, "bio.restore", { sourceId: bioVersionId, restoredId: restored.id });
-    res.json({ ...restored, paragraphs: restoredParagraphs });
-  });
-
-  app.delete("/api/admin/bio/:id", requireAdmin, async (req, res) => {
-    const bioVersionId = routeId(req.params.id);
-
-    const [existing] = await db.select().from(bio)
-      .where(eq(bio.id, bioVersionId))
-      .limit(1);
-
-    if (!existing) {
-      return res.status(404).json({ message: "Bio version not found" });
-    }
-
-    await db.delete(bioParagraphs).where(eq(bioParagraphs.bioId, bioVersionId));
-    await db.delete(bio).where(eq(bio.id, bioVersionId));
-    await logAudit(req, "bio.delete", { id: bioVersionId });
-    res.json({ ok: true });
-  });
+  app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected);
+  app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected);
 
   app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
     const rows = await db.select().from(portfolioSkills)
@@ -1306,7 +1102,10 @@ export async function registerRoutes(
 
   app.delete("/api/admin/skills-groups/:id", requireAdmin, async (req, res) => {
     const groupId = routeId(req.params.id);
-    await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
+    await db.transaction(async (tx) => {
+      await tx.update(allSkills).set({ groupingId: null }).where(eq(allSkills.groupingId, groupId));
+      await tx.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
+    });
     await logAudit(req, "skillsGroup.delete", { id: groupId });
     res.json({ ok: true });
   });
@@ -1323,45 +1122,49 @@ export async function registerRoutes(
     );
   });
 
-  app.post("/api/admin/all-skills", requireAdmin, async (req, res) => {
-    const parsed = insertAllSkillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [created] = await db.insert(allSkills).values(parsed.data).returning();
-    await logAudit(req, "allSkill.create", created);
-    res.json(created);
-  });
+  app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected);
 
   app.put("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
     const allSkillId = routeId(req.params.id);
-    const parsed = updateAllSkillSchema.safeParse(req.body);
+    const parsed = allSkillPresentationUpdateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
-    const [updated] = await db
-      .update(allSkills)
-      .set(parsed.data)
+    const [existingSkill] = await db
+      .select({ id: allSkills.id })
+      .from(allSkills)
       .where(eq(allSkills.id, allSkillId))
-      .returning();
+      .limit(1);
+    if (!existingSkill) return res.status(404).json({ message: "Skill not found" });
 
-    await logAudit(req, "allSkill.update", { id: allSkillId, ...parsed.data });
+    if (parsed.data.groupingId) {
+      const [existingGroup] = await db
+        .select({ id: skillsGroup.id })
+        .from(skillsGroup)
+        .where(eq(skillsGroup.id, parsed.data.groupingId))
+        .limit(1);
+      if (!existingGroup) return res.status(400).json({ message: "Invalid skills_group reference" });
+    }
+
+    let updated;
+    try {
+      [updated] = await db
+        .update(allSkills)
+        .set(parsed.data)
+        .where(eq(allSkills.id, allSkillId))
+        .returning();
+    } catch (error) {
+      if (isForeignKeyViolation(error, "all_skills_grouping_id_skills_group_id_fk")) {
+        return res.status(400).json({ message: "Invalid skills_group reference" });
+      }
+      throw error;
+    }
+    if (!updated) return res.status(404).json({ message: "Skill not found" });
+
+    await logAudit(req, "allSkill.presentation.update", { id: allSkillId, ...parsed.data });
     res.json(updated);
   });
 
-  app.delete("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
-    const allSkillId = routeId(req.params.id);
-    const [inUse] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(portfolioSkills)
-      .where(eq(portfolioSkills.allSkillId, allSkillId));
-
-    if ((inUse?.count ?? 0) > 0) {
-      return res.status(400).json({ message: "Cannot delete all_skill that is assigned to portfolio_skills" });
-    }
-
-    await db.delete(allSkills).where(eq(allSkills.id, allSkillId));
-    await logAudit(req, "allSkill.delete", { id: allSkillId });
-    res.json({ ok: true });
-  });
+  app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
 
   app.post("/api/admin/skills", requireAdmin, async (req, res) => {
     const parsed = insertPortfolioSkillSchema.safeParse(req.body);
@@ -1377,10 +1180,18 @@ export async function registerRoutes(
       .from(portfolioSkills);
     const nextPos = (maxRow?.max ?? 0) + 1;
 
-    const [created] = await db
-      .insert(portfolioSkills)
-      .values({ ...parsed.data, position: nextPos })
-      .returning();
+    let created;
+    try {
+      [created] = await db
+        .insert(portfolioSkills)
+        .values({ ...parsed.data, position: nextPos })
+        .returning();
+    } catch (error) {
+      if (isForeignKeyViolation(error, "portfolio_skills_all_skill_id_all_skills_id_fk")) {
+        return res.status(400).json({ message: "Invalid all_skill reference" });
+      }
+      throw error;
+    }
 
     await logAudit(req, "portfolioSkill.create", created);
     const [hydrated] = await hydratePortfolioSkills([created]);
@@ -1399,11 +1210,19 @@ export async function registerRoutes(
       if (!allSkill) return res.status(400).json({ message: "Invalid all_skill reference" });
     }
 
-    const [updated] = await db
-      .update(portfolioSkills)
-      .set(parsed.data)
-      .where(eq(portfolioSkills.id, skillId))
-      .returning();
+    let updated;
+    try {
+      [updated] = await db
+        .update(portfolioSkills)
+        .set(parsed.data)
+        .where(eq(portfolioSkills.id, skillId))
+        .returning();
+    } catch (error) {
+      if (isForeignKeyViolation(error, "portfolio_skills_all_skill_id_all_skills_id_fk")) {
+        return res.status(400).json({ message: "Invalid all_skill reference" });
+      }
+      throw error;
+    }
 
     await logAudit(req, "portfolioSkill.update", { id: skillId, ...parsed.data });
     const [hydrated] = await hydratePortfolioSkills([updated]);
@@ -1437,60 +1256,11 @@ export async function registerRoutes(
     res.json(rows);
   });
 
-  app.post("/api/admin/experiences", requireAdmin, async (req, res) => {
-    const parsed = insertExperienceSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
+  app.post("/api/admin/experiences", requireAdmin, canonicalCareerMutationRejected);
+  app.put("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.delete("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected);
 
-    const [maxRow] = await db
-      .select({ max: sql<number>`max(${experiences.position})` })
-      .from(experiences);
-    const nextPos = (maxRow?.max ?? 0) + 1;
-
-    const [created] = await db
-      .insert(experiences)
-      .values({ ...parsed.data, position: nextPos })
-      .returning();
-
-    await logAudit(req, "experience.create", created);
-    res.json(created);
-  });
-
-  app.put("/api/admin/experiences/:id", requireAdmin, async (req, res) => {
-    const expId = routeId(req.params.id);
-    const parsed = updateExperienceSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [updated] = await db
-      .update(experiences)
-      .set(parsed.data)
-      .where(eq(experiences.id, expId))
-      .returning();
-
-    if (!updated) return res.status(404).json({ message: "Experience not found" });
-
-    await logAudit(req, "experience.update", { id: expId, ...parsed.data });
-    res.json(updated);
-  });
-
-  app.delete("/api/admin/experiences/:id", requireAdmin, async (req, res) => {
-    const expId = routeId(req.params.id);
-    await db.delete(experiences).where(eq(experiences.id, expId));
-    await logAudit(req, "experience.delete", { id: expId });
-    res.json({ ok: true });
-  });
-
-  app.post("/api/admin/experiences/reorder", requireAdmin, async (req, res) => {
-    const order = Array.isArray(req.body?.order) ? req.body.order : [];
-    await db.transaction(async (tx) => {
-      await Promise.all(
-        order.map((id: string, index: number) =>
-          tx.update(experiences).set({ position: index }).where(eq(experiences.id, id))
-        )
-      );
-    });
-    await logAudit(req, "experience.reorder", { order });
-    res.json({ ok: true });
-  });
+  app.post("/api/admin/experiences/reorder", requireAdmin, canonicalCareerMutationRejected);
 
   // Archived items endpoints
   app.get("/api/admin/archived/projects", requireAdmin, async (_req, res) => {
@@ -1500,16 +1270,7 @@ export async function registerRoutes(
     res.json(rows);
   });
 
-  app.post("/api/admin/projects/:id/restore", requireAdmin, async (req, res) => {
-    const projectId = routeId(req.params.id);
-    const [restored] = await db.update(projects)
-      .set({ deletedAt: null, archivedBy: null })
-      .where(eq(projects.id, projectId))
-      .returning();
-    invalidateProjectsCache();
-    await logAudit(req, "project.restore", { id: projectId });
-    res.json(restored);
-  });
+  app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected);
 
   // ========== WELCOME MESSAGES (PERSONALIZATION) ==========
 
@@ -1637,13 +1398,6 @@ async function logAudit(req: Request, action: string, payload: unknown) {
   });
 }
 
-function normalizeBullets(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
-}
-
 function routeId(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
@@ -1651,16 +1405,9 @@ function routeId(value: string | string[] | undefined): string {
 
 function buildWelcomeMessages(args: {
   aiSummary: string;
-  ownerName: string;
-  ownerEmail: string;
-  ownerPhone: string;
-  ownerLinkedin: string;
-  ownerGithub: string;
-  ownerPortfolio: string;
+  owner: ReturnType<typeof buildChatOwnerContext>;
 }) {
-  const firstName = args.ownerName.trim().split(/\s+/)[0] || "Matt";
-
-  return [
+  const messages = [
     [`**What this is:** ${args.aiSummary}`].join("\n"),
     [
       "**I'm here to help, I can:**",
@@ -1668,8 +1415,16 @@ function buildWelcomeMessages(args: {
     "- Pull from the actual project source code when needed.",
     "- Check the repository context, commits, and related history.",
     ].join("\n"),
-    `Reach out to ${firstName} via [Email](mailto:${args.ownerEmail}), [Phone](tel:${args.ownerPhone}), [LinkedIn](${args.ownerLinkedin}), or [GitHub](${args.ownerGithub})!`,
   ];
+
+  if (args.owner) {
+    const firstName = args.owner.name.trim().split(/\s+/)[0];
+    messages.push(
+      `Reach out to ${firstName} via [Email](mailto:${args.owner.email}), [Phone](tel:${args.owner.phone}), [LinkedIn](${args.owner.linkedinUrl}), or [GitHub](${args.owner.githubUrl})!`,
+    );
+  }
+
+  return messages;
 }
 
 function createPromptSuggestionsHash(

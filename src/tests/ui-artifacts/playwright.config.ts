@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5000";
+const slowMo = Number.parseInt(process.env.PLAYWRIGHT_SLOW_MO_MS ?? "0", 10);
 
 export default defineConfig({
   testDir: ".",
@@ -15,6 +16,7 @@ export default defineConfig({
     browserName: "chromium",
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
+    launchOptions: { slowMo: Number.isFinite(slowMo) ? Math.max(0, slowMo) : 0 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

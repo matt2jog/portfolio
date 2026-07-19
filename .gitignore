@@ -1,4 +1,7 @@
 /node_modules/
+**/node_modules/
+**/.wrangler/
+**/.dev.vars*
 /gcp_settings/
 /dist/
 .env

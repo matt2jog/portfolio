@@ -3,47 +3,33 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { AdminAcceptanceModal } from "@/components/AdminAcceptanceModal";
 import Footer from "@/components/Footer";
-import AdminBioPanel from "@/components/admin/AdminBioPanel";
-import AdminProjectsPanel from "@/components/admin/AdminProjectsPanel";
+import AdminProjectPresentationPanel from "@/components/admin/AdminProjectPresentationPanel";
 import AdminSkillsPanel from "@/components/admin/AdminSkillsPanel";
 import AdminPersonalizationPanel from "@/components/admin/AdminPersonalizationPanel";
 
-type AdminTab = "bio" | "projects" | "skills" | "personalization";
+type AdminTab = "personalization" | "project-presentation" | "skill-presentation";
 
 const tabs: { id: AdminTab; label: string }[] = [
-  { id: "bio", label: "Bio" },
-  { id: "projects", label: "Projects" },
-  { id: "skills", label: "Skills" },
-  { id: "personalization", label: "Personalization" },
+  { id: "personalization", label: "Welcome messages" },
+  { id: "project-presentation", label: "Project presentation" },
+  { id: "skill-presentation", label: "Skill presentation" },
 ];
 
 export default function Admin() {
-  const isLocalProductionPreview =
-    import.meta.env.PROD &&
-    typeof window !== "undefined" &&
-    window.location.hostname === "127.0.0.1";
-
-  const { data: me } = useQuery({
+  const { data: me } = useQuery<{ role?: string } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-    enabled: !isLocalProductionPreview,
   });
 
   const [showAcceptanceModal, setShowAcceptanceModal] = useState(false);
   const [policyAccepted, setPolicyAccepted] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
 
-  const isAdmin = isLocalProductionPreview || (me as any)?.role === "admin";
-  const [activeTab, setActiveTab] = useState<AdminTab>("bio");
+  const isAdmin = me?.role === "admin";
+  const [activeTab, setActiveTab] = useState<AdminTab>("personalization");
 
   // Check if admin needs to accept policies
   useEffect(() => {
-    if (isLocalProductionPreview) {
-      setPolicyAccepted(true);
-      setShowAcceptanceModal(false);
-      return;
-    }
-
     if (isAdmin && !policyAccepted) {
       const checkAcceptance = async () => {
         try {
@@ -67,7 +53,7 @@ export default function Admin() {
       };
       checkAcceptance();
     }
-  }, [isAdmin, isLocalProductionPreview, policyAccepted]);
+  }, [isAdmin, policyAccepted]);
 
   const handleAcceptPolicies = async () => {
     setIsAccepting(true);
@@ -86,13 +72,12 @@ export default function Admin() {
   };
 
   const activePanel = useMemo(() => {
-    if (activeTab === "projects") return <AdminProjectsPanel />;
-    if (activeTab === "skills") return <AdminSkillsPanel />;
-    if (activeTab === "personalization") return <AdminPersonalizationPanel />;
-    return <AdminBioPanel />;
+    if (activeTab === "project-presentation") return <AdminProjectPresentationPanel />;
+    if (activeTab === "skill-presentation") return <AdminSkillsPanel />;
+    return <AdminPersonalizationPanel />;
   }, [activeTab]);
 
-  if (!isLocalProductionPreview && !me) {
+  if (!me) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -119,7 +104,7 @@ export default function Admin() {
     );
   }
 
-  if (!isLocalProductionPreview && isAdmin && !policyAccepted) {
+  if (isAdmin && !policyAccepted) {
     return (
       <div>
         <AdminAcceptanceModal
@@ -146,14 +131,20 @@ export default function Admin() {
         </button>
       </div>
 
-      <nav data-testid="admin-tabs" className="border border-white/10 p-2 bg-black/40 sticky top-2 z-10">
-        <div className="grid grid-cols-4 gap-2">
+      <p className="max-w-[65ch] text-sm leading-6 text-white/70">
+        Canonical career content is managed in Admin Dashboard. This page owns only Portfolio presentation.
+      </p>
+
+      <nav data-testid="admin-tabs" aria-label="Portfolio administration" className="border border-white/10 p-2 bg-black/40 sticky top-2 z-10">
+        <div className="grid gap-2 sm:grid-cols-3">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               data-testid={`admin-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-sm sm:text-base border ${activeTab === tab.id ? "border-white/60 bg-white/10" : "border-white/20 hover:border-white/40"}`}
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              className={`px-3 py-2 text-sm border ${activeTab === tab.id ? "border-white/60 bg-white/10" : "border-white/20 hover:border-white/40"}`}
             >
               {tab.label}
             </button>

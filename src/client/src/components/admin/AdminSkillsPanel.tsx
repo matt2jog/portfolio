@@ -15,8 +15,6 @@ export default function AdminSkillsPanel() {
   const allSkillsQuery = useQuery({ queryKey: ["/api/admin/all-skills"] });
 
   const [skillGroupInput, setSkillGroupInput] = useState("");
-  const [allSkillNameInput, setAllSkillNameInput] = useState("");
-  const [allSkillGroupingNameInput, setAllSkillGroupingNameInput] = useState("");
   const [selectedAllSkillNameInput, setSelectedAllSkillNameInput] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [selectedAllSkill, setSelectedAllSkill] = useState<any | null>(null);
@@ -27,7 +25,6 @@ export default function AdminSkillsPanel() {
     message: "",
   });
   const [groupEditNameInput, setGroupEditNameInput] = useState("");
-  const [allSkillEditNameInput, setAllSkillEditNameInput] = useState("");
   const [allSkillEditGroupingNameInput, setAllSkillEditGroupingNameInput] = useState("");
 
   const addSkillGroup = useMutation({
@@ -73,60 +70,22 @@ export default function AdminSkillsPanel() {
     },
   });
 
-  const addAllSkill = useMutation({
-    mutationFn: async ({ name, groupingId }: { name: string; groupingId: string | null }) => {
-      await apiRequest("POST", "/api/admin/all-skills", {
-        name,
-        groupingId,
-      });
-    },
-    onSuccess: () => {
-      setAllSkillNameInput("");
-      setAllSkillGroupingNameInput("");
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
-      toast({ title: "Success", description: "all_skill added" });
-    },
-    onError: (error) => {
-      setErrorDialog({
-        open: true,
-        title: "all_skill Add Failed",
-        message: getErrorMessage(error),
-      });
-    },
-  });
-
   const updateAllSkill = useMutation({
-    mutationFn: async ({ id, name, groupingId }: { id: string; name: string; groupingId?: string | null }) => {
-      await apiRequest("PUT", `/api/admin/all-skills/${id}`, {
-        name,
-        groupingId: groupingId || null,
-      });
+    mutationFn: async ({ id, groupingId }: { id: string; groupingId: string | null }) => {
+      await apiRequest("PUT", `/api/admin/all-skills/${id}`, { groupingId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/skills"] });
       queryClient.invalidateQueries({ queryKey: ["/api/public/skills"] });
-      toast({ title: "Success", description: "all_skill updated" });
+      toast({ title: "Success", description: "Skill presentation updated" });
     },
     onError: (error) => {
       setErrorDialog({
         open: true,
-        title: "all_skill Update Failed",
+        title: "Skill presentation update failed",
         message: getErrorMessage(error),
       });
-    },
-  });
-
-  const deleteAllSkill = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/all-skills/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-skills"] });
-      toast({ title: "Success", description: "all_skill deleted" });
-    },
-    onError: (error) => {
-      toast({ title: "Failed", description: `all_skill delete failed: ${getErrorMessage(error)}`, variant: "destructive" });
     },
   });
 
@@ -187,7 +146,6 @@ export default function AdminSkillsPanel() {
   }, [selectedGroup]);
 
   useEffect(() => {
-    setAllSkillEditNameInput(selectedAllSkill?.name || "");
     setAllSkillEditGroupingNameInput(selectedAllSkill?.groupingName || "");
   }, [selectedAllSkill]);
 
@@ -205,26 +163,10 @@ export default function AdminSkillsPanel() {
     return match?.id ?? null;
   };
 
-  const handleAddAllSkill = () => {
-    const name = allSkillNameInput.trim();
-    if (!name) {
-      setErrorDialog({ open: true, title: "Invalid all_skill", message: "Skill name is required." });
-      return;
-    }
-
-    const groupingId = resolveGroupIdByName(allSkillGroupingNameInput);
-    if (allSkillGroupingNameInput.trim() && !groupingId) {
-      setErrorDialog({ open: true, title: "Invalid Group", message: "Group must match an existing skills_group name." });
-      return;
-    }
-
-    addAllSkill.mutate({ name, groupingId });
-  };
-
   const handleAddPortfolioSkill = () => {
     const allSkillId = resolveAllSkillIdByName(selectedAllSkillNameInput);
     if (!allSkillId) {
-      setErrorDialog({ open: true, title: "Invalid all_skill", message: "Select an existing all_skill name to assign." });
+      setErrorDialog({ open: true, title: "Invalid skill", message: "Select an existing canonical skill." });
       return;
     }
 
@@ -233,10 +175,16 @@ export default function AdminSkillsPanel() {
 
   return (
     <section className="space-y-6 border border-white/10 p-4 sm:p-6">
-      <h2 className="text-xl font-semibold">Skills CRUD</h2>
+      <div className="space-y-2">
+        <h2 className="text-xl font-semibold">Skill presentation</h2>
+        <p className="max-w-[65ch] text-sm leading-6 text-white/70">
+          Create and rename canonical skills in Admin Dashboard. Manage only Portfolio groups, selections,
+          and display order here.
+        </p>
+      </div>
 
       <div className="space-y-3 border border-white/10 p-4">
-        <h3 className="text-lg font-semibold">skills_group</h3>
+        <h3 className="text-lg font-semibold">Display groups</h3>
         <div className="flex flex-col sm:flex-row gap-3">
           <input
             value={skillGroupInput}
@@ -249,7 +197,7 @@ export default function AdminSkillsPanel() {
             className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
             disabled={!skillGroupInput.trim()}
           >
-            Add Group
+            Add group
           </button>
         </div>
         <div className="space-y-2">
@@ -267,34 +215,15 @@ export default function AdminSkillsPanel() {
       </div>
 
       <div className="space-y-3 border border-white/10 p-4">
-        <h3 className="text-lg font-semibold">all_skills</h3>
-        <div className="grid gap-3 md:grid-cols-3">
-          <input
-            value={allSkillNameInput}
-            onChange={(e) => setAllSkillNameInput(e.target.value)}
-            placeholder="Skill name"
-            className="bg-black/60 border border-white/20 p-2"
-          />
-          <input
-            list="skills-group-options"
-            value={allSkillGroupingNameInput}
-            onChange={(e) => setAllSkillGroupingNameInput(e.target.value)}
-            placeholder="Group name (autocomplete)"
-            className="bg-black/60 border border-white/20 p-2"
-          />
-          <datalist id="skills-group-options">
-            {skillGroups.map((group: any) => (
-              <option key={group.id} value={group.name} />
-            ))}
-          </datalist>
-          <button
-            onClick={handleAddAllSkill}
-            className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
-            disabled={!allSkillNameInput.trim()}
-          >
-            Add all_skill
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold">Canonical skills</h3>
+        <p className="max-w-[65ch] text-sm leading-6 text-white/60">
+          Select a skill to assign its Portfolio display group. Skill names remain read-only.
+        </p>
+        <datalist id="skills-group-options">
+          {skillGroups.map((group: any) => (
+            <option key={group.id} value={group.name} />
+          ))}
+        </datalist>
 
         <div className="space-y-2">
           {allSkills.map((allSkill: any) => (
@@ -309,18 +238,18 @@ export default function AdminSkillsPanel() {
               </div>
             </div>
           ))}
-          {allSkills.length === 0 && <div className="text-sm text-white/40 italic">No all_skills entries</div>}
+          {allSkills.length === 0 && <div className="text-sm text-white/40 italic">No canonical skills available</div>}
         </div>
       </div>
 
       <div className="space-y-3 border border-white/10 p-4">
-        <h3 className="text-lg font-semibold">portfolio_skills</h3>
+        <h3 className="text-lg font-semibold">Visible Portfolio skills</h3>
         <div className="grid gap-3 md:grid-cols-2">
           <input
             list="all-skills-options"
             value={selectedAllSkillNameInput}
             onChange={(e) => setSelectedAllSkillNameInput(e.target.value)}
-            placeholder="all_skill name (autocomplete)"
+            placeholder="Canonical skill name"
             className="bg-black/60 border border-white/20 p-2"
           />
           <datalist id="all-skills-options">
@@ -333,7 +262,7 @@ export default function AdminSkillsPanel() {
             className="px-4 py-2 border border-white/20 text-white hover:border-white/60"
             disabled={!selectedAllSkillNameInput.trim()}
           >
-            Assign to portfolio_skills
+            Add to Portfolio
           </button>
         </div>
 
@@ -361,7 +290,7 @@ export default function AdminSkillsPanel() {
               <DialogHeader>
                 <DialogTitle>{selectedGroup.name}</DialogTitle>
               </DialogHeader>
-              <div className="text-sm text-white/70">skills_group detail</div>
+              <div className="text-sm text-white/70">Portfolio display group</div>
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
@@ -371,7 +300,7 @@ export default function AdminSkillsPanel() {
                   }}
                   className="px-3 py-1 border border-white/20"
                 >
-                  Edit
+                  Save name
                 </button>
                 <button
                   onClick={() => {
@@ -403,49 +332,28 @@ export default function AdminSkillsPanel() {
               </DialogHeader>
               <div className="text-sm text-white/80">Group: {selectedAllSkill.groupingName || "None"}</div>
               <input
-                value={allSkillEditNameInput}
-                onChange={(e) => setAllSkillEditNameInput(e.target.value)}
-                placeholder="Edit all_skill name"
-                className="bg-black/60 border border-white/20 p-2"
-              />
-              <input
                 list="skills-group-options"
                 value={allSkillEditGroupingNameInput}
                 onChange={(e) => setAllSkillEditGroupingNameInput(e.target.value)}
-                placeholder="Edit group name (autocomplete)"
+                placeholder="Display group name"
                 className="bg-black/60 border border-white/20 p-2"
               />
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
-                    const nextName = allSkillEditNameInput.trim();
-                    if (!nextName) {
-                      setErrorDialog({ open: true, title: "Invalid all_skill", message: "all_skill name is required." });
-                      return;
-                    }
                     const nextGroupingId = resolveGroupIdByName(allSkillEditGroupingNameInput);
                     if (allSkillEditGroupingNameInput.trim() && !nextGroupingId) {
-                      setErrorDialog({ open: true, title: "Invalid Group", message: "Group must match an existing skills_group name." });
+                      setErrorDialog({ open: true, title: "Invalid group", message: "Choose an existing display group." });
                       return;
                     }
                     updateAllSkill.mutate({
                       id: selectedAllSkill.id,
-                      name: nextName,
                       groupingId: nextGroupingId,
                     });
                   }}
                   className="px-3 py-1 border border-white/20"
                 >
-                  Edit
-                </button>
-                <button
-                  onClick={() => {
-                    deleteAllSkill.mutate(selectedAllSkill.id);
-                    setSelectedAllSkill(null);
-                  }}
-                  className="px-3 py-1 border border-white/20"
-                >
-                  Delete
+                  Save group
                 </button>
               </div>
             </>

@@ -1,6 +1,6 @@
 import { db } from "./data/db";
 import { githubTimelineEvents } from "../shared/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 
 export async function fetchGithubActivity(username: string, token: string) {
   const query = `
@@ -144,10 +144,6 @@ export async function syncGithubTimeline() {
   if (!username || !token) return;
 
   try {
-    // Delete the mock event as requested
-    await db.delete(githubTimelineEvents)
-      .where(eq(githubTimelineEvents.extId, "mock-event-2024-test"));
-
     const query = `
       query($login: String!) {
         user(login: $login) {

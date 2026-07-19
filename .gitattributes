@@ -1,0 +1,5 @@
+package-lock.json text eol=lf
+infra/cloudflare/portfolio-edge/package-lock.json text eol=lf
+infra/cloudflare/portfolio-edge/worker-configuration.d.ts text eol=lf -whitespace
+*.sh text eol=lf
+*.yml text eol=lf

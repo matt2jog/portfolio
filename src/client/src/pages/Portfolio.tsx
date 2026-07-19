@@ -1,7 +1,6 @@
 import { Navbar } from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BlueprintCard } from "@/components/BlueprintCard";
-import ProjectChat from "@/components/ProjectChat";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type TransitionEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,71 +26,12 @@ function ProjectCardClickHint({ isVisible }: { isVisible: boolean }) {
 
 export default function Portfolio() {
   const [, setLocation] = useLocation();
-  const fallbackProjects = [
-    {
-      title: "Lorem Ipsum I",
-      description:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
-      tech: ["Rust", "Kafka", "gRPC", "Kubernetes"],
-      githubUrl: "https://github.com/binimal101",
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum II",
-      description:
-        "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
-      tech: ["Python", "PyTorch", "React", "WebGL"],
-      githubUrl: "https://github.com/binimal101",
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum III",
-      description:
-        "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
-      tech: ["C++", "Assembly", "Redis Module"],
-      githubUrl: "https://github.com/binimal101",
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum IV",
-      description:
-        "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-      tech: ["Solidity", "ZK-Snarks", "Node.js"],
-      githubUrl: "https://github.com/binimal101",
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum V",
-      description:
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.",
-      tech: ["Haskell", "Cryptography", "Nix"],
-      githubUrl: null,
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum VI",
-      description:
-        "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.",
-      tech: ["Zig", "ARM Assembly", "LLVM"],
-      githubUrl: null,
-      deployedUrl: null,
-    },
-    {
-      title: "Lorem Ipsum VII",
-      description:
-        "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
-      tech: ["Go", "Protobuf", "WebRTC"],
-      githubUrl: "https://github.com/binimal101",
-      deployedUrl: "https://example.com",
-    },
-  ];
-
   const projectsQuery = useQuery({ queryKey: ["/api/public/projects"] });
 
-  const projects =
-    Array.isArray(projectsQuery.data) && projectsQuery.data.length > 0
-      ? projectsQuery.data
-      : fallbackProjects;
+  const projects = useMemo(
+    () => Array.isArray(projectsQuery.data) ? projectsQuery.data : [],
+    [projectsQuery.data],
+  );
 
   const facesCount = 4;
   const projectsPerFace = 4;
@@ -251,7 +191,7 @@ export default function Portfolio() {
                   {currentProjectPage}/{totalGroups}]
                 </p>
               </div>
-              <div className="hidden md:flex gap-4">
+              {projects.length > 0 && <div className="hidden md:flex gap-4">
                 <button
                   aria-label="Previous project page"
                   onClick={prevFace}
@@ -272,9 +212,17 @@ export default function Portfolio() {
                     className="group-active:scale-90 transition-transform"
                   />
                 </button>
-              </div>
+              </div>}
             </div>
 
+            {projects.length === 0 ? (
+              <div
+                data-testid="portfolio-empty"
+                className="mx-auto flex min-h-[28rem] max-w-2xl items-center justify-center border border-dashed border-white/15 bg-black/30 p-8 text-center"
+              >
+                <p className="font-mono text-sm text-gray-400">No portfolio projects are configured.</p>
+              </div>
+            ) : <>
             <div data-testid="portfolio-cube-scene" className="project-cube-scene mx-auto">
               <div
                 data-testid="portfolio-cube"
@@ -354,6 +302,7 @@ export default function Portfolio() {
                 />
               </button>
             </div>
+            </>}
           </div>
         </section>
 

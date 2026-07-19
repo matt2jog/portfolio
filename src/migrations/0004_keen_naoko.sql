@@ -1,4 +1,6 @@
-CREATE TABLE "admin_policy_acceptance" (
+CREATE EXTENSION IF NOT EXISTS vector;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "admin_policy_acceptance" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"admin_id" varchar NOT NULL,
 	"timestamp" timestamp DEFAULT now() NOT NULL,
@@ -8,7 +10,7 @@ CREATE TABLE "admin_policy_acceptance" (
 	"accepted" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "ai_models" (
+CREATE TABLE IF NOT EXISTS "ai_models" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"label" text NOT NULL,
 	"model_id" text NOT NULL,
@@ -20,7 +22,7 @@ CREATE TABLE "ai_models" (
 	CONSTRAINT "ai_models_model_id_unique" UNIQUE("model_id")
 );
 --> statement-breakpoint
-ALTER TABLE "all_skills" ADD COLUMN "embedding" vector(768);--> statement-breakpoint
-ALTER TABLE "all_skills" ADD COLUMN "embedding_model" text;--> statement-breakpoint
-ALTER TABLE "projects" ADD COLUMN "ai_system_prompt" text;--> statement-breakpoint
-CREATE UNIQUE INDEX "admin_policy_acceptance_unique_idx" ON "admin_policy_acceptance" USING btree ("admin_id","policy_version","terms_version","privacy_version");
+ALTER TABLE "all_skills" ADD COLUMN IF NOT EXISTS "embedding" vector(768);--> statement-breakpoint
+ALTER TABLE "all_skills" ADD COLUMN IF NOT EXISTS "embedding_model" text;--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "ai_system_prompt" text;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "admin_policy_acceptance_unique_idx" ON "admin_policy_acceptance" USING btree ("admin_id","policy_version","terms_version","privacy_version");

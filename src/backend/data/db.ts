@@ -1,6 +1,11 @@
-import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { readFileSync } from "node:fs";
+import { createAuditedPool } from "./database-audit";
+import {
+  postgresConnectionConfig,
+  productionSupabaseConnectionConfig,
+} from "../../shared/postgres-tls";
+import { assertRuntimeDatabaseSession } from "./runtime-database-boundary";
 
 const databaseUrl = process.env.DATABASE_URL;
 const caCertPath = process.env.SUPABASE_CA_CERT_PATH;
@@ -13,12 +18,25 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }
 
-export const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: databaseUrl.includes("supabase.com")
-    ? caCert
-      ? { rejectUnauthorized: true, ca: caCert }
-      : { rejectUnauthorized: false }
+export const pool = createAuditedPool({
+  ...(process.env.NODE_ENV === "production"
+    ? productionSupabaseConnectionConfig({
+      databaseUrl,
+      projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
+      supabaseCaCert: caCert,
+      expectedCaSha256: process.env.SUPABASE_CA_SHA256,
+      expectedRole: "portfolio_runtime_login",
+      capabilityRole: "portfolio_runtime",
+      searchPath: "portfolio, extensions",
+    })
+    : postgresConnectionConfig(databaseUrl, caCert, "portfolio, extensions")),
+}, {
+  databaseActor: "portfolio_runtime",
+  initializeConnection: process.env.NODE_ENV === "production"
+    ? assertRuntimeDatabaseSession
+    : undefined,
+  capabilityRole: process.env.NODE_ENV === "production"
+    ? "portfolio_runtime"
     : undefined,
 });
 
