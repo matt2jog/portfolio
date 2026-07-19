@@ -90,8 +90,8 @@ test("every direct and reusable legal caller uses its distinct exact-workflow pr
 
   assert.match(workflow, /providers\/portfolio-legal-audit-main/);
   assert.match(workflow, /providers\/portfolio-legal-reusable-main/);
-  assert.match(workflow, /providers\/portfolio-legal-data-migration-main/);
-  assert.match(workflow, /providers\/portfolio-legal-release-cleanup-main/);
+  assert.match(workflow, /providers\/portfolio-legal-migrate-main/);
+  assert.match(workflow, /providers\/portfolio-legal-cleanup-main/);
   assert.match(deploy, /identity_mode:\s*reusable/);
   assert.match(dataMigration, /identity_mode:\s*data_migration/);
   assert.match(cleanup, /identity_mode:\s*release_cleanup/);
