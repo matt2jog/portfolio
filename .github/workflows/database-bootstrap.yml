@@ -28,7 +28,7 @@ env:
   GCP_PROJECT_ID: personal-brand-501801
   DATABASE_BOOTSTRAP_SECRET_NAME: portfolio-database-bootstrap-bundle-prod
   DATABASE_BOOTSTRAP_BUNDLE_VERSION: ${{ vars.PORTFOLIO_DATABASE_BOOTSTRAP_BUNDLE_VERSION }}
-  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/personal-brand-github/providers/portfolio-database-bootstrap-main
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/personal-brand-github/providers/portfolio-db-bootstrap-main
   DATABASE_BOOTSTRAP_SERVICE_ACCOUNT: portfolio-database-bootstrap@personal-brand-501801.iam.gserviceaccount.com
   DATABASE_BOOTSTRAP_WORKFLOW_REF: matt2jog/portfolio/.github/workflows/database-bootstrap.yml@refs/heads/main
   GITHUB_WORKFLOW_SHA: ${{ github.sha }}
