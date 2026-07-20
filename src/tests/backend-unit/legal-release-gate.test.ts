@@ -87,6 +87,9 @@ test("every direct and reusable legal caller uses its distinct exact-workflow pr
   const deploy = jobBlock(read(".github/workflows/deploy.yml"), "legal_audit");
   const dataMigration = jobBlock(read(".github/workflows/data-migration.yml"), "legal_audit");
   const cleanup = jobBlock(read(".github/workflows/release-cleanup.yml"), "legal_audit");
+  const reusableMode = workflow.match(/reusable\)([\s\S]*?)\s+;;/);
+
+  assert.ok(reusableMode, "missing reusable identity mode");
 
   assert.match(workflow, /providers\/portfolio-legal-audit-main/);
   assert.match(workflow, /providers\/portfolio-legal-reusable-main/);
@@ -95,7 +98,18 @@ test("every direct and reusable legal caller uses its distinct exact-workflow pr
   assert.match(deploy, /identity_mode:\s*reusable/);
   assert.match(dataMigration, /identity_mode:\s*data_migration/);
   assert.match(cleanup, /identity_mode:\s*release_cleanup/);
-  assert.match(workflow, /GITHUB_EVENT_NAME.*workflow_dispatch/);
+  assert.match(
+    workflow,
+    /reusable\)\s+test "\$GITHUB_EVENT_NAME" = "workflow_run"\s+;;/,
+  );
+  assert.match(
+    workflow,
+    /data_migration\|release_cleanup\|dispatch\)\s+test "\$GITHUB_EVENT_NAME" = "workflow_dispatch"\s+;;/,
+  );
+  assert.doesNotMatch(
+    reusableMode[1],
+    /(?:push|workflow_dispatch)/,
+  );
   assert.match(workflow, /test "\$GITHUB_REPOSITORY" = "matt2jog\/portfolio"/);
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
 });
