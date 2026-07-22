@@ -119,6 +119,35 @@ test("database bootstrap preserves the managed Supabase pgvector installation", 
   assert.match(ledger, /managed Supabase pgvector contract/);
 });
 
+test("managed ACL reconciliation mutates only objects with explicit Portfolio grants", () => {
+  const post = read("infra/supabase/portfolio-role-acls.sql");
+  const start = post.indexOf("-- Strip only explicit grants held by Portfolio target roles");
+  const end = post.indexOf("-- Table-level REVOKE does not remove column ACLs", start);
+  const managedReconciliation = post.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, "managed-object reconciliation block must exist");
+  assert.doesNotMatch(
+    managedReconciliation,
+    /ON ALL (?:TABLES|SEQUENCES|ROUTINES) IN SCHEMA %I/,
+  );
+  assert.match(managedReconciliation, /aclexplode\(namespace\.nspacl\)/);
+  assert.match(managedReconciliation, /aclexplode\(object\.relacl\)/);
+  assert.match(managedReconciliation, /aclexplode\(routine\.proacl\)/);
+  assert.match(managedReconciliation, /aclexplode\(type\.typacl\)/);
+  assert.match(managedReconciliation, /pg_get_function_identity_arguments\(routine\.oid\)/);
+  assert.match(managedReconciliation, /privilege\.grantee IN \(/);
+
+  const managedRevokes = [
+    ...managedReconciliation.matchAll(
+      /'REVOKE ALL PRIVILEGES ON (?:SCHEMA|SEQUENCE|TABLE|ROUTINE|TYPE) [^']+'/g,
+    ),
+  ].map((match) => match[0]);
+  assert.equal(managedRevokes.length, 5);
+  for (const statement of managedRevokes) {
+    assert.match(statement, / CASCADE'$/);
+  }
+});
+
 test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {
   const session = read("src/shared/postgres-session.ts");
 
