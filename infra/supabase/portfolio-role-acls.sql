@@ -735,7 +735,8 @@ BEGIN
     WHERE granted.rolname IN (
       'portfolio_runtime', 'portfolio_migrator', 'legal_audit_writer',
       'portfolio_audit_owner', 'portfolio_compensation_operator',
-      'portfolio_legacy_reader', 'portfolio_fence_operator'
+      'portfolio_legacy_reader', 'portfolio_fence_operator',
+      'portfolio_fence_owner'
     )
       AND NOT (
         NOT membership.admin_option
@@ -757,7 +758,8 @@ BEGIN
     WHERE granted.rolname IN (
       'portfolio_runtime', 'portfolio_migrator', 'legal_audit_writer',
       'portfolio_audit_owner', 'portfolio_compensation_operator',
-      'portfolio_legacy_reader', 'portfolio_fence_operator'
+      'portfolio_legacy_reader', 'portfolio_fence_operator',
+      'portfolio_fence_owner'
     )
   ) <> 7 THEN
     RAISE EXCEPTION 'Portfolio capability role memberships are not exact';
