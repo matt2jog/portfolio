@@ -617,6 +617,13 @@ BEGIN
 END
 $$;
 
+-- End the managed-administrator bootstrap window before proving the final
+-- membership graph. Runtime and ordinary release identities never receive
+-- these memberships.
+REVOKE portfolio_migrator, portfolio_audit_owner,
+  portfolio_compensation_operator, portfolio_fence_owner
+  FROM postgres;
+
 -- Fail closed unless LOGIN identities remain pure authenticators and the
 -- complete capability/default ACL graph is exact. aclexplode includes PUBLIC
 -- as grantee oid 0, so this catches both named and global drift.
