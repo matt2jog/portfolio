@@ -147,9 +147,9 @@ function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): Datab
         await client.query("SET ROLE portfolio_fence_operator");
         const capability = await client.query<{ currentUser: string; activate: boolean; abort: boolean; commit: boolean }>(`
           SELECT current_user AS "currentUser",
-            has_function_privilege(current_user, 'portfolio.activate_portfolio_source_write_fence(text,integer)', 'EXECUTE') AS activate,
-            has_function_privilege(current_user, 'portfolio.abort_portfolio_source_write_fence(text)', 'EXECUTE') AS abort,
-            has_function_privilege(current_user, 'portfolio.commit_portfolio_source_write_fence(text)', 'EXECUTE') AS commit
+            has_function_privilege(current_user, 'portfolio_control.activate_portfolio_source_write_fence(text,integer)', 'EXECUTE') AS activate,
+            has_function_privilege(current_user, 'portfolio_control.abort_portfolio_source_write_fence(text)', 'EXECUTE') AS abort,
+            has_function_privilege(current_user, 'portfolio_control.commit_portfolio_source_write_fence(text)', 'EXECUTE') AS commit
         `);
         if (
           capability.rows[0]?.currentUser !== "portfolio_fence_operator"

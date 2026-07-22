@@ -22,6 +22,7 @@ test("source fence activation is a bounded lease over the exact 23-table trigger
   assert.equal(evidence.fenceId, "a".repeat(64));
   assert.equal(evidence.expiresAt, "2026-07-16T20:15:00.000Z");
   assert.deepEqual(calls[0]?.values, ["a".repeat(64), 900]);
+  assert.match(calls[0]?.text ?? "", /portfolio_control\.activate_portfolio_source_write_fence/);
   assert.match(evidence.triggerDigest, /^[0-9a-f]{64}$/);
 });
 
@@ -36,6 +37,8 @@ test("source fence abort and authority commit require the exact token and fail c
   await abortSourceWriteFence(client, "b".repeat(64));
   await commitSourceWriteFence(client, "b".repeat(64));
   assert.equal(calls.length, 2);
+  assert.match(calls[0] ?? "", /portfolio_control\.abort_portfolio_source_write_fence/);
+  assert.match(calls[1] ?? "", /portfolio_control\.commit_portfolio_source_write_fence/);
   await assert.rejects(() => abortSourceWriteFence({
     async query() { return { rows: [{ accepted: false }] }; },
   }, "b".repeat(64)), /abort/i);

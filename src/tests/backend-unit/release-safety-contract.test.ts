@@ -45,12 +45,20 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
       new RegExp(`FOR ROLE ${owner}[\\s\\S]*REVOKE USAGE ON TYPES FROM PUBLIC`),
     );
   }
-  assert.match(pre, /CREATE TABLE IF NOT EXISTS portfolio\.portfolio_source_write_fence_control/);
-  assert.doesNotMatch(
-    pre,
-    /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\s+(?!IF\s+NOT\s+EXISTS\s+portfolio\.portfolio_source_write_fence_control\b)/im,
+  assert.doesNotMatch(pre, /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\b/im);
+  assert.match(
+    post,
+    /CREATE TABLE IF NOT EXISTS portfolio_control\.portfolio_source_write_fence_control/,
+  );
+  assert.match(
+    post,
+    /CREATE OR REPLACE FUNCTION portfolio_control\.activate_portfolio_source_write_fence/,
   );
   assert.match(pre, /CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator/);
+  assert.match(
+    pre,
+    /CREATE SCHEMA IF NOT EXISTS portfolio_control AUTHORIZATION portfolio_fence_owner/,
+  );
   assert.match(
     pre,
     /GRANT portfolio_migrator, portfolio_audit_owner,\s*portfolio_compensation_operator, portfolio_fence_owner\s+TO postgres\s+WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;/,
