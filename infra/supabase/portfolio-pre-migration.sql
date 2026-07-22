@@ -203,6 +203,16 @@ GRANT portfolio_audit_owner, portfolio_compensation_operator
   TO portfolio_migrator
   WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
 
+-- Supabase's managed postgres administrator is not a true superuser. Give the
+-- bootstrap session only the bounded SET ROLE memberships needed to transfer
+-- schema/object ownership and reconcile owner-scoped default privileges. The
+-- post-migration ACL script revokes these memberships before its exact graph
+-- assertion, so they never survive a successful bootstrap.
+GRANT portfolio_migrator, portfolio_audit_owner,
+  portfolio_compensation_operator, portfolio_fence_owner
+  TO postgres
+  WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+
 DO $$
 BEGIN
   EXECUTE format(

@@ -51,6 +51,25 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
     /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\s+(?!IF\s+NOT\s+EXISTS\s+public\.portfolio_source_write_fence_control\b)/im,
   );
   assert.match(pre, /CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator/);
+  assert.match(
+    pre,
+    /GRANT portfolio_migrator, portfolio_audit_owner,\s*portfolio_compensation_operator, portfolio_fence_owner\s+TO postgres\s+WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;/,
+  );
+  assert.match(
+    post,
+    /REVOKE portfolio_migrator, portfolio_audit_owner,\s*portfolio_compensation_operator, portfolio_fence_owner\s+FROM postgres;[\s\S]*Fail closed unless LOGIN identities remain pure authenticators/,
+  );
+  const membershipInvariantEnd = post.indexOf(
+    "RAISE EXCEPTION 'Portfolio capability role memberships are not exact'",
+    post.indexOf("-- Fail closed unless LOGIN identities remain pure authenticators"),
+  );
+  const membershipInvariantStart = post.lastIndexOf("IF EXISTS (", membershipInvariantEnd);
+  const membershipInvariant = post.slice(membershipInvariantStart, membershipInvariantEnd);
+  assert.equal(
+    membershipInvariant.match(/'portfolio_fence_owner'/g)?.length,
+    2,
+    "the exact and counted membership filters must both reject residual fence-owner membership",
+  );
   assert.match(pre, /SET timezone TO 'UTC'/i);
   assert.match(post, /pg_default_acl/);
   assert.match(post, /aclexplode/);
