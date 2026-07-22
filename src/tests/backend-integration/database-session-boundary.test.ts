@@ -35,6 +35,14 @@ const legacyReaderSql = readFileSync(
   "utf8",
 );
 
+async function reconcilePortfolioDatabase(admin: Client): Promise<void> {
+  // Production reconciliation is an inseparable two-phase operation. The
+  // pre-migration phase opens bounded managed-administrator memberships; the
+  // post-migration phase closes them after proving the exact ACL graph.
+  await admin.query(preMigrationSql);
+  await admin.query(provisioningSql);
+}
+
 const managedPortfolioRoles = [
   ["portfolio_runtime_login", true],
   ["portfolio_migrator_login", true],
@@ -372,9 +380,8 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
       `GRANT TEMPORARY ON DATABASE ${quotePostgresIdentifier(databaseName)} TO PUBLIC`,
     );
 
-    await admin.query(preMigrationSql);
-    await admin.query(provisioningSql);
-    await admin.query(provisioningSql);
+    await reconcilePortfolioDatabase(admin);
+    await reconcilePortfolioDatabase(admin);
 
     const auditRoles = await admin.query<{
       roleName: string;
@@ -487,8 +494,8 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
     });
     assert.deepEqual(rerun, { adopted: 0, applied: 0, total: plan.length });
 
-    await admin.query(provisioningSql);
-    await admin.query(provisioningSql);
+    await reconcilePortfolioDatabase(admin);
+    await reconcilePortfolioDatabase(admin);
 
     runtime = new Client(
       postgresConnectionConfig(
@@ -733,8 +740,8 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
       /LOGIN\/RESET ROLE|audit-role|portfolio-acl-matrix/i,
     );
 
-    await admin.query(provisioningSql);
-    await admin.query(provisioningSql);
+    await reconcilePortfolioDatabase(admin);
+    await reconcilePortfolioDatabase(admin);
     await assertUnprivilegedDatabaseSession(
       runtime,
       "portfolio_runtime",
