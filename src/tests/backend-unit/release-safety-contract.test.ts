@@ -54,6 +54,10 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
     post,
     /CREATE OR REPLACE FUNCTION portfolio_control\.activate_portfolio_source_write_fence/,
   );
+  assert.match(
+    post,
+    /SET ROLE portfolio_fence_owner;\s*GRANT USAGE, CREATE ON SCHEMA portfolio_control TO portfolio_fence_owner;[\s\S]*CREATE TABLE IF NOT EXISTS portfolio_control\.portfolio_source_write_fence_control[\s\S]*CREATE OR REPLACE FUNCTION portfolio_control\.commit_portfolio_source_write_fence[\s\S]*RESET ROLE;[\s\S]*DO \$triggers\$/,
+  );
   assert.match(pre, /CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator/);
   assert.match(
     pre,
@@ -78,6 +82,10 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
     2,
     "the exact and counted membership filters must both reject residual fence-owner membership",
   );
+  assert.match(membershipInvariant, /grantor\.rolname = 'supabase_admin'/);
+  assert.match(membershipInvariant, /member\.rolname = 'postgres'/);
+  assert.match(membershipInvariant, /membership\.admin_option[\s\S]*NOT membership\.inherit_option[\s\S]*NOT membership\.set_option/);
+  assert.match(membershipInvariant, /\) <> 15 THEN/);
   assert.match(pre, /SET timezone TO 'UTC'/i);
   assert.match(post, /pg_default_acl/);
   assert.match(post, /aclexplode/);

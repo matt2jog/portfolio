@@ -454,6 +454,13 @@ $$;
 -- migration batch has passed its empty-target fingerprint gate. Keeping these
 -- controls in a dedicated private schema prevents operational state from
 -- becoming Portfolio domain data or poisoning migration evidence.
+-- Managed Supabase `postgres` is a role administrator, not a true superuser.
+-- Enter the dedicated owner explicitly after the ACL scrub so object creation
+-- uses the schema owner's inherent CREATE privilege rather than an inherited
+-- approximation that managed Postgres intentionally rejects.
+SET ROLE portfolio_fence_owner;
+GRANT USAGE, CREATE ON SCHEMA portfolio_control TO portfolio_fence_owner;
+
 CREATE TABLE IF NOT EXISTS portfolio_control.portfolio_source_write_fence_control (
   singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   fence_token text NOT NULL CHECK (fence_token ~ '^[0-9a-f]{64}$'),
@@ -575,6 +582,8 @@ ALTER FUNCTION portfolio_control.commit_portfolio_source_write_fence(text)
   OWNER TO portfolio_fence_owner;
 REVOKE ALL ON FUNCTION portfolio_control.commit_portfolio_source_write_fence(text)
   FROM PUBLIC;
+
+RESET ROLE;
 
 DO $triggers$
 DECLARE table_name text;
@@ -1005,6 +1014,7 @@ BEGIN
     FROM pg_auth_members membership
     JOIN pg_roles granted ON granted.oid = membership.roleid
     JOIN pg_roles member ON member.oid = membership.member
+    JOIN pg_roles grantor ON grantor.oid = membership.grantor
     WHERE granted.rolname IN (
       'portfolio_runtime', 'portfolio_migrator', 'legal_audit_writer',
       'portfolio_audit_owner', 'portfolio_compensation_operator',
@@ -1012,17 +1022,26 @@ BEGIN
       'portfolio_fence_owner'
     )
       AND NOT (
-        NOT membership.admin_option
-        AND NOT membership.inherit_option
-        AND membership.set_option
-        AND (granted.rolname, member.rolname) IN (
-          ('portfolio_runtime', 'portfolio_runtime_login'),
-          ('portfolio_migrator', 'portfolio_migrator_login'),
-          ('legal_audit_writer', 'portfolio_legal_login'),
-          ('portfolio_legacy_reader', 'portfolio_legacy_reader_login'),
-          ('portfolio_fence_operator', 'portfolio_fence_login'),
-          ('portfolio_audit_owner', 'portfolio_migrator'),
-          ('portfolio_compensation_operator', 'portfolio_migrator')
+        (
+          NOT membership.admin_option
+          AND NOT membership.inherit_option
+          AND membership.set_option
+          AND (granted.rolname, member.rolname) IN (
+            ('portfolio_runtime', 'portfolio_runtime_login'),
+            ('portfolio_migrator', 'portfolio_migrator_login'),
+            ('legal_audit_writer', 'portfolio_legal_login'),
+            ('portfolio_legacy_reader', 'portfolio_legacy_reader_login'),
+            ('portfolio_fence_operator', 'portfolio_fence_login'),
+            ('portfolio_audit_owner', 'portfolio_migrator'),
+            ('portfolio_compensation_operator', 'portfolio_migrator')
+          )
+        )
+        OR (
+          membership.admin_option
+          AND NOT membership.inherit_option
+          AND NOT membership.set_option
+          AND member.rolname = 'postgres'
+          AND grantor.rolname = 'supabase_admin'
         )
       )
   ) OR (
@@ -1034,7 +1053,7 @@ BEGIN
       'portfolio_legacy_reader', 'portfolio_fence_operator',
       'portfolio_fence_owner'
     )
-  ) <> 7 THEN
+  ) <> 15 THEN
     RAISE EXCEPTION 'Portfolio capability role memberships are not exact';
   END IF;
 
