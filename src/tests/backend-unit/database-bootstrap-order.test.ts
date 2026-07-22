@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   runDatabaseBootstrap,
+  waitForCredentialPropagation,
   type DatabaseBootstrapDependencies,
 } from "../../scripts/release/run-database-bootstrap-from-bundle";
 import type { PortfolioDatabaseBootstrapBundle } from "../../scripts/release/database-bootstrap-config";
@@ -30,6 +31,7 @@ test("one-time bootstrap creates roles, rotates every login, migrates, reconcile
   const dependencies: DatabaseBootstrapDependencies = {
     async executeAdministratorSql(filename) { events.push(filename); },
     async rotateLoginPassword(role, password) { events.push(`rotate:${role}:${password}`); },
+    async waitForLoginCredentials() { events.push("wait-for-login-propagation"); },
     async runMigrationsFromBundle() { events.push("digest-pinned-migrations"); },
     async verifyScopedBoundaries() { events.push("verify-all-scoped-boundaries"); },
   };
@@ -45,6 +47,7 @@ test("one-time bootstrap creates roles, rotates every login, migrates, reconcile
     "rotate:portfolio_legal_login:password-portfolio_legal_login",
     "rotate:portfolio_legacy_reader_login:password-portfolio_legacy_reader_login",
     "rotate:portfolio_fence_login:password-portfolio_fence_login",
+    "wait-for-login-propagation",
     "digest-pinned-migrations",
     "portfolio-role-acls.sql",
     "verify-all-scoped-boundaries",
@@ -73,6 +76,10 @@ test("a pre-generated source-fence URL is consumed only after its scoped role ex
       assert.equal(password, "pre-generated/fence");
       fencePasswordRotated = true;
     },
+    async waitForLoginCredentials() {
+      assert.equal(fencePasswordRotated, true);
+      events.push("wait-for-login-propagation");
+    },
     async runMigrationsFromBundle() {
       assert.equal(fencePasswordRotated, true);
     },
@@ -92,4 +99,19 @@ test("a pre-generated source-fence URL is consumed only after its scoped role ex
   );
   assert.equal(events[0], "portfolio-pre-migration.sql");
   assert.equal(events.at(-1), "portfolio-role-acls.sql");
+});
+
+test("bootstrap waits through bounded Supabase password propagation before migrations", async () => {
+  let attempts = 0;
+  const sleeps: number[] = [];
+  await waitForCredentialPropagation(
+    "portfolio_migrator_login",
+    async () => {
+      attempts += 1;
+      return attempts === 3;
+    },
+    async (milliseconds) => { sleeps.push(milliseconds); },
+  );
+  assert.equal(attempts, 3);
+  assert.deepEqual(sleeps, [5_000, 5_000]);
 });

@@ -30,10 +30,14 @@ const LOGIN_URLS = [
   ["portfolio_legacy_reader_login", "LEGACY_READER_DATABASE_URL"],
   ["portfolio_fence_login", "SOURCE_FENCE_DATABASE_URL"],
 ] as const;
+const LOGIN_PROPAGATION_ATTEMPTS = 72;
+const LOGIN_PROPAGATION_INTERVAL_MS = 5_000;
+type Sleep = (milliseconds: number) => Promise<void>;
 
 export interface DatabaseBootstrapDependencies {
   executeAdministratorSql(filename: string, sql: string): Promise<void>;
   rotateLoginPassword(role: string, password: string): Promise<void>;
+  waitForLoginCredentials(bundle: PortfolioDatabaseBootstrapBundle): Promise<void>;
   runMigrationsFromBundle(bundle: PortfolioDatabaseBootstrapBundle, imageDigestUri: string): Promise<void>;
   verifyScopedBoundaries(bundle: PortfolioDatabaseBootstrapBundle): Promise<void>;
 }
@@ -104,6 +108,50 @@ async function withClient(
   }
 }
 
+function isPostgresAuthenticationFailure(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return error.code === "28P01" || error.code === "28000";
+}
+
+export async function waitForCredentialPropagation(
+  role: (typeof LOGIN_URLS)[number][0],
+  probe: () => Promise<boolean>,
+  sleep: Sleep = async (milliseconds) => await new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<void> {
+  for (let attempt = 1; attempt <= LOGIN_PROPAGATION_ATTEMPTS; attempt += 1) {
+    if (await probe()) return;
+    if (attempt === LOGIN_PROPAGATION_ATTEMPTS) {
+      throw new Error(`Portfolio bootstrap credential did not become usable after rotation: ${role}`);
+    }
+    await sleep(LOGIN_PROPAGATION_INTERVAL_MS);
+  }
+}
+
+async function waitForScopedLogin(
+  bundle: PortfolioDatabaseBootstrapBundle,
+  role: (typeof LOGIN_URLS)[number][0],
+  databaseUrl: string,
+): Promise<void> {
+  const searchPath = role === "portfolio_legacy_reader_login" ? "public" : "portfolio, extensions";
+  const config = connectionConfig(bundle, databaseUrl, role, undefined, searchPath);
+  await waitForCredentialPropagation(role, async () => {
+    try {
+      await withClient(config, async (client) => {
+        const identity = await client.query<{ sessionUser: string; currentUser: string }>(
+          `SELECT session_user AS "sessionUser", current_user AS "currentUser"`,
+        );
+        if (identity.rows[0]?.sessionUser !== role || identity.rows[0]?.currentUser !== role) {
+          throw new Error(`Portfolio bootstrap credential authenticated as an unexpected role: ${role}`);
+        }
+      });
+      return true;
+    } catch (error) {
+      if (!isPostgresAuthenticationFailure(error)) throw error;
+      return false;
+    }
+  });
+}
+
 function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): DatabaseBootstrapDependencies {
   const adminConfig = connectionConfig(bundle, bundle.DATABASE_ADMIN_URL, "postgres");
   return {
@@ -121,6 +169,11 @@ function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): Datab
         if (!statement) throw new Error("Portfolio login password rotation statement was not generated");
         await client.query(statement);
       });
+    },
+    async waitForLoginCredentials(value) {
+      for (const [role, key] of LOGIN_URLS) {
+        await waitForScopedLogin(value, role, value[key]);
+      }
     },
     runMigrationsFromBundle: spawnMigrations,
     async verifyScopedBoundaries(value) {
@@ -186,6 +239,7 @@ export async function runDatabaseBootstrap(
   for (const [role, key] of LOGIN_URLS) {
     await actions.rotateLoginPassword(role, passwordFromUrl(bundle[key]));
   }
+  await actions.waitForLoginCredentials(bundle);
   await actions.runMigrationsFromBundle(bundle, imageDigestUri);
   await actions.executeAdministratorSql("portfolio-role-acls.sql", post);
   await actions.verifyScopedBoundaries(bundle);
