@@ -241,7 +241,7 @@ test("runtime boundary uses an explicit namespace allowlist and exact ACL catalo
   );
   assert.match(
     statement,
-    /has_schema_privilege\(current_user, 'extensions', 'USAGE'\)/,
+    /has_schema_privilege\(current_user, vector_extension\.extnamespace, 'USAGE'\)/,
   );
   assert.match(
     statement,
@@ -250,6 +250,50 @@ test("runtime boundary uses an explicit namespace allowlist and exact ACL catalo
   assert.match(statement, /FROM pg_extension/);
   assert.match(statement, /extension\.extname = 'vector'/);
   assert.match(statement, /type\.typrelid = 0/);
+});
+
+test("LOGIN transition permits only scalar types owned by the vector extension", async () => {
+  const base = queryable();
+  let loginStatement = "";
+  await assertRuntimeDatabaseSession({
+    async query(text: string) {
+      if (text.includes('AS "loginCanLogin"')) loginStatement = text;
+      return base.query(text);
+    },
+  });
+
+  assert.match(loginStatement, /dependency\.classid = 'pg_type'::regclass/);
+  assert.match(loginStatement, /dependency\.refclassid = 'pg_extension'::regclass/);
+  assert.match(loginStatement, /dependency\.refobjid = \(SELECT oid FROM vector_extension\)/);
+  assert.match(loginStatement, /dependency\.deptype = 'e'/);
+  assert.doesNotMatch(loginStatement, /type\.typname = 'vector'/);
+});
+
+test("capability boundary follows the managed vector schema and ignores only extension-owned public routines", async () => {
+  const base = queryable();
+  let capabilityStatement = "";
+  await assertRuntimeDatabaseSession({
+    async query(text: string) {
+      if (text.includes('AS "roleExists"')) capabilityStatement = text;
+      return base.query(text);
+    },
+  });
+
+  assert.match(capabilityStatement, /extension\.extnamespace/);
+  assert.match(
+    capabilityStatement,
+    /has_schema_privilege\(current_user, vector_extension\.extnamespace, 'USAGE'\)/,
+  );
+  assert.match(
+    capabilityStatement,
+    /privilege\.nspname = \(SELECT nspname FROM vector_extension\)/,
+  );
+  const publicAccess = capabilityStatement.slice(
+    capabilityStatement.indexOf("has_schema_privilege(current_user, 'public', 'USAGE') AND ("),
+    capabilityStatement.indexOf('AS "hasPublicObjectAccess"'),
+  );
+  assert.match(publicAccess, /dependency\.classid = 'pg_proc'::regclass/);
+  assert.match(publicAccess, /dependency\.refobjid = \(SELECT oid FROM vector_extension\)/);
 });
 
 test("legal writer accepts INSERT-only legal history access without SELECT", async () => {
