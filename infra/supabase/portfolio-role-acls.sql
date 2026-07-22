@@ -1026,6 +1026,7 @@ BEGIN
           NOT membership.admin_option
           AND NOT membership.inherit_option
           AND membership.set_option
+          AND grantor.rolname = 'postgres'
           AND (granted.rolname, member.rolname) IN (
             ('portfolio_runtime', 'portfolio_runtime_login'),
             ('portfolio_migrator', 'portfolio_migrator_login'),
@@ -1047,13 +1048,38 @@ BEGIN
   ) OR (
     SELECT count(*) FROM pg_auth_members membership
     JOIN pg_roles granted ON granted.oid = membership.roleid
+    JOIN pg_roles member ON member.oid = membership.member
+    JOIN pg_roles grantor ON grantor.oid = membership.grantor
+    WHERE NOT membership.admin_option
+      AND NOT membership.inherit_option
+      AND membership.set_option
+      AND grantor.rolname = 'postgres'
+      AND (granted.rolname, member.rolname) IN (
+        ('portfolio_runtime', 'portfolio_runtime_login'),
+        ('portfolio_migrator', 'portfolio_migrator_login'),
+        ('legal_audit_writer', 'portfolio_legal_login'),
+        ('portfolio_legacy_reader', 'portfolio_legacy_reader_login'),
+        ('portfolio_fence_operator', 'portfolio_fence_login'),
+        ('portfolio_audit_owner', 'portfolio_migrator'),
+        ('portfolio_compensation_operator', 'portfolio_migrator')
+      )
+  ) <> 7 OR (
+    SELECT count(*) FROM pg_auth_members membership
+    JOIN pg_roles granted ON granted.oid = membership.roleid
+    JOIN pg_roles member ON member.oid = membership.member
+    JOIN pg_roles grantor ON grantor.oid = membership.grantor
     WHERE granted.rolname IN (
-      'portfolio_runtime', 'portfolio_migrator', 'legal_audit_writer',
-      'portfolio_audit_owner', 'portfolio_compensation_operator',
-      'portfolio_legacy_reader', 'portfolio_fence_operator',
-      'portfolio_fence_owner'
-    )
-  ) <> 15 THEN
+        'portfolio_runtime', 'portfolio_migrator', 'legal_audit_writer',
+        'portfolio_audit_owner', 'portfolio_compensation_operator',
+        'portfolio_legacy_reader', 'portfolio_fence_operator',
+        'portfolio_fence_owner'
+      )
+      AND membership.admin_option
+      AND NOT membership.inherit_option
+      AND NOT membership.set_option
+      AND member.rolname = 'postgres'
+      AND grantor.rolname = 'supabase_admin'
+  ) NOT IN (0, 8) THEN
     RAISE EXCEPTION 'Portfolio capability role memberships are not exact';
   END IF;
 

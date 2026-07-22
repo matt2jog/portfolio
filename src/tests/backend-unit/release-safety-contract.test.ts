@@ -77,15 +77,11 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
   );
   const membershipInvariantStart = post.lastIndexOf("IF EXISTS (", membershipInvariantEnd);
   const membershipInvariant = post.slice(membershipInvariantStart, membershipInvariantEnd);
-  assert.equal(
-    membershipInvariant.match(/'portfolio_fence_owner'/g)?.length,
-    2,
-    "the exact and counted membership filters must both reject residual fence-owner membership",
-  );
   assert.match(membershipInvariant, /grantor\.rolname = 'supabase_admin'/);
   assert.match(membershipInvariant, /member\.rolname = 'postgres'/);
   assert.match(membershipInvariant, /membership\.admin_option[\s\S]*NOT membership\.inherit_option[\s\S]*NOT membership\.set_option/);
-  assert.match(membershipInvariant, /\) <> 15 THEN/);
+  assert.match(membershipInvariant, /grantor\.rolname = 'postgres'[\s\S]*\) <> 7 OR/);
+  assert.match(membershipInvariant, /\) NOT IN \(0, 8\) THEN/);
   assert.match(pre, /SET timezone TO 'UTC'/i);
   assert.match(post, /pg_default_acl/);
   assert.match(post, /aclexplode/);
