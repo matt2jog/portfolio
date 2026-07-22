@@ -49,10 +49,12 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = extension.extnamespace
     JOIN pg_roles owner ON owner.oid = extension.extowner
     WHERE extension.extname = 'vector'
-      AND namespace.nspname = 'extensions'
-      AND owner.rolname = 'postgres'
+      AND (
+        (namespace.nspname = 'extensions' AND owner.rolname = 'postgres')
+        OR (namespace.nspname = 'public' AND owner.rolname = 'supabase_admin')
+      )
   ) THEN
-    RAISE EXCEPTION 'vector must exist in extensions and be owned by postgres';
+    RAISE EXCEPTION 'vector must match the local or managed Supabase pgvector contract';
   END IF;
   IF NOT EXISTS (
     SELECT 1
@@ -61,10 +63,12 @@ BEGIN
     JOIN pg_roles owner ON owner.oid = type.typowner
     WHERE type.typname = 'vector'
       AND type.typrelid = 0
-      AND namespace.nspname = 'extensions'
-      AND owner.rolname = 'postgres'
+      AND (
+        (namespace.nspname = 'extensions' AND owner.rolname = 'postgres')
+        OR (namespace.nspname = 'public' AND owner.rolname = 'supabase_admin')
+      )
   ) THEN
-    RAISE EXCEPTION 'extensions.vector must be owned by postgres';
+    RAISE EXCEPTION 'vector type must match the local or managed Supabase pgvector contract';
   END IF;
 END
 $$;
@@ -351,6 +355,167 @@ BEGIN
 END
 $$;
 
+-- Install the dormant, lease-based source fence only after the canonical
+-- migration batch has passed its empty-target fingerprint gate. Keeping these
+-- controls in a dedicated private schema prevents operational state from
+-- becoming Portfolio domain data or poisoning migration evidence.
+CREATE TABLE IF NOT EXISTS portfolio_control.portfolio_source_write_fence_control (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  fence_token text NOT NULL CHECK (fence_token ~ '^[0-9a-f]{64}$'),
+  expires_at timestamptz NOT NULL,
+  committed_at timestamptz,
+  activated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+ALTER TABLE portfolio_control.portfolio_source_write_fence_control
+  OWNER TO portfolio_fence_owner;
+REVOKE ALL ON TABLE portfolio_control.portfolio_source_write_fence_control FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION portfolio_control.portfolio_legacy_write_fence()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+SET TimeZone = 'UTC'
+AS $function$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM portfolio_control.portfolio_source_write_fence_control
+    WHERE singleton
+      AND (committed_at IS NOT NULL OR expires_at > clock_timestamp())
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = 'Legacy public Portfolio data authority is fenced';
+  END IF;
+  RETURN NULL;
+END
+$function$;
+ALTER FUNCTION portfolio_control.portfolio_legacy_write_fence()
+  OWNER TO portfolio_fence_owner;
+REVOKE ALL ON FUNCTION portfolio_control.portfolio_legacy_write_fence() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION portfolio_control.activate_portfolio_source_write_fence(
+  requested_token text,
+  requested_lifetime_seconds integer
+) RETURNS TABLE (fence_token text, expires_at timestamptz)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+SET TimeZone = 'UTC'
+AS $function$
+BEGIN
+  IF requested_token !~ '^[0-9a-f]{64}$'
+     OR requested_lifetime_seconds < 300
+     OR requested_lifetime_seconds > 1800 THEN
+    RAISE EXCEPTION 'Invalid Portfolio source-fence lease request';
+  END IF;
+  DELETE FROM portfolio_control.portfolio_source_write_fence_control
+  WHERE committed_at IS NULL AND expires_at <= clock_timestamp();
+  IF EXISTS (
+    SELECT 1 FROM portfolio_control.portfolio_source_write_fence_control
+  ) THEN
+    RAISE EXCEPTION 'A Portfolio source-fence lease is already active or committed';
+  END IF;
+  INSERT INTO portfolio_control.portfolio_source_write_fence_control
+    (singleton, fence_token, expires_at)
+  VALUES (
+    true,
+    requested_token,
+    clock_timestamp() + make_interval(secs => requested_lifetime_seconds)
+  );
+  RETURN QUERY
+    SELECT control.fence_token, control.expires_at
+    FROM portfolio_control.portfolio_source_write_fence_control control;
+END
+$function$;
+ALTER FUNCTION portfolio_control.activate_portfolio_source_write_fence(text, integer)
+  OWNER TO portfolio_fence_owner;
+REVOKE ALL ON FUNCTION portfolio_control.activate_portfolio_source_write_fence(text, integer)
+  FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION portfolio_control.abort_portfolio_source_write_fence(
+  requested_token text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+SET TimeZone = 'UTC'
+AS $function$
+DECLARE removed integer;
+BEGIN
+  DELETE FROM portfolio_control.portfolio_source_write_fence_control
+  WHERE fence_token = requested_token AND committed_at IS NULL;
+  GET DIAGNOSTICS removed = ROW_COUNT;
+  RETURN removed = 1 OR NOT EXISTS (
+    SELECT 1 FROM portfolio_control.portfolio_source_write_fence_control
+  );
+END
+$function$;
+ALTER FUNCTION portfolio_control.abort_portfolio_source_write_fence(text)
+  OWNER TO portfolio_fence_owner;
+REVOKE ALL ON FUNCTION portfolio_control.abort_portfolio_source_write_fence(text)
+  FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION portfolio_control.commit_portfolio_source_write_fence(
+  requested_token text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+SET TimeZone = 'UTC'
+AS $function$
+DECLARE changed integer;
+BEGIN
+  UPDATE portfolio_control.portfolio_source_write_fence_control
+  SET committed_at = clock_timestamp(), expires_at = 'infinity'::timestamptz
+  WHERE fence_token = requested_token
+    AND committed_at IS NULL
+    AND expires_at > clock_timestamp();
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  RETURN changed = 1;
+END
+$function$;
+ALTER FUNCTION portfolio_control.commit_portfolio_source_write_fence(text)
+  OWNER TO portfolio_fence_owner;
+REVOKE ALL ON FUNCTION portfolio_control.commit_portfolio_source_write_fence(text)
+  FROM PUBLIC;
+
+DO $triggers$
+DECLARE table_name text;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY[
+    'admin_policy_acceptance', 'ai_models', 'all_skills', 'audit_logs',
+    'bio', 'bio_paragraphs', 'browser_request_logs', 'browser_tracking',
+    'browser_tracking_ips', 'education', 'experiences',
+    'github_timeline_events', 'ip_rate_logs', 'legal_document_versions',
+    'linkedin_timeline_events', 'personal_information', 'portfolio_skills',
+    'projects', 'session', 'skills_group', 'users', 'welcome_messages',
+    'xyz_bullets'
+  ]
+  LOOP
+    IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
+      EXECUTE format(
+        'DROP TRIGGER IF EXISTS portfolio_legacy_write_fence_row ON public.%I',
+        table_name
+      );
+      EXECUTE format(
+        'DROP TRIGGER IF EXISTS portfolio_legacy_write_fence_truncate ON public.%I',
+        table_name
+      );
+      EXECUTE format(
+        'CREATE TRIGGER portfolio_legacy_write_fence_row BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION portfolio_control.portfolio_legacy_write_fence()',
+        table_name
+      );
+      EXECUTE format(
+        'CREATE TRIGGER portfolio_legacy_write_fence_truncate BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION portfolio_control.portfolio_legacy_write_fence()',
+        table_name
+      );
+    END IF;
+  END LOOP;
+END
+$triggers$;
+
 DO $$
 BEGIN
   IF to_regclass('portfolio.database_mutation_audit') IS NULL THEN
@@ -364,14 +529,27 @@ $$;
 GRANT USAGE ON SCHEMA portfolio TO portfolio_runtime, legal_audit_writer;
 GRANT USAGE ON SCHEMA portfolio
   TO portfolio_audit_owner, portfolio_compensation_operator;
-GRANT USAGE ON SCHEMA extensions
-  TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
-GRANT USAGE ON SCHEMA public TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.activate_portfolio_source_write_fence(text, integer)
+DO $$
+BEGIN
+  GRANT USAGE ON SCHEMA extensions
+    TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  IF to_regtype('extensions.vector') IS NOT NULL THEN
+    GRANT USAGE ON TYPE extensions.vector
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  ELSE
+    GRANT USAGE ON SCHEMA public
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+    GRANT USAGE ON TYPE public.vector
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  END IF;
+END
+$$;
+GRANT USAGE ON SCHEMA portfolio_control TO portfolio_fence_operator;
+GRANT EXECUTE ON FUNCTION portfolio_control.activate_portfolio_source_write_fence(text, integer)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.abort_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio_control.abort_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.commit_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio_control.commit_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
 
 DO $$
@@ -856,9 +1034,9 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_db_role_setting settings
     CROSS JOIN LATERAL unnest(settings.setconfig) configuration
-    WHERE configuration ~* '^pgrst\.db_schemas=.*(^|[, ])(portfolio|resume)([, ]|$)'
+    WHERE configuration ~* '^pgrst\.db_schemas=.*(^|[, ])(portfolio|portfolio_control|resume)([, ]|$)'
   ) THEN
-    RAISE EXCEPTION 'Private portfolio/resume schema is exposed through the Data API';
+    RAISE EXCEPTION 'Private portfolio/control/resume schema is exposed through the Data API';
   END IF;
 END
 $$;

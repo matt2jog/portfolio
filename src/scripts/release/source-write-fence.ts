@@ -40,7 +40,7 @@ export async function activateSourceWriteFence(
   }
   const activated = await client.query(
     `SELECT fence_token AS "fenceToken", expires_at AS "expiresAt"
-     FROM public.activate_portfolio_source_write_fence($1::text, $2::integer)`,
+     FROM portfolio_control.activate_portfolio_source_write_fence($1::text, $2::integer)`,
     [fenceToken, lifetimeSeconds],
   );
   const lease = record(activated.rows[0]);
@@ -80,7 +80,7 @@ export async function activateSourceWriteFence(
 
 export async function abortSourceWriteFence(client: SourceFenceQueryable, fenceToken: string): Promise<void> {
   const result = await client.query(
-    `SELECT public.abort_portfolio_source_write_fence($1::text) AS accepted`,
+    `SELECT portfolio_control.abort_portfolio_source_write_fence($1::text) AS accepted`,
     [exactToken(fenceToken)],
   );
   if (record(result.rows[0]).accepted !== true) {
@@ -90,7 +90,7 @@ export async function abortSourceWriteFence(client: SourceFenceQueryable, fenceT
 
 export async function commitSourceWriteFence(client: SourceFenceQueryable, fenceToken: string): Promise<void> {
   const result = await client.query(
-    `SELECT public.commit_portfolio_source_write_fence($1::text) AS accepted`,
+    `SELECT portfolio_control.commit_portfolio_source_write_fence($1::text) AS accepted`,
     [exactToken(fenceToken)],
   );
   if (record(result.rows[0]).accepted !== true) {

@@ -8,7 +8,12 @@ const MIGRATION_TAG = /^\d{4}_[a-z0-9_]+$/;
 const MIGRATION_LOCK_ID = "7166271023188393201";
 const ACTUAL_SEARCH_PATH = "portfolio, extensions, pg_temp";
 const EXPECTED_SEARCH_PATH = "pg_temp, extensions";
-const VECTOR_EXTENSION_OWNER = "postgres";
+const MANAGED_ACTUAL_SEARCH_PATH = "portfolio, public, extensions, pg_temp";
+const MANAGED_EXPECTED_SEARCH_PATH = "pg_temp, public, extensions";
+const VECTOR_EXTENSION_CONTRACTS = [
+  { schemaName: "extensions", owner: "postgres" },
+  { schemaName: "public", owner: "supabase_admin" },
+] as const;
 
 interface JournalEntry {
   idx: number;
@@ -818,6 +823,7 @@ async function schemaFingerprint(
   schemaOid: string,
   searchPath: string,
   expectedSchemaOwner: string,
+  temporary: boolean,
 ): Promise<FingerprintRow[]> {
   await client.query(`SET LOCAL search_path = ${searchPath}`);
   const result = await client.query<FingerprintRow>(SCHEMA_FINGERPRINT_SQL, [
@@ -836,7 +842,7 @@ async function schemaFingerprint(
   }
   return result.rows.map((row) => ({
     ...row,
-    definition: searchPath === EXPECTED_SEARCH_PATH
+    definition: temporary
       ? row.definition.replaceAll("pg_temp.", "<schema>.")
       : row.definition,
   }));
@@ -851,19 +857,23 @@ async function assertSchemaFingerprint(
   actualSchemaOid: string,
   expectedSchemaOid: string,
   migrationCount: number,
+  actualSearchPath: string,
+  expectedSearchPath: string,
 ): Promise<void> {
   const expectedSchemaOwner = "portfolio_migrator";
   const actual = await schemaFingerprint(
     client,
     actualSchemaOid,
-    ACTUAL_SEARCH_PATH,
+    actualSearchPath,
     expectedSchemaOwner,
+    false,
   );
   const expected = await schemaFingerprint(
     client,
     expectedSchemaOid,
-    EXPECTED_SEARCH_PATH,
+    expectedSearchPath,
     expectedSchemaOwner,
+    true,
   );
   const actualDigest = fingerprintDigest(actual);
   const expectedDigest = fingerprintDigest(expected);
@@ -971,19 +981,29 @@ export async function applyPortfolioMigrations(
       JOIN pg_available_extensions available ON available.name = extension.extname
       WHERE extension.extname = 'vector'
     `);
+    const vectorContract = VECTOR_EXTENSION_CONTRACTS.some(
+      (contract) =>
+        contract.schemaName === vectorExtension.rows[0]?.schemaName
+        && contract.owner === vectorExtension.rows[0]?.owner,
+    );
     if (
       vectorExtension.rows.length !== 1 ||
-      vectorExtension.rows[0]?.schemaName !== "extensions" ||
-      vectorExtension.rows[0]?.owner !== VECTOR_EXTENSION_OWNER ||
+      !vectorContract ||
       vectorExtension.rows[0]?.version !==
         vectorExtension.rows[0]?.defaultVersion ||
       vectorExtension.rows[0]?.relocatable !== true
     ) {
       throw new Error(
-        `The vector extension must be isolated in extensions, owned by ${VECTOR_EXTENSION_OWNER}, ` +
-          "relocatable, and installed at the platform default version",
+        "The vector extension must match the local or managed Supabase pgvector contract, " +
+          "remain relocatable, and use the platform default version",
       );
     }
+    const actualSearchPath = vectorExtension.rows[0]?.schemaName === "public"
+      ? MANAGED_ACTUAL_SEARCH_PATH
+      : ACTUAL_SEARCH_PATH;
+    const expectedSearchPath = vectorExtension.rows[0]?.schemaName === "public"
+      ? MANAGED_EXPECTED_SEARCH_PATH
+      : EXPECTED_SEARCH_PATH;
 
     await client.query("SET LOCAL search_path = portfolio, extensions");
     await createLedgerTable(client, false);
@@ -1007,7 +1027,7 @@ export async function applyPortfolioMigrations(
       );
     }
 
-    await client.query(`SET LOCAL search_path = ${EXPECTED_SEARCH_PATH}`);
+    await client.query(`SET LOCAL search_path = ${expectedSearchPath}`);
     await createLedgerTable(client, true);
     await applyStatements(client, plan.slice(0, completed));
     const expectedSchema = await client.query<{ oid: string }>(
@@ -1026,15 +1046,17 @@ export async function applyPortfolioMigrations(
       actualSchema.rows[0].oid,
       expectedSchema.rows[0].oid,
       completed,
+      actualSearchPath,
+      expectedSearchPath,
     );
 
     let applied = 0;
     for (let index = completed; index < plan.length; index++) {
       const migration = plan[index];
-      await client.query(`SET LOCAL search_path = ${ACTUAL_SEARCH_PATH}`);
+      await client.query(`SET LOCAL search_path = ${actualSearchPath}`);
       await applyStatements(client, [migration]);
       await insertLedgerRow(client, migration);
-      await client.query(`SET LOCAL search_path = ${EXPECTED_SEARCH_PATH}`);
+      await client.query(`SET LOCAL search_path = ${expectedSearchPath}`);
       await applyStatements(client, [migration]);
       applied++;
     }
@@ -1044,6 +1066,8 @@ export async function applyPortfolioMigrations(
         actualSchema.rows[0].oid,
         expectedSchema.rows[0].oid,
         plan.length,
+        actualSearchPath,
+        expectedSearchPath,
       );
     }
     await client.query("DISCARD TEMP");
