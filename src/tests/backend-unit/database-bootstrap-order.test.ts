@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  connectWithSupabaseRetry,
   runDatabaseBootstrap,
   waitForCredentialPropagation,
   type DatabaseBootstrapDependencies,
@@ -114,4 +115,40 @@ test("bootstrap waits through bounded Supabase password propagation before migra
   );
   assert.equal(attempts, 3);
   assert.deepEqual(sleeps, [5_000, 5_000]);
+});
+
+test("bootstrap retries only transient Supabase pooler connection failures", async () => {
+  let attempts = 0;
+  let closed = 0;
+  const sleeps: number[] = [];
+  const client = await connectWithSupabaseRetry(
+    () => ({
+      async connect() {
+        attempts += 1;
+        if (attempts === 1) throw Object.assign(new Error("connection refused"), { code: "08006" });
+        if (attempts === 2) throw Object.assign(new Error("auth_query secret check timed out"), { code: "XX000" });
+      },
+      async end() { closed += 1; },
+    }),
+    async (milliseconds) => { sleeps.push(milliseconds); },
+  );
+  assert.equal(attempts, 3);
+  assert.equal(closed, 2);
+  assert.deepEqual(sleeps, [5_000, 5_000]);
+  await client.end();
+});
+
+test("bootstrap fails immediately for non-transient credential errors", async () => {
+  let attempts = 0;
+  await assert.rejects(connectWithSupabaseRetry(
+    () => ({
+      async connect() {
+        attempts += 1;
+        throw Object.assign(new Error("password authentication failed"), { code: "28P01" });
+      },
+      async end() {},
+    }),
+    async () => assert.fail("non-transient failures must not sleep"),
+  ), /password authentication failed/);
+  assert.equal(attempts, 1);
 });

@@ -32,7 +32,14 @@ const LOGIN_URLS = [
 ] as const;
 const LOGIN_PROPAGATION_ATTEMPTS = 72;
 const LOGIN_PROPAGATION_INTERVAL_MS = 5_000;
+const CONNECTION_ATTEMPTS = 6;
+const CONNECTION_INTERVAL_MS = 5_000;
+const CONNECTION_TIMEOUT_MS = 15_000;
 type Sleep = (milliseconds: number) => Promise<void>;
+interface ConnectableClient {
+  connect(): Promise<unknown>;
+  end(): Promise<void>;
+}
 
 export interface DatabaseBootstrapDependencies {
   executeAdministratorSql(filename: string, sql: string): Promise<void>;
@@ -49,15 +56,18 @@ function connectionConfig(
   capabilityRole?: string,
   searchPath: "portfolio, extensions" | "public" = "portfolio, extensions",
 ) {
-  return productionSupabaseConnectionConfig({
-    databaseUrl,
-    projectRef: bundle.SUPABASE_PROJECT_REF,
-    supabaseCaCert: bundle.SUPABASE_CA_CERT,
-    expectedCaSha256: bundle.SUPABASE_CA_SHA256,
-    expectedRole,
-    capabilityRole,
-    searchPath,
-  });
+  return {
+    ...productionSupabaseConnectionConfig({
+      databaseUrl,
+      projectRef: bundle.SUPABASE_PROJECT_REF,
+      supabaseCaCert: bundle.SUPABASE_CA_CERT,
+      expectedCaSha256: bundle.SUPABASE_CA_SHA256,
+      expectedRole,
+      capabilityRole,
+      searchPath,
+    }),
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+  };
 }
 
 async function spawnMigrations(
@@ -99,13 +109,41 @@ async function withClient(
   config: ReturnType<typeof connectionConfig>,
   action: (client: Client) => Promise<void>,
 ): Promise<void> {
-  const client = new Client(config);
-  await client.connect();
+  const client = await connectWithSupabaseRetry(() => new Client(config));
   try {
     await action(client);
   } finally {
     await client.end();
   }
+}
+
+function transientConnectionFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = "code" in error ? String(error.code) : "";
+  if (code.startsWith("08")) return true;
+  if (["57P03", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT"].includes(code)) return true;
+  return code === "XX000" && /auth_query|econnrefused|timed? out/i.test(error.message);
+}
+
+export async function connectWithSupabaseRetry<T extends ConnectableClient>(
+  createClient: () => T,
+  sleep: Sleep = async (milliseconds) => await new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<T> {
+  for (let attempt = 1; attempt <= CONNECTION_ATTEMPTS; attempt += 1) {
+    const client = createClient();
+    try {
+      await client.connect();
+      return client;
+    } catch (error) {
+      await client.end().catch(() => undefined);
+      if (!transientConnectionFailure(error)) throw error;
+      if (attempt === CONNECTION_ATTEMPTS) {
+        throw new Error(`Portfolio Supabase pooler remained unavailable after ${CONNECTION_ATTEMPTS} connection attempts`);
+      }
+      await sleep(CONNECTION_INTERVAL_MS);
+    }
+  }
+  throw new Error("Portfolio Supabase connection retry policy was exhausted");
 }
 
 function isPostgresAuthenticationFailure(error: unknown): boolean {

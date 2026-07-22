@@ -160,7 +160,9 @@ jobs:
           set -euo pipefail
           service_json="$(gcloud run services describe "$SERVICE_NAME" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format=json)"
           previous_revision="$(jq -er '[.status.traffic[] | select(.percent == 100) | .revisionName] | if length == 1 then .[0] else error("expected one serving revision") end' <<<"$service_json")"
-          previous_digest="$(gcloud run revisions describe "$previous_revision" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='value(status.imageDigest)')"
+          previous_image="$(gcloud run revisions describe "$previous_revision" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='value(status.imageDigest)')"
+          [[ "$previous_image" =~ @sha256:[0-9a-f]{64}$ ]]
+          previous_digest="${previous_image##*@}"
           case "$PORTFOLIO_PREVIOUS_REVISION_COMPATIBILITY" in
             public-only)
               [[ "$PORTFOLIO_PUBLIC_ONLY_BASELINE_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]

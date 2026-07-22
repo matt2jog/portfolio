@@ -203,6 +203,8 @@ test("bootstrap owns administrator reconciliation while deploy gates the migrato
   assert.match(workflow, /PORTFOLIO_CUTOVER_EVIDENCE_RUN_ID/);
   assert.match(workflow, /PORTFOLIO_CUTOVER_EVIDENCE_SHA256/);
   assert.match(workflow, /portfolio-release-record/);
+  assert.match(workflow, /previous_image=.*status\.imageDigest/);
+  assert.match(workflow, /previous_digest="\$\{previous_image##\*@\}"/);
 });
 
 test("authority cutover binds evidence and disables rollback to a public writer", () => {

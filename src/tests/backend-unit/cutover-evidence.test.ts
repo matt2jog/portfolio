@@ -31,7 +31,6 @@ function validEvidence(): FinalCutoverEvidence {
       snapshotDigest: "d".repeat(64),
       producerRelease: "e".repeat(40),
       capturedAt: "2026-07-15T19:59:00.000Z",
-      resumeCutoverComplete: true,
     },
     careerCheckpoint: {
       generation: "generation-42",
@@ -67,7 +66,7 @@ test("final cutover evidence is canonical, digest-bound, and fail-closed", () =>
     { ...evidence, tables: [] },
     { ...evidence, careerCheckpoint: { ...evidence.careerCheckpoint, gapCount: 1 } },
     { ...evidence, writeFence: { ...evidence.writeFence, active: false } },
-    { ...evidence, adminSnapshot: { ...evidence.adminSnapshot, resumeCutoverComplete: false } },
+    { ...evidence, adminSnapshot: { ...evidence.adminSnapshot, resumeCutoverComplete: true } },
   ]) {
     assert.throws(() => parseFinalCutoverEvidence(JSON.stringify(invalid), {
       expectedProjectRef: "qvbpgvazqfyhwjsfulsb",
