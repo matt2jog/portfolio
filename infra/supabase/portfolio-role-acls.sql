@@ -49,10 +49,12 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = extension.extnamespace
     JOIN pg_roles owner ON owner.oid = extension.extowner
     WHERE extension.extname = 'vector'
-      AND namespace.nspname = 'extensions'
-      AND owner.rolname = 'postgres'
+      AND (
+        (namespace.nspname = 'extensions' AND owner.rolname = 'postgres')
+        OR (namespace.nspname = 'public' AND owner.rolname = 'supabase_admin')
+      )
   ) THEN
-    RAISE EXCEPTION 'vector must exist in extensions and be owned by postgres';
+    RAISE EXCEPTION 'vector must match the local or managed Supabase pgvector contract';
   END IF;
   IF NOT EXISTS (
     SELECT 1
@@ -61,10 +63,12 @@ BEGIN
     JOIN pg_roles owner ON owner.oid = type.typowner
     WHERE type.typname = 'vector'
       AND type.typrelid = 0
-      AND namespace.nspname = 'extensions'
-      AND owner.rolname = 'postgres'
+      AND (
+        (namespace.nspname = 'extensions' AND owner.rolname = 'postgres')
+        OR (namespace.nspname = 'public' AND owner.rolname = 'supabase_admin')
+      )
   ) THEN
-    RAISE EXCEPTION 'extensions.vector must be owned by postgres';
+    RAISE EXCEPTION 'vector type must match the local or managed Supabase pgvector contract';
   END IF;
 END
 $$;
@@ -364,14 +368,27 @@ $$;
 GRANT USAGE ON SCHEMA portfolio TO portfolio_runtime, legal_audit_writer;
 GRANT USAGE ON SCHEMA portfolio
   TO portfolio_audit_owner, portfolio_compensation_operator;
-GRANT USAGE ON SCHEMA extensions
-  TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
-GRANT USAGE ON SCHEMA public TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.activate_portfolio_source_write_fence(text, integer)
+DO $$
+BEGIN
+  GRANT USAGE ON SCHEMA extensions
+    TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  IF to_regtype('extensions.vector') IS NOT NULL THEN
+    GRANT USAGE ON TYPE extensions.vector
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  ELSE
+    GRANT USAGE ON SCHEMA public
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+    GRANT USAGE ON TYPE public.vector
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  END IF;
+END
+$$;
+GRANT USAGE ON SCHEMA portfolio TO portfolio_fence_operator;
+GRANT EXECUTE ON FUNCTION portfolio.activate_portfolio_source_write_fence(text, integer)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.abort_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio.abort_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.commit_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio.commit_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
 
 DO $$

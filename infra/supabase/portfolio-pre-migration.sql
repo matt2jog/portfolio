@@ -206,12 +206,14 @@ GRANT portfolio_audit_owner, portfolio_compensation_operator
 -- Supabase's managed postgres administrator is not a true superuser. Give the
 -- bootstrap session only the bounded SET ROLE memberships needed to transfer
 -- schema/object ownership and reconcile owner-scoped default privileges. The
+-- membership must be inherited during this bounded bootstrap because Supabase's
+-- managed postgres role cannot ALTER DEFAULT PRIVILEGES through SET-only membership.
 -- post-migration ACL script revokes these memberships before its exact graph
 -- assertion, so they never survive a successful bootstrap.
 GRANT portfolio_migrator, portfolio_audit_owner,
   portfolio_compensation_operator, portfolio_fence_owner
   TO postgres
-  WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+  WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
 
 DO $$
 BEGIN
@@ -294,16 +296,27 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = extension.extnamespace
     JOIN pg_roles owner ON owner.oid = extension.extowner
     WHERE extension.extname = 'vector'
-      AND namespace.nspname = 'extensions'
-      AND owner.rolname = 'postgres'
+      AND (
+        (namespace.nspname = 'extensions' AND owner.rolname = 'postgres')
+        OR (namespace.nspname = 'public' AND owner.rolname = 'supabase_admin')
+      )
   ) THEN
-    RAISE EXCEPTION 'vector must exist in extensions and be owned by postgres';
+    RAISE EXCEPTION 'vector must match the local or managed Supabase pgvector contract';
   END IF;
 END
 $$;
 
-GRANT USAGE ON SCHEMA extensions TO portfolio_migrator;
-GRANT USAGE ON TYPE extensions.vector TO portfolio_migrator;
+DO $$
+BEGIN
+  IF to_regtype('extensions.vector') IS NOT NULL THEN
+    GRANT USAGE ON SCHEMA extensions TO portfolio_migrator;
+    GRANT USAGE ON TYPE extensions.vector TO portfolio_migrator;
+  ELSE
+    GRANT USAGE ON SCHEMA public TO portfolio_migrator;
+    GRANT USAGE ON TYPE public.vector TO portfolio_migrator;
+  END IF;
+END
+$$;
 
 -- PostgreSQL grants PUBLIC routine execution and type usage by default. Establish
 -- the exact global baseline before the first migration so RESET ROLE cannot
@@ -330,17 +343,19 @@ ALTER DEFAULT PRIVILEGES FOR ROLE portfolio_fence_owner
 -- lease through portfolio_fence_operator; they cannot create triggers or use
 -- the postgres administrator. Expired, uncommitted leases fail open so every
 -- pre-authority failure leaves the previous public writer viable.
-CREATE TABLE IF NOT EXISTS public.portfolio_source_write_fence_control (
+GRANT USAGE, CREATE ON SCHEMA portfolio TO portfolio_fence_owner;
+
+CREATE TABLE IF NOT EXISTS portfolio.portfolio_source_write_fence_control (
   singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   fence_token text NOT NULL CHECK (fence_token ~ '^[0-9a-f]{64}$'),
   expires_at timestamptz NOT NULL,
   committed_at timestamptz,
   activated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
-ALTER TABLE public.portfolio_source_write_fence_control OWNER TO portfolio_fence_owner;
-REVOKE ALL ON TABLE public.portfolio_source_write_fence_control FROM PUBLIC;
+ALTER TABLE portfolio.portfolio_source_write_fence_control OWNER TO portfolio_fence_owner;
+REVOKE ALL ON TABLE portfolio.portfolio_source_write_fence_control FROM PUBLIC;
 
-CREATE OR REPLACE FUNCTION public.portfolio_legacy_write_fence()
+CREATE OR REPLACE FUNCTION portfolio.portfolio_legacy_write_fence()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -350,7 +365,7 @@ AS $function$
 BEGIN
   IF EXISTS (
     SELECT 1
-    FROM public.portfolio_source_write_fence_control
+    FROM portfolio.portfolio_source_write_fence_control
     WHERE singleton
       AND (committed_at IS NOT NULL OR expires_at > clock_timestamp())
   ) THEN
@@ -361,10 +376,10 @@ BEGIN
   RETURN NULL;
 END
 $function$;
-ALTER FUNCTION public.portfolio_legacy_write_fence() OWNER TO portfolio_fence_owner;
-REVOKE ALL ON FUNCTION public.portfolio_legacy_write_fence() FROM PUBLIC;
+ALTER FUNCTION portfolio.portfolio_legacy_write_fence() OWNER TO portfolio_fence_owner;
+REVOKE ALL ON FUNCTION portfolio.portfolio_legacy_write_fence() FROM PUBLIC;
 
-CREATE OR REPLACE FUNCTION public.activate_portfolio_source_write_fence(
+CREATE OR REPLACE FUNCTION portfolio.activate_portfolio_source_write_fence(
   requested_token text,
   requested_lifetime_seconds integer
 ) RETURNS TABLE (fence_token text, expires_at timestamptz)
@@ -379,24 +394,24 @@ BEGIN
      OR requested_lifetime_seconds > 1800 THEN
     RAISE EXCEPTION 'Invalid Portfolio source-fence lease request';
   END IF;
-  DELETE FROM public.portfolio_source_write_fence_control
+  DELETE FROM portfolio.portfolio_source_write_fence_control
   WHERE committed_at IS NULL AND expires_at <= clock_timestamp();
-  IF EXISTS (SELECT 1 FROM public.portfolio_source_write_fence_control) THEN
+  IF EXISTS (SELECT 1 FROM portfolio.portfolio_source_write_fence_control) THEN
     RAISE EXCEPTION 'A Portfolio source-fence lease is already active or committed';
   END IF;
-  INSERT INTO public.portfolio_source_write_fence_control
+  INSERT INTO portfolio.portfolio_source_write_fence_control
     (singleton, fence_token, expires_at)
   VALUES (true, requested_token, clock_timestamp() + make_interval(secs => requested_lifetime_seconds));
   RETURN QUERY
     SELECT control.fence_token, control.expires_at
-    FROM public.portfolio_source_write_fence_control control;
+    FROM portfolio.portfolio_source_write_fence_control control;
 END
 $function$;
-ALTER FUNCTION public.activate_portfolio_source_write_fence(text, integer)
+ALTER FUNCTION portfolio.activate_portfolio_source_write_fence(text, integer)
   OWNER TO portfolio_fence_owner;
-REVOKE ALL ON FUNCTION public.activate_portfolio_source_write_fence(text, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portfolio.activate_portfolio_source_write_fence(text, integer) FROM PUBLIC;
 
-CREATE OR REPLACE FUNCTION public.abort_portfolio_source_write_fence(requested_token text)
+CREATE OR REPLACE FUNCTION portfolio.abort_portfolio_source_write_fence(requested_token text)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -405,19 +420,19 @@ SET TimeZone = 'UTC'
 AS $function$
 DECLARE removed integer;
 BEGIN
-  DELETE FROM public.portfolio_source_write_fence_control
+  DELETE FROM portfolio.portfolio_source_write_fence_control
   WHERE fence_token = requested_token AND committed_at IS NULL;
   GET DIAGNOSTICS removed = ROW_COUNT;
   RETURN removed = 1 OR NOT EXISTS (
-    SELECT 1 FROM public.portfolio_source_write_fence_control
+    SELECT 1 FROM portfolio.portfolio_source_write_fence_control
   );
 END
 $function$;
-ALTER FUNCTION public.abort_portfolio_source_write_fence(text)
+ALTER FUNCTION portfolio.abort_portfolio_source_write_fence(text)
   OWNER TO portfolio_fence_owner;
-REVOKE ALL ON FUNCTION public.abort_portfolio_source_write_fence(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portfolio.abort_portfolio_source_write_fence(text) FROM PUBLIC;
 
-CREATE OR REPLACE FUNCTION public.commit_portfolio_source_write_fence(requested_token text)
+CREATE OR REPLACE FUNCTION portfolio.commit_portfolio_source_write_fence(requested_token text)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -426,7 +441,7 @@ SET TimeZone = 'UTC'
 AS $function$
 DECLARE changed integer;
 BEGIN
-  UPDATE public.portfolio_source_write_fence_control
+  UPDATE portfolio.portfolio_source_write_fence_control
   SET committed_at = clock_timestamp(), expires_at = 'infinity'::timestamptz
   WHERE fence_token = requested_token
     AND committed_at IS NULL
@@ -435,15 +450,15 @@ BEGIN
   RETURN changed = 1;
 END
 $function$;
-ALTER FUNCTION public.commit_portfolio_source_write_fence(text)
+ALTER FUNCTION portfolio.commit_portfolio_source_write_fence(text)
   OWNER TO portfolio_fence_owner;
-REVOKE ALL ON FUNCTION public.commit_portfolio_source_write_fence(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portfolio.commit_portfolio_source_write_fence(text) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION public.activate_portfolio_source_write_fence(text, integer)
+GRANT EXECUTE ON FUNCTION portfolio.activate_portfolio_source_write_fence(text, integer)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.abort_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio.abort_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
-GRANT EXECUTE ON FUNCTION public.commit_portfolio_source_write_fence(text)
+GRANT EXECUTE ON FUNCTION portfolio.commit_portfolio_source_write_fence(text)
   TO portfolio_fence_operator;
 
 DO $triggers$
@@ -462,8 +477,8 @@ BEGIN
     IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
       EXECUTE format('DROP TRIGGER IF EXISTS portfolio_legacy_write_fence_row ON public.%I', table_name);
       EXECUTE format('DROP TRIGGER IF EXISTS portfolio_legacy_write_fence_truncate ON public.%I', table_name);
-      EXECUTE format('CREATE TRIGGER portfolio_legacy_write_fence_row BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.portfolio_legacy_write_fence()', table_name);
-      EXECUTE format('CREATE TRIGGER portfolio_legacy_write_fence_truncate BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.portfolio_legacy_write_fence()', table_name);
+      EXECUTE format('CREATE TRIGGER portfolio_legacy_write_fence_row BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION portfolio.portfolio_legacy_write_fence()', table_name);
+      EXECUTE format('CREATE TRIGGER portfolio_legacy_write_fence_truncate BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION portfolio.portfolio_legacy_write_fence()', table_name);
     END IF;
   END LOOP;
 END

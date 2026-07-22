@@ -45,15 +45,15 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
       new RegExp(`FOR ROLE ${owner}[\\s\\S]*REVOKE USAGE ON TYPES FROM PUBLIC`),
     );
   }
-  assert.match(pre, /CREATE TABLE IF NOT EXISTS public\.portfolio_source_write_fence_control/);
+  assert.match(pre, /CREATE TABLE IF NOT EXISTS portfolio\.portfolio_source_write_fence_control/);
   assert.doesNotMatch(
     pre,
-    /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\s+(?!IF\s+NOT\s+EXISTS\s+public\.portfolio_source_write_fence_control\b)/im,
+    /^\s*CREATE\s+(?:TABLE|FUNCTION|VIEW)\s+(?!IF\s+NOT\s+EXISTS\s+portfolio\.portfolio_source_write_fence_control\b)/im,
   );
   assert.match(pre, /CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator/);
   assert.match(
     pre,
-    /GRANT portfolio_migrator, portfolio_audit_owner,\s*portfolio_compensation_operator, portfolio_fence_owner\s+TO postgres\s+WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;/,
+    /GRANT portfolio_migrator, portfolio_audit_owner,\s*portfolio_compensation_operator, portfolio_fence_owner\s+TO postgres\s+WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;/,
   );
   assert.match(
     post,
@@ -92,6 +92,23 @@ test("database bootstrap separates privilege-free logins from NOLOGIN capabiliti
     assert.match(reconciler, /cardinality\(alter_clauses\) > 0/);
     assert.match(reconciler, /'ALTER ROLE %I %s'/);
   }
+});
+
+test("database bootstrap preserves the managed Supabase pgvector installation", () => {
+  const pre = read("infra/supabase/portfolio-pre-migration.sql");
+  const post = read("infra/supabase/portfolio-role-acls.sql");
+  const ledger = read("src/scripts/migration-ledger.ts");
+  const vectorMigration = read("src/migrations/0004_keen_naoko.sql");
+
+  for (const contract of [pre, post, ledger]) {
+    assert.match(contract, /supabase_admin/);
+    assert.match(contract, /public/);
+  }
+  assert.match(vectorMigration, /\bvector\(768\)/);
+  assert.match(ledger, /portfolio, public, extensions, pg_temp/);
+  assert.match(ledger, /pg_temp, public, extensions/);
+  assert.doesNotMatch(`${pre}\n${post}\n${ledger}`, /ALTER EXTENSION vector SET SCHEMA|DROP EXTENSION vector/);
+  assert.match(ledger, /managed Supabase pgvector contract/);
 });
 
 test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {
