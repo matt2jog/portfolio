@@ -7,7 +7,11 @@ import {
 } from "../shared/postgres-tls";
 import { applyPortfolioMigrations, loadMigrationPlan } from "./migration-ledger";
 import { withMigrationTransitionPolicy } from "./migration-transition-policy";
-import { assertProductionMutationAllowed } from "./production-execution-guard";
+import {
+  assertProductionMutationAllowed,
+  DATABASE_BOOTSTRAP_WORKFLOW_REF,
+  DEPLOY_WORKFLOW_REF,
+} from "./production-execution-guard";
 import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-session";
 
 function migrationsFolder(): string {
@@ -21,7 +25,11 @@ async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
   if (process.env.NODE_ENV === "production") {
-    assertProductionMutationAllowed(process.env, "Portfolio database migration");
+    assertProductionMutationAllowed(
+      process.env,
+      "Portfolio database migration",
+      [DEPLOY_WORKFLOW_REF, DATABASE_BOOTSTRAP_WORKFLOW_REF],
+    );
   } else if (!process.env.TEST_DATABASE_URL || databaseUrl !== process.env.TEST_DATABASE_URL) {
     throw new Error("Non-production migration is allowed only against the exact TEST_DATABASE_URL");
   }

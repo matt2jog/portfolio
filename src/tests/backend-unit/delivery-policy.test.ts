@@ -192,6 +192,10 @@ test("production mutation helpers are gated to Portfolio main GitHub Actions", (
   ]) {
     assert.match(read(relativePath), /assertProductionMutationAllowed/);
   }
+  assert.match(
+    read("src/scripts/migrate.ts"),
+    /DEPLOY_WORKFLOW_REF, DATABASE_BOOTSTRAP_WORKFLOW_REF/,
+  );
 
   for (const relativePath of [
     ".github/scripts/deploy-cloud-run.sh",

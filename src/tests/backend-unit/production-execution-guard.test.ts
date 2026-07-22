@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertProductionMutationAllowed,
+  DATABASE_BOOTSTRAP_WORKFLOW_REF,
   DATA_MIGRATION_WORKFLOW_REF,
   isExpectedPortfolioActionsMain,
   LEGAL_AUDIT_WORKFLOW_REF,
@@ -54,6 +55,25 @@ test("one-time data migration identity is accepted only when explicitly requeste
       migrationContext,
       "legacy Portfolio data migration",
       [DATA_MIGRATION_WORKFLOW_REF],
+    ),
+  );
+});
+
+test("one-time database bootstrap identity is accepted only when explicitly requested", () => {
+  const bootstrapContext = {
+    ...expectedContext,
+    GITHUB_WORKFLOW_REF: DATABASE_BOOTSTRAP_WORKFLOW_REF,
+  };
+  assert.equal(isExpectedPortfolioActionsMain(bootstrapContext), false);
+  assert.equal(
+    isExpectedPortfolioActionsMain(bootstrapContext, [DATABASE_BOOTSTRAP_WORKFLOW_REF]),
+    true,
+  );
+  assert.doesNotThrow(() =>
+    assertProductionMutationAllowed(
+      bootstrapContext,
+      "Portfolio one-time database bootstrap",
+      [DATABASE_BOOTSTRAP_WORKFLOW_REF],
     ),
   );
 });
