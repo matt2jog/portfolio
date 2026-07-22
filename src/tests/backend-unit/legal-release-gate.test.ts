@@ -26,7 +26,7 @@ test("production mutation depends on the reusable legal audit gate", () => {
   const release = jobBlock(deploy, "release");
 
   assert.match(gate, /uses:\s*\.\/\.github\/workflows\/legal-audit\.yml/);
-  assert.match(gate, /source_sha:\s*\$\{\{\s*github\.event\.workflow_run\.head_sha\s*\}\}/);
+  assert.match(gate, /source_sha:\s*\$\{\{\s*github\.sha\s*\}\}/);
   assert.match(prepare, /needs:\s*legal_audit/);
   assert.match(release, /needs:\s*prepare_release/);
 });
@@ -100,7 +100,7 @@ test("every direct and reusable legal caller uses its distinct exact-workflow pr
   assert.match(cleanup, /identity_mode:\s*release_cleanup/);
   assert.match(
     workflow,
-    /reusable\)\s+test "\$GITHUB_EVENT_NAME" = "workflow_run"\s+;;/,
+    /reusable\)\s+test "\$GITHUB_EVENT_NAME" = "workflow_dispatch"\s+;;/,
   );
   assert.match(
     workflow,
@@ -108,7 +108,7 @@ test("every direct and reusable legal caller uses its distinct exact-workflow pr
   );
   assert.doesNotMatch(
     reusableMode[1],
-    /(?:push|workflow_dispatch)/,
+    /(?:push|workflow_run)/,
   );
   assert.match(workflow, /test "\$GITHUB_REPOSITORY" = "matt2jog\/portfolio"/);
   assert.match(workflow, /test "\$GITHUB_REF" = "refs\/heads\/main"/);

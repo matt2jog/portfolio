@@ -536,7 +536,7 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   const workflow = read(".github/workflows/deploy.yml");
   const release = read(".github/scripts/deploy-cloud-run.sh");
 
-  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
   assert.match(workflow, /personal-brand-github\/providers\/portfolio-main/);
   assert.match(
     workflow,
@@ -546,9 +546,9 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
     workflow,
     /us-east4-docker\.pkg\.dev\/personal-brand-501801\/portfolio\/portfolio/,
   );
-  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
-  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /IMAGE_RELEASE_RUN_ID:\s*\$\{\{ inputs\.image_build_run_id \}\}/);
   assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
   assert.doesNotMatch(workflow, /docker build/);
   assert.doesNotMatch(workflow, /docker push/);
@@ -955,10 +955,10 @@ test("deployment consumes the exact approved release-image run without rebuildin
   const workflow = read(".github/workflows/deploy.yml");
   const release = read(".github/scripts/deploy-cloud-run.sh");
 
-  assert.match(workflow, /workflow_run:\s*\n\s*workflows:\s*\["Build Approved Release Image"\]/);
-  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.match(workflow, /github\.event\.workflow_run\.head_sha == github\.sha/);
-  assert.match(workflow, /ref:\s*\$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /ref:\s*\$\{\{ github\.sha \}\}/);
   assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
   assert.doesNotMatch(workflow, /docker build/);
   assert.doesNotMatch(workflow, /docker push/);
