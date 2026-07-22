@@ -140,6 +140,18 @@ test("managed ACL reconciliation mutates only objects with explicit Portfolio gr
   assert.match(managedReconciliation, /aclexplode\(type\.typacl\)/);
   assert.match(managedReconciliation, /pg_get_function_identity_arguments\(routine\.oid\)/);
   assert.match(managedReconciliation, /privilege\.grantee IN \(/);
+  for (const ownerBoundary of [
+    /privilege\.grantee <> namespace\.nspowner/,
+    /privilege\.grantee <> object\.relowner/,
+    /privilege\.grantee <> routine\.proowner/,
+    /privilege\.grantee <> type\.typowner/,
+  ]) {
+    assert.match(managedReconciliation, ownerBoundary);
+  }
+  assert.doesNotMatch(
+    managedReconciliation,
+    /FROM portfolio_runtime_login, portfolio_migrator_login/,
+  );
 
   const managedRevokes = [
     ...managedReconciliation.matchAll(

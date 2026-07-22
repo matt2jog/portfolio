@@ -84,11 +84,13 @@ DECLARE
   schema_acl record;
 BEGIN
   FOR schema_acl IN
-    SELECT DISTINCT namespace.nspname
+    SELECT DISTINCT namespace.nspname, target_grantee.rolname AS grantee_name
     FROM pg_namespace namespace
     CROSS JOIN LATERAL aclexplode(namespace.nspacl) privilege
+    JOIN pg_roles target_grantee ON target_grantee.oid = privilege.grantee
     WHERE namespace.nspname <> 'information_schema'
       AND namespace.nspname NOT LIKE 'pg_%'
+      AND privilege.grantee <> namespace.nspowner
       AND privilege.grantee IN (
         SELECT oid FROM pg_roles
         WHERE rolname IN (
@@ -103,8 +105,9 @@ BEGIN
       )
   LOOP
     EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON SCHEMA %I FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner CASCADE',
-      schema_acl.nspname
+      'REVOKE ALL PRIVILEGES ON SCHEMA %I FROM %I CASCADE',
+      schema_acl.nspname,
+      schema_acl.grantee_name
     );
   END LOOP;
 END
@@ -115,13 +118,16 @@ DECLARE
   relation_acl record;
 BEGIN
   FOR relation_acl IN
-    SELECT DISTINCT namespace.nspname, object.relname, object.relkind
+    SELECT DISTINCT namespace.nspname, object.relname, object.relkind,
+      target_grantee.rolname AS grantee_name
     FROM pg_class object
     JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
     CROSS JOIN LATERAL aclexplode(object.relacl) privilege
+    JOIN pg_roles target_grantee ON target_grantee.oid = privilege.grantee
     WHERE object.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
       AND namespace.nspname <> 'information_schema'
       AND namespace.nspname NOT LIKE 'pg_%'
+      AND privilege.grantee <> object.relowner
       AND privilege.grantee IN (
         SELECT oid FROM pg_roles
         WHERE rolname IN (
@@ -137,15 +143,17 @@ BEGIN
   LOOP
     IF relation_acl.relkind = 'S' THEN
       EXECUTE format(
-        'REVOKE ALL PRIVILEGES ON SEQUENCE %I.%I FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner CASCADE',
+        'REVOKE ALL PRIVILEGES ON SEQUENCE %I.%I FROM %I CASCADE',
         relation_acl.nspname,
-        relation_acl.relname
+        relation_acl.relname,
+        relation_acl.grantee_name
       );
     ELSE
       EXECUTE format(
-        'REVOKE ALL PRIVILEGES ON TABLE %I.%I FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner CASCADE',
+        'REVOKE ALL PRIVILEGES ON TABLE %I.%I FROM %I CASCADE',
         relation_acl.nspname,
-        relation_acl.relname
+        relation_acl.relname,
+        relation_acl.grantee_name
       );
     END IF;
   END LOOP;
@@ -160,12 +168,15 @@ BEGIN
     SELECT DISTINCT
       namespace.nspname,
       routine.proname,
-      pg_get_function_identity_arguments(routine.oid) AS identity_arguments
+      pg_get_function_identity_arguments(routine.oid) AS identity_arguments,
+      target_grantee.rolname AS grantee_name
     FROM pg_proc routine
     JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
     CROSS JOIN LATERAL aclexplode(routine.proacl) privilege
+    JOIN pg_roles target_grantee ON target_grantee.oid = privilege.grantee
     WHERE namespace.nspname <> 'information_schema'
       AND namespace.nspname NOT LIKE 'pg_%'
+      AND privilege.grantee <> routine.proowner
       AND privilege.grantee IN (
         SELECT oid FROM pg_roles
         WHERE rolname IN (
@@ -180,10 +191,11 @@ BEGIN
       )
   LOOP
     EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON ROUTINE %I.%I(%s) FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner CASCADE',
+      'REVOKE ALL PRIVILEGES ON ROUTINE %I.%I(%s) FROM %I CASCADE',
       routine_acl.nspname,
       routine_acl.proname,
-      routine_acl.identity_arguments
+      routine_acl.identity_arguments,
+      routine_acl.grantee_name
     );
   END LOOP;
 END
@@ -194,14 +206,17 @@ DECLARE
   type_object record;
 BEGIN
   FOR type_object IN
-    SELECT DISTINCT namespace.nspname, type.typname
+    SELECT DISTINCT namespace.nspname, type.typname,
+      target_grantee.rolname AS grantee_name
     FROM pg_type type
     JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
     CROSS JOIN LATERAL aclexplode(type.typacl) privilege
+    JOIN pg_roles target_grantee ON target_grantee.oid = privilege.grantee
     WHERE type.typrelid = 0
       AND type.typelem = 0
       AND namespace.nspname <> 'information_schema'
       AND namespace.nspname NOT LIKE 'pg_%'
+      AND privilege.grantee <> type.typowner
       AND privilege.grantee IN (
         SELECT oid FROM pg_roles
         WHERE rolname IN (
@@ -216,9 +231,10 @@ BEGIN
       )
   LOOP
     EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON TYPE %I.%I FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner CASCADE',
+      'REVOKE ALL PRIVILEGES ON TYPE %I.%I FROM %I CASCADE',
       type_object.nspname,
-      type_object.typname
+      type_object.typname,
+      type_object.grantee_name
     );
   END LOOP;
 END
@@ -231,15 +247,18 @@ DECLARE
   column_acl record;
 BEGIN
   FOR column_acl IN
-    SELECT DISTINCT namespace.nspname, object.relname, attribute.attname
+    SELECT DISTINCT namespace.nspname, object.relname, attribute.attname,
+      target_grantee.rolname AS grantee_name
     FROM pg_attribute attribute
     JOIN pg_class object ON object.oid = attribute.attrelid
     JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
     CROSS JOIN LATERAL aclexplode(attribute.attacl) privilege
+    JOIN pg_roles target_grantee ON target_grantee.oid = privilege.grantee
     WHERE attribute.attnum > 0
       AND NOT attribute.attisdropped
       AND namespace.nspname <> 'information_schema'
       AND namespace.nspname NOT LIKE 'pg_%'
+      AND privilege.grantee <> object.relowner
       AND privilege.grantee IN (
         SELECT oid FROM pg_roles
         WHERE rolname IN (
@@ -261,10 +280,11 @@ BEGIN
   LOOP
     EXECUTE format(
       'REVOKE SELECT (%1$I), INSERT (%1$I), UPDATE (%1$I), REFERENCES (%1$I) '
-      || 'ON TABLE %2$I.%3$I FROM portfolio_runtime_login, portfolio_migrator_login, portfolio_legal_login, portfolio_legacy_reader_login, portfolio_fence_login, portfolio_migrator, portfolio_runtime, legal_audit_writer, portfolio_audit_owner, portfolio_compensation_operator, portfolio_legacy_reader, portfolio_fence_operator, portfolio_fence_owner',
+      || 'ON TABLE %2$I.%3$I FROM %4$I',
       column_acl.attname,
       column_acl.nspname,
-      column_acl.relname
+      column_acl.relname,
+      column_acl.grantee_name
     );
   END LOOP;
 END
