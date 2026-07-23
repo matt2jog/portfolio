@@ -198,6 +198,7 @@ test("managed ACL reconciliation mutates only objects with explicit Portfolio gr
 test("Portfolio ACL reconciliation preserves and repairs ordinary owner privileges", () => {
   const pre = read("infra/supabase/portfolio-pre-migration.sql");
   const post = read("infra/supabase/portfolio-role-acls.sql");
+  const session = read("src/shared/postgres-session.ts");
   const scrubStart = post.indexOf("-- A private service schema has one global ACL matrix");
   const scrubEnd = post.indexOf("$portfolio_acl_scrub$;", scrubStart);
   const scrub = post.slice(scrubStart, scrubEnd + "$portfolio_acl_scrub$;".length);
@@ -224,6 +225,8 @@ test("Portfolio ACL reconciliation preserves and repairs ordinary owner privileg
     post,
     /REVOKE GRANT OPTION FOR USAGE, CREATE ON SCHEMA portfolio\s+FROM portfolio_migrator CASCADE/,
   );
+  assert.match(`${post}\n${session}`, /object\.relkind = 'S' THEN 's'::/);
+  assert.doesNotMatch(`${post}\n${session}`, /object\.relkind = 'S' THEN 'S'::/);
 });
 
 test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {

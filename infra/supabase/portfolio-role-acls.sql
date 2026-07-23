@@ -342,7 +342,7 @@ BEGIN
     CROSS JOIN LATERAL aclexplode(COALESCE(
       object.relacl,
       acldefault(
-        CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END,
+        CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END,
         object.relowner
       )
     )) privilege
@@ -1070,7 +1070,7 @@ BEGIN
     SELECT 1 FROM pg_class object
     CROSS JOIN LATERAL aclexplode(COALESCE(
       object.relacl,
-      acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner)
+      acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner)
     )) privilege
     WHERE privilege.grantee = ANY(login_oids)
   ) OR EXISTS (
@@ -1261,7 +1261,7 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
     CROSS JOIN LATERAL aclexplode(COALESCE(
       object.relacl,
-      acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner)
+      acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner)
     )) privilege
     LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
     WHERE namespace.nspname = 'portfolio'

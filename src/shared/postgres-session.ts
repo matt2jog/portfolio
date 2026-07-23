@@ -432,7 +432,7 @@ async function databaseSessionEvidence(
       "  CROSS JOIN LATERAL aclexplode(COALESCE(",
       "    object.relacl,",
       "    acldefault(",
-      "      CASE WHEN object.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END,",
+      "      CASE WHEN object.relkind = 'S' THEN 's'::\"char\" ELSE 'r'::\"char\" END,",
       "      object.relowner",
       "    )",
       "  )) privilege",
@@ -1377,7 +1377,7 @@ async function loginTransitionEvidence(
       "    CROSS JOIN LATERAL aclexplode(COALESCE(object.nspacl, acldefault('n', object.nspowner))) privilege",
       "    JOIN pg_roles login ON login.oid = privilege.grantee AND login.rolname = $1::name",
       "    UNION ALL SELECT 1 FROM pg_class object",
-      "    CROSS JOIN LATERAL aclexplode(COALESCE(object.relacl, acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END, object.relowner))) privilege",
+      "    CROSS JOIN LATERAL aclexplode(COALESCE(object.relacl, acldefault(CASE WHEN object.relkind = 'S' THEN 's'::\"char\" ELSE 'r'::\"char\" END, object.relowner))) privilege",
       "    JOIN pg_roles login ON login.oid = privilege.grantee AND login.rolname = $1::name",
       "    UNION ALL SELECT 1 FROM pg_attribute object",
       "    CROSS JOIN LATERAL aclexplode(object.attacl) privilege",
@@ -2052,7 +2052,7 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
       SELECT privilege.grantee FROM pg_class object
       CROSS JOIN LATERAL aclexplode(COALESCE(
         object.relacl,
-        acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner)
+        acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner)
       )) privilege
       UNION ALL
       SELECT privilege.grantee FROM pg_attribute object
@@ -2164,7 +2164,7 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
       UNION ALL SELECT privilege.grantee FROM pg_namespace object
       CROSS JOIN LATERAL aclexplode(COALESCE(object.nspacl, acldefault('n', object.nspowner))) privilege
       UNION ALL SELECT privilege.grantee FROM pg_class object
-      CROSS JOIN LATERAL aclexplode(COALESCE(object.relacl, acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner))) privilege
+      CROSS JOIN LATERAL aclexplode(COALESCE(object.relacl, acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner))) privilege
       UNION ALL SELECT privilege.grantee FROM pg_attribute object
       CROSS JOIN LATERAL aclexplode(object.attacl) privilege
       UNION ALL SELECT privilege.grantee FROM pg_proc object
