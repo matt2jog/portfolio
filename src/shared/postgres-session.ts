@@ -249,7 +249,7 @@ interface LegacyReaderSessionEvidence {
   hasValidAllowedRowSecurity: boolean;
   hasAllowedWriteAccess: boolean;
   hasUnexpectedPublicObjectAccess: boolean;
-  hasPublicFunctionExecute: boolean;
+  hasUnexpectedPublicFunctionExecute: boolean;
   searchPath: string;
 }
 
@@ -337,7 +337,7 @@ function isLegacyReaderEvidence(
     typeof row.hasValidAllowedRowSecurity === "boolean" &&
     typeof row.hasAllowedWriteAccess === "boolean" &&
     typeof row.hasUnexpectedPublicObjectAccess === "boolean" &&
-    typeof row.hasPublicFunctionExecute === "boolean" &&
+    typeof row.hasUnexpectedPublicFunctionExecute === "boolean" &&
     typeof row.searchPath === "string"
   );
 }
@@ -1735,7 +1735,20 @@ async function legacyReaderSessionEvidence(
       "    JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace",
       "    WHERE namespace.nspname = 'public'",
       "      AND has_function_privilege(current_user, routine.oid, 'EXECUTE')",
-      '  ) AS "hasPublicFunctionExecute",',
+      "      AND NOT EXISTS (",
+      "        SELECT 1",
+      "        FROM pg_depend dependency",
+      "        JOIN pg_extension extension ON extension.oid = dependency.refobjid",
+      "        JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner",
+      "        WHERE dependency.classid = 'pg_proc'::regclass",
+      "          AND dependency.objid = routine.oid",
+      "          AND dependency.refclassid = 'pg_extension'::regclass",
+      "          AND dependency.deptype = 'e'",
+      "          AND extension.extname = 'vector'",
+      "          AND extension.extnamespace = namespace.oid",
+      "          AND extension_owner.rolname = 'supabase_admin'",
+      "      )",
+      '  ) AS "hasUnexpectedPublicFunctionExecute",',
       "  regexp_replace(current_setting('search_path'), '\\s*,\\s*', ', ', 'g')",
       '    AS "searchPath"',
     ].join("\n"),
@@ -2112,7 +2125,7 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
     if (evidence.hasAllowedWriteAccess) violations.push("allowed-table-write");
     if (evidence.hasUnexpectedPublicObjectAccess)
       violations.push("unexpected-public-access");
-    if (evidence.hasPublicFunctionExecute)
+    if (evidence.hasUnexpectedPublicFunctionExecute)
       violations.push("public-function-execute");
     if (evidence.searchPath !== "public") violations.push("search-path");
   }
@@ -2161,12 +2174,40 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
         WHERE namespace.nspname <> 'information_schema' AND namespace.nspname NOT LIKE 'pg_%'
           AND has_schema_privilege(current_user, namespace.oid, 'USAGE')
           AND has_function_privilege(current_user, routine.oid, 'EXECUTE')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_depend dependency
+            JOIN pg_extension extension ON extension.oid = dependency.refobjid
+            JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner
+            WHERE dependency.classid = 'pg_proc'::regclass
+              AND dependency.objid = routine.oid
+              AND dependency.refclassid = 'pg_extension'::regclass
+              AND dependency.deptype = 'e'
+              AND namespace.nspname = 'public'
+              AND extension.extname = 'vector'
+              AND extension.extnamespace = namespace.oid
+              AND extension_owner.rolname = 'supabase_admin'
+          )
       ) AND NOT EXISTS (
         SELECT 1 FROM pg_type type JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
         WHERE type.typrelid = 0 AND type.typelem = 0
           AND namespace.nspname <> 'information_schema' AND namespace.nspname NOT LIKE 'pg_%'
           AND has_schema_privilege(current_user, namespace.oid, 'USAGE')
           AND has_type_privilege(current_user, type.oid, 'USAGE')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_depend dependency
+            JOIN pg_extension extension ON extension.oid = dependency.refobjid
+            JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner
+            WHERE dependency.classid = 'pg_type'::regclass
+              AND dependency.objid = type.oid
+              AND dependency.refclassid = 'pg_extension'::regclass
+              AND dependency.deptype = 'e'
+              AND namespace.nspname = 'public'
+              AND extension.extname = 'vector'
+              AND extension.extnamespace = namespace.oid
+              AND extension_owner.rolname = 'supabase_admin'
+          )
       ) AS "effectiveObjectAclIsEmpty",
       NOT EXISTS (
         SELECT 1 FROM pg_namespace namespace

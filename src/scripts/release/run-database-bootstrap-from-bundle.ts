@@ -23,6 +23,7 @@ import { assertLocalPortfolioImageProvenance } from "./image-provenance";
 const IMAGE_PATTERN = /^us-east4-docker\.pkg\.dev\/personal-brand-501801\/portfolio\/portfolio@sha256:[a-f0-9]{64}$/;
 const PRE_MIGRATION_SQL = "infra/supabase/portfolio-pre-migration.sql";
 const POST_MIGRATION_SQL = "infra/supabase/portfolio-role-acls.sql";
+const LEGACY_READER_SQL = "infra/supabase/legacy-reader.sql";
 const LOGIN_URLS = [
   ["portfolio_runtime_login", "RUNTIME_DATABASE_URL"],
   ["portfolio_migrator_login", "MIGRATION_DATABASE_URL"],
@@ -271,8 +272,11 @@ export async function runDatabaseBootstrap(
 ): Promise<void> {
   if (!IMAGE_PATTERN.test(imageDigestUri)) throw new Error("An exact Portfolio image digest is required for database bootstrap");
   const actions = dependencies ?? productionDependencies(bundle);
-  const pre = await readFile(path.resolve(process.cwd(), PRE_MIGRATION_SQL), "utf8");
-  const post = await readFile(path.resolve(process.cwd(), POST_MIGRATION_SQL), "utf8");
+  const [pre, post, legacyReader] = await Promise.all([
+    readFile(path.resolve(process.cwd(), PRE_MIGRATION_SQL), "utf8"),
+    readFile(path.resolve(process.cwd(), POST_MIGRATION_SQL), "utf8"),
+    readFile(path.resolve(process.cwd(), LEGACY_READER_SQL), "utf8"),
+  ]);
   await actions.executeAdministratorSql("portfolio-pre-migration.sql", pre);
   for (const [role, key] of LOGIN_URLS) {
     await actions.rotateLoginPassword(role, passwordFromUrl(bundle[key]));
@@ -280,6 +284,7 @@ export async function runDatabaseBootstrap(
   await actions.waitForLoginCredentials(bundle);
   await actions.runMigrationsFromBundle(bundle, imageDigestUri);
   await actions.executeAdministratorSql("portfolio-role-acls.sql", post);
+  await actions.executeAdministratorSql("legacy-reader.sql", legacyReader);
   await actions.verifyScopedBoundaries(bundle);
 }
 

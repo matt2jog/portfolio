@@ -133,7 +133,7 @@ function legacyReaderQueryable(overrides: Record<string, unknown> = {}) {
             hasValidAllowedRowSecurity: true,
             hasAllowedWriteAccess: false,
             hasUnexpectedPublicObjectAccess: false,
-            hasPublicFunctionExecute: false,
+            hasUnexpectedPublicFunctionExecute: false,
             searchPath: "public",
             ...overrides,
           },
@@ -425,7 +425,7 @@ test("legacy reader accepts only exact allowlisted public SELECT access", async 
     { hasValidAllowedRowSecurity: false },
     { hasAllowedWriteAccess: true },
     { hasUnexpectedPublicObjectAccess: true },
-    { hasPublicFunctionExecute: true },
+    { hasUnexpectedPublicFunctionExecute: true },
     { searchPath: "public, extensions" },
     { roleExists: false },
   ]) {

@@ -173,9 +173,22 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
     WHERE namespace.nspname = 'public'
       AND has_function_privilege('portfolio_legacy_reader', routine.oid, 'EXECUTE')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend dependency
+        JOIN pg_extension extension ON extension.oid = dependency.refobjid
+        JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner
+        WHERE dependency.classid = 'pg_proc'::regclass
+          AND dependency.objid = routine.oid
+          AND dependency.refclassid = 'pg_extension'::regclass
+          AND dependency.deptype = 'e'
+          AND extension.extname = 'vector'
+          AND extension.extnamespace = namespace.oid
+          AND extension_owner.rolname = 'supabase_admin'
+      )
   ) THEN
     RAISE EXCEPTION
-      'portfolio_legacy_reader still inherits EXECUTE on a public function; review and revoke the supplying grant';
+      'portfolio_legacy_reader inherits EXECUTE on a non-vector public function; review and revoke the supplying grant';
   END IF;
 END
 $$;

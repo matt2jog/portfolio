@@ -84,7 +84,7 @@ jobs:
           docker pull "$image_uri"
           npx tsx src/scripts/release/image-provenance.ts "$image_uri" "$GITHUB_SHA"
           echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
-      - name: Create roles/schema, rotate all logins, migrate, and reconcile exact ACLs
+      - name: Create roles/schema, rotate all logins, migrate, and reconcile target/bridge ACLs
         env:
           IMAGE_DIGEST_URI: ${{ steps.image.outputs.uri }}
         run: |
