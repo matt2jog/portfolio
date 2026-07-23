@@ -250,6 +250,7 @@ interface LegacyReaderSessionEvidence {
   hasAllowedWriteAccess: boolean;
   hasUnexpectedPublicObjectAccess: boolean;
   hasUnexpectedPublicFunctionExecute: boolean;
+  hasUnexpectedPublicTypeUsage: boolean;
   searchPath: string;
 }
 
@@ -338,6 +339,7 @@ function isLegacyReaderEvidence(
     typeof row.hasAllowedWriteAccess === "boolean" &&
     typeof row.hasUnexpectedPublicObjectAccess === "boolean" &&
     typeof row.hasUnexpectedPublicFunctionExecute === "boolean" &&
+    typeof row.hasUnexpectedPublicTypeUsage === "boolean" &&
     typeof row.searchPath === "string"
   );
 }
@@ -1749,6 +1751,27 @@ async function legacyReaderSessionEvidence(
       "          AND extension_owner.rolname = 'supabase_admin'",
       "      )",
       '  ) AS "hasUnexpectedPublicFunctionExecute",',
+      "  EXISTS (",
+      "    SELECT 1 FROM pg_type type",
+      "    JOIN pg_namespace namespace ON namespace.oid = type.typnamespace",
+      "    WHERE namespace.nspname = 'public'",
+      "      AND type.typrelid = 0",
+      "      AND type.typelem = 0",
+      "      AND has_type_privilege(current_user, type.oid, 'USAGE')",
+      "      AND NOT EXISTS (",
+      "        SELECT 1",
+      "        FROM pg_depend dependency",
+      "        JOIN pg_extension extension ON extension.oid = dependency.refobjid",
+      "        JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner",
+      "        WHERE dependency.classid = 'pg_type'::regclass",
+      "          AND dependency.objid = type.oid",
+      "          AND dependency.refclassid = 'pg_extension'::regclass",
+      "          AND dependency.deptype = 'e'",
+      "          AND extension.extname = 'vector'",
+      "          AND extension.extnamespace = namespace.oid",
+      "          AND extension_owner.rolname = 'supabase_admin'",
+      "      )",
+      '  ) AS "hasUnexpectedPublicTypeUsage",',
       "  regexp_replace(current_setting('search_path'), '\\s*,\\s*', ', ', 'g')",
       '    AS "searchPath"',
     ].join("\n"),
@@ -2127,6 +2150,8 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
       violations.push("unexpected-public-access");
     if (evidence.hasUnexpectedPublicFunctionExecute)
       violations.push("public-function-execute");
+    if (evidence.hasUnexpectedPublicTypeUsage)
+      violations.push("public-type-usage");
     if (evidence.searchPath !== "public") violations.push("search-path");
   }
   await queryable.query("RESET ROLE");

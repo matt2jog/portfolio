@@ -134,6 +134,7 @@ function legacyReaderQueryable(overrides: Record<string, unknown> = {}) {
             hasAllowedWriteAccess: false,
             hasUnexpectedPublicObjectAccess: false,
             hasUnexpectedPublicFunctionExecute: false,
+            hasUnexpectedPublicTypeUsage: false,
             searchPath: "public",
             ...overrides,
           },
@@ -426,6 +427,7 @@ test("legacy reader accepts only exact allowlisted public SELECT access", async 
     { hasAllowedWriteAccess: true },
     { hasUnexpectedPublicObjectAccess: true },
     { hasUnexpectedPublicFunctionExecute: true },
+    { hasUnexpectedPublicTypeUsage: true },
     { searchPath: "public, extensions" },
     { roleExists: false },
   ]) {
@@ -439,7 +441,7 @@ test("legacy reader accepts only exact allowlisted public SELECT access", async 
   }
 });
 
-test("legacy reader query requires the one exact legal document RLS policy", async () => {
+test("legacy reader query requires the exact legal RLS and managed-vector public ACL boundary", async () => {
   const base = legacyReaderQueryable();
   const statements: string[] = [];
   await assertPortfolioLegacyReaderDatabaseSession(
@@ -464,6 +466,11 @@ test("legacy reader query requires the one exact legal document RLS policy", asy
   );
   assert.match(statement, /policy\.polwithcheck IS NULL/);
   assert.match(statement, /allowed\.table_name = 'legal_document_versions'/);
+  assert.match(statement, /dependency\.classid = 'pg_proc'::regclass/);
+  assert.match(statement, /dependency\.classid = 'pg_type'::regclass/);
+  assert.match(statement, /has_type_privilege\(current_user, type\.oid, 'USAGE'\)/);
+  assert.match(statement, /extension\.extname = 'vector'/);
+  assert.match(statement, /extension_owner\.rolname = 'supabase_admin'/);
 });
 
 test("legacy reader rejects empty, duplicate, or malformed table allowlists", async () => {
