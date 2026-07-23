@@ -496,6 +496,14 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
 
     await reconcilePortfolioDatabase(admin);
     await reconcilePortfolioDatabase(admin);
+    const postReconciliationRerun = await applyPortfolioMigrations(migrator, plan, {
+      allowSchemaBootstrap: false,
+    });
+    assert.deepEqual(postReconciliationRerun, {
+      adopted: 0,
+      applied: 0,
+      total: plan.length,
+    });
 
     runtime = new Client(
       postgresConnectionConfig(

@@ -234,6 +234,90 @@ CREATE SCHEMA IF NOT EXISTS portfolio_control AUTHORIZATION portfolio_fence_owne
 ALTER SCHEMA portfolio_control OWNER TO portfolio_fence_owner;
 REVOKE ALL ON SCHEMA portfolio_control FROM PUBLIC;
 
+-- Repair ordinary owner privileges stripped by bootstrap versions that revoked
+-- from every role, including each object's owner. Ownership still permits DDL,
+-- but PostgreSQL allows an owner to revoke its own SELECT/INSERT/EXECUTE/USAGE
+-- ACLs; that made an otherwise healthy target impossible to migrate again.
+-- Restore privileges only to the reviewed owner of each existing Portfolio
+-- object. This creates no object and therefore cannot satisfy the empty-target
+-- migration gate.
+DO $owner_acl_repair$
+DECLARE
+  owned_object record;
+BEGIN
+  GRANT ALL PRIVILEGES ON SCHEMA portfolio TO portfolio_migrator;
+
+  FOR owned_object IN
+    SELECT object.relname, object.relkind, owner.rolname AS owner_name
+    FROM pg_class object
+    JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
+    JOIN pg_roles owner ON owner.oid = object.relowner
+    WHERE namespace.nspname = 'portfolio'
+      AND object.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      AND owner.rolname IN (
+        'portfolio_migrator', 'portfolio_audit_owner',
+        'portfolio_compensation_operator'
+      )
+  LOOP
+    IF owned_object.relkind = 'S' THEN
+      EXECUTE format(
+        'GRANT ALL PRIVILEGES ON SEQUENCE portfolio.%I TO %I',
+        owned_object.relname,
+        owned_object.owner_name
+      );
+    ELSE
+      EXECUTE format(
+        'GRANT ALL PRIVILEGES ON TABLE portfolio.%I TO %I',
+        owned_object.relname,
+        owned_object.owner_name
+      );
+    END IF;
+  END LOOP;
+
+  FOR owned_object IN
+    SELECT
+      routine.proname,
+      pg_get_function_identity_arguments(routine.oid) AS identity_arguments,
+      owner.rolname AS owner_name
+    FROM pg_proc routine
+    JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
+    JOIN pg_roles owner ON owner.oid = routine.proowner
+    WHERE namespace.nspname = 'portfolio'
+      AND owner.rolname IN (
+        'portfolio_migrator', 'portfolio_audit_owner',
+        'portfolio_compensation_operator'
+      )
+  LOOP
+    EXECUTE format(
+      'GRANT ALL PRIVILEGES ON ROUTINE portfolio.%I(%s) TO %I',
+      owned_object.proname,
+      owned_object.identity_arguments,
+      owned_object.owner_name
+    );
+  END LOOP;
+
+  FOR owned_object IN
+    SELECT type.typname, owner.rolname AS owner_name
+    FROM pg_type type
+    JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+    JOIN pg_roles owner ON owner.oid = type.typowner
+    WHERE namespace.nspname = 'portfolio'
+      AND type.typrelid = 0
+      AND type.typelem = 0
+      AND owner.rolname IN (
+        'portfolio_migrator', 'portfolio_audit_owner',
+        'portfolio_compensation_operator'
+      )
+  LOOP
+    EXECUTE format(
+      'GRANT ALL PRIVILEGES ON TYPE portfolio.%I TO %I',
+      owned_object.typname,
+      owned_object.owner_name
+    );
+  END LOOP;
+END
+$owner_acl_repair$;
+
 DO $$
 DECLARE
   role_name text;

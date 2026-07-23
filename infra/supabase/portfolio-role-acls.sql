@@ -293,35 +293,109 @@ $$;
 -- A private service schema has one global ACL matrix, not merely an ACL for
 -- the role performing this preflight. Strip every direct non-owner grant from
 -- Portfolio objects before rebuilding the reviewed runtime/legal grants.
-DO $$
+-- Relation, sequence, schema, and type owners retain their ordinary privileges:
+-- PostgreSQL permits owners to revoke those privileges from themselves, which
+-- would make later migrations unable to read their own ledger or update their
+-- own tables. Routine EXECUTE is the deliberate exception. Pre-migration
+-- restores owner execution while migrations run; post-migration removes it
+-- again unless the routine is part of the explicit deployment capability.
+DO $portfolio_acl_scrub$
 DECLARE
-  grantee record;
+  schema_acl record;
+  relation_acl record;
+  routine_acl record;
 BEGIN
   REVOKE ALL PRIVILEGES ON SCHEMA portfolio FROM PUBLIC;
   REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA portfolio FROM PUBLIC;
   REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA portfolio FROM PUBLIC;
   REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA portfolio FROM PUBLIC;
 
-  FOR grantee IN SELECT rolname FROM pg_roles
+  FOR schema_acl IN
+    SELECT DISTINCT
+      privilege.grantee,
+      grantee.rolname AS grantee_name
+    FROM pg_namespace namespace
+    CROSS JOIN LATERAL aclexplode(COALESCE(
+      namespace.nspacl,
+      acldefault('n', namespace.nspowner)
+    )) privilege
+    LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+    WHERE namespace.nspname = 'portfolio'
+      AND privilege.grantee <> namespace.nspowner
   LOOP
     EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON SCHEMA portfolio FROM %I CASCADE', grantee.rolname
+      'REVOKE ALL PRIVILEGES ON SCHEMA portfolio FROM %s CASCADE',
+      CASE WHEN schema_acl.grantee = 0 THEN 'PUBLIC'
+        ELSE format('%I', schema_acl.grantee_name)
+      END
     );
+  END LOOP;
+
+  FOR relation_acl IN
+    SELECT DISTINCT
+      object.relname,
+      object.relkind,
+      privilege.grantee,
+      grantee.rolname AS grantee_name
+    FROM pg_class object
+    JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
+    CROSS JOIN LATERAL aclexplode(COALESCE(
+      object.relacl,
+      acldefault(
+        CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END,
+        object.relowner
+      )
+    )) privilege
+    LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+    WHERE namespace.nspname = 'portfolio'
+      AND object.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+      AND privilege.grantee <> object.relowner
+  LOOP
+    IF relation_acl.relkind = 'S' THEN
+      EXECUTE format(
+        'REVOKE ALL PRIVILEGES ON SEQUENCE portfolio.%I FROM %s CASCADE',
+        relation_acl.relname,
+        CASE WHEN relation_acl.grantee = 0 THEN 'PUBLIC'
+          ELSE format('%I', relation_acl.grantee_name)
+        END
+      );
+    ELSE
+      EXECUTE format(
+        'REVOKE ALL PRIVILEGES ON TABLE portfolio.%I FROM %s CASCADE',
+        relation_acl.relname,
+        CASE WHEN relation_acl.grantee = 0 THEN 'PUBLIC'
+          ELSE format('%I', relation_acl.grantee_name)
+        END
+      );
+    END IF;
+  END LOOP;
+
+  FOR routine_acl IN
+    SELECT DISTINCT
+      routine.proname,
+      pg_get_function_identity_arguments(routine.oid) AS identity_arguments,
+      privilege.grantee,
+      grantee.rolname AS grantee_name
+    FROM pg_proc routine
+    JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
+    CROSS JOIN LATERAL aclexplode(COALESCE(
+      routine.proacl,
+      acldefault('f', routine.proowner)
+    )) privilege
+    LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+    WHERE namespace.nspname = 'portfolio'
+  LOOP
     EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA portfolio FROM %I',
-      grantee.rolname
-    );
-    EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA portfolio FROM %I',
-      grantee.rolname
-    );
-    EXECUTE format(
-      'REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA portfolio FROM %I',
-      grantee.rolname
+      'REVOKE ALL PRIVILEGES ON ROUTINE portfolio.%I(%s) FROM %s CASCADE',
+      routine_acl.proname,
+      routine_acl.identity_arguments,
+      CASE WHEN routine_acl.grantee = 0 THEN 'PUBLIC'
+        ELSE format('%I', routine_acl.grantee_name)
+      END
     );
   END LOOP;
 END
-$$;
+$portfolio_acl_scrub$;
 
 DO $$
 DECLARE
@@ -374,6 +448,7 @@ BEGIN
     WHERE attribute.attnum > 0
       AND NOT attribute.attisdropped
       AND namespace.nspname = 'portfolio'
+      AND privilege.grantee <> object.relowner
   LOOP
     EXECUTE format(
       'REVOKE SELECT (%1$I), INSERT (%1$I), UPDATE (%1$I), REFERENCES (%1$I) '
@@ -646,6 +721,12 @@ BEGIN
     GRANT USAGE, CREATE ON SCHEMA portfolio
       TO portfolio_migrator WITH GRANT OPTION;
   ELSE
+    -- The clean-target phase temporarily needs schema grant options so
+    -- migration 0016 can install its separated audit owners. Once the audit
+    -- boundary exists, remove that transitional ACL bit explicitly without
+    -- revoking the owner's ordinary schema or relation privileges.
+    REVOKE GRANT OPTION FOR USAGE, CREATE ON SCHEMA portfolio
+      FROM portfolio_migrator CASCADE;
     GRANT USAGE, CREATE ON SCHEMA portfolio TO portfolio_migrator;
   END IF;
 END
@@ -989,7 +1070,7 @@ BEGIN
     SELECT 1 FROM pg_class object
     CROSS JOIN LATERAL aclexplode(COALESCE(
       object.relacl,
-      acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner)
+      acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner)
     )) privilege
     WHERE privilege.grantee = ANY(login_oids)
   ) OR EXISTS (
@@ -1180,7 +1261,7 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
     CROSS JOIN LATERAL aclexplode(COALESCE(
       object.relacl,
-      acldefault(CASE WHEN object.relkind = 'S' THEN 'S'::"char" ELSE 'r'::"char" END, object.relowner)
+      acldefault(CASE WHEN object.relkind = 'S' THEN 's'::"char" ELSE 'r'::"char" END, object.relowner)
     )) privilege
     LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
     WHERE namespace.nspname = 'portfolio'
