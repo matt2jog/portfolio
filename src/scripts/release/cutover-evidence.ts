@@ -36,7 +36,6 @@ export interface FinalCutoverEvidence {
     snapshotDigest: string;
     producerRelease: string;
     capturedAt: string;
-    resumeCutoverComplete: true;
   };
   careerCheckpoint: {
     generation: string;
@@ -150,15 +149,13 @@ export function parseFinalCutoverEvidence(
   };
 
   const snapshot = requireRecord(root.adminSnapshot, 'Admin snapshot');
-  requireExactKeys(snapshot, ['snapshotId', 'snapshotDigest', 'producerRelease', 'capturedAt', 'resumeCutoverComplete'], 'Admin snapshot');
-  if (snapshot.resumeCutoverComplete !== true) throw new Error('Admin snapshot does not prove Resume cutover');
+  requireExactKeys(snapshot, ['snapshotId', 'snapshotDigest', 'producerRelease', 'capturedAt'], 'Admin snapshot');
   const capturedAt = requireUtc(snapshot.capturedAt, 'Admin snapshot capture time');
   const adminSnapshot = {
     snapshotId: requireString(snapshot.snapshotId, 'Admin snapshot id'),
     snapshotDigest: requireString(snapshot.snapshotDigest, 'Admin snapshot digest', SHA256),
     producerRelease: requireString(snapshot.producerRelease, 'Admin snapshot producer release', RELEASE_SHA),
     capturedAt,
-    resumeCutoverComplete: true as const,
   };
 
   const checkpoint = requireRecord(root.careerCheckpoint, 'career checkpoint');

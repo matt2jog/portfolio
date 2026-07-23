@@ -178,10 +178,11 @@ test("production session verification proves login, SET ROLE, capability, and RE
   assert.match(session, /current_setting\('TimeZone'\)/);
 });
 
-test("bootstrap owns administrator reconciliation while deploy gates the migrator-only release", () => {
+test("bootstrap owns administrator reconciliation while delivery publishes a migrator-proven candidate", () => {
   const workflow = read(".github/workflows/deploy.yml");
   const bootstrap = read("src/scripts/release/run-database-bootstrap-from-bundle.ts");
   const databaseRelease = read("src/scripts/release/run-database-release-from-bundle.ts");
+  const candidate = read(".github/scripts/deploy-candidate.sh");
 
   assert.match(bootstrap, /portfolio-pre-migration\.sql/);
   assert.match(bootstrap, /runMigrationsFromBundle/);
@@ -196,13 +197,24 @@ test("bootstrap owns administrator reconciliation while deploy gates the migrato
   );
   assert.match(databaseRelease, /runMigrationsFromBundle/);
   assert.doesNotMatch(databaseRelease, /portfolio-pre-migration\.sql|portfolio-role-acls\.sql/);
-  assert.match(workflow, /prepare_release:/);
-  assert.match(workflow, /prepare_release:[\s\S]+needs:\s*legal_audit/);
-  assert.match(workflow, /release:[\s\S]+needs:\s*prepare_release/);
-  assert.ok(workflow.indexOf("Consume exact finalized cutover evidence") < workflow.indexOf("Run pre-role bootstrap"));
-  assert.match(workflow, /PORTFOLIO_CUTOVER_EVIDENCE_RUN_ID/);
-  assert.match(workflow, /PORTFOLIO_CUTOVER_EVIDENCE_SHA256/);
-  assert.match(workflow, /portfolio-release-record/);
+  assert.match(workflow, /candidate:[\s\S]+needs:\s*legal_audit/);
+  assert.ok(
+    workflow.indexOf("Run additive migrations using the approved image")
+      < workflow.indexOf("Deploy and smoke-test green at zero traffic"),
+  );
+  assert.ok(
+    workflow.indexOf("Deploy and smoke-test green at zero traffic")
+      < workflow.indexOf("Publish identity-attested candidate to release controller"),
+  );
+  assert.match(workflow, /portfolio-migration-evidence\.json/);
+  assert.match(workflow, /portfolio-candidate-manifest\.json/);
+  assert.match(workflow, /portfolio-controller-response\.json/);
+  assert.match(candidate, /expectedBlueRevision/);
+  assert.match(candidate, /expectedBlueDigest/);
+  assert.match(candidate, /MIGRATION_EVIDENCE_SHA256/);
+  assert.doesNotMatch(workflow, /PORTFOLIO_CUTOVER_EVIDENCE_/);
+  assert.doesNotMatch(workflow, /portfolio-release-record/);
+  assert.doesNotMatch(workflow, /update-traffic|--to-revisions/);
 });
 
 test("authority cutover binds evidence and disables rollback to a public writer", () => {
@@ -260,6 +272,7 @@ test("legal reusable identity mode is explicit and legacy copy remains bounded",
   assert.match(legal, /identity_mode/);
   assert.match(legal, /inputs\.identity_mode == 'reusable'/);
   assert.match(deploy, /identity_mode:\s*reusable/);
+  assert.match(deploy, /candidate:[\s\S]+needs:\s*legal_audit/);
   assert.match(migration, /LEGACY_COPY_BATCH_SIZE/);
   assert.match(migration, /AsyncGenerator/);
   assert.doesNotMatch(migration, /result\.rows\.map\(\(row\) => row\.payload\)/);

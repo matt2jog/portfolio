@@ -350,7 +350,12 @@ tables, excludes Resume/control-plane storage, ignores the legacy
 `skills_group.discipline_id` dependency, and preserves the source. Its bootstrap
 result is staged with `cutoverReady: false`. Owned rows still require a write
 fence/final hash; projected and hybrid rows require an Admin snapshot and durable
-event checkpoint. The frozen source column inventory is
+event checkpoint. Admin evidence proves only canonical career-data authority and
+zero event-version gaps; Resume Studio proves its separate schema cutover in its
+own release and is never a Portfolio release prerequisite. The one-time bootstrap
+retries only recognized transient Supabase pooler connection failures, with six
+15-second attempts and fixed five-second delays; authentication, TLS, role, and
+contract errors fail immediately. The frozen source column inventory is
 `src/tests/fixtures/legacy-portfolio-schema.ts`. Resume and Portfolio rollback
 windows complete before any public compatibility object is retired. The `vector`
 extension is provisioned only in `extensions`; Portfolio has no embedding or

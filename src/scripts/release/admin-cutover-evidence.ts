@@ -107,8 +107,7 @@ export async function verifyAdminCutoverEvidenceJws(
   }
 
   const snapshot = record(payload.adminSnapshot, "Admin snapshot");
-  exactKeys(snapshot, ["snapshotId", "snapshotDigest", "producerRelease", "capturedAt", "resumeCutoverComplete"], "Admin snapshot");
-  if (snapshot.resumeCutoverComplete !== true) throw new Error("Admin snapshot does not prove Resume cutover");
+  exactKeys(snapshot, ["snapshotId", "snapshotDigest", "producerRelease", "capturedAt"], "Admin snapshot");
   const capturedAt = string(snapshot.capturedAt, UTC_TIMESTAMP, "Admin snapshot capture time");
   if (Number.isNaN(Date.parse(capturedAt))) throw new Error("Admin snapshot capture time is invalid");
 
@@ -124,7 +123,6 @@ export async function verifyAdminCutoverEvidenceJws(
       snapshotDigest: string(snapshot.snapshotDigest, SHA256, "Admin snapshot digest"),
       producerRelease: string(snapshot.producerRelease, RELEASE_SHA, "Admin producer release"),
       capturedAt,
-      resumeCutoverComplete: true,
     },
     careerCheckpoint: {
       generation: nonempty(checkpoint.generation, "career checkpoint generation"),

@@ -38,7 +38,6 @@ async function signedEvidence(overrides: Record<string, unknown> = {}) {
       snapshotDigest: "d".repeat(64),
       producerRelease: "e".repeat(40),
       capturedAt: "2026-07-16T11:59:00.000Z",
-      resumeCutoverComplete: true,
     },
     careerCheckpoint: {
       generation: "career-generation-1",
@@ -69,7 +68,7 @@ test("Admin cutover evidence is RS256-verified and release/image/ledger/manifest
     migrationLedgerDigest,
     now,
   }, keySet);
-  assert.equal(evidence.adminSnapshot.resumeCutoverComplete, true);
+  assert.equal(evidence.adminSnapshot.snapshotDigest, "d".repeat(64));
   assert.equal(evidence.careerCheckpoint.gapCount, 0);
 
   await assert.rejects(verifyAdminCutoverEvidenceJws(token, {
@@ -106,4 +105,23 @@ test("Admin cutover evidence rejects manifest drift and event gaps", async () =>
     migrationLedgerDigest,
     now,
   }, gap.keySet), /event gap/i);
+});
+
+test("Admin cutover evidence rejects a coupled Resume completion claim", async () => {
+  const coupled = await signedEvidence({
+    adminSnapshot: {
+      snapshotId: "admin-snapshot-1",
+      snapshotDigest: "d".repeat(64),
+      producerRelease: "e".repeat(40),
+      capturedAt: "2026-07-16T11:59:00.000Z",
+      resumeCutoverComplete: true,
+    },
+  });
+  await assert.rejects(verifyAdminCutoverEvidenceJws(coupled.token, {
+    releaseSha,
+    imageDigest,
+    imageReleaseRunId,
+    migrationLedgerDigest,
+    now,
+  }, coupled.keySet), /keys are not exact/i);
 });
