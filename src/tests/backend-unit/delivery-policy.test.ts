@@ -726,6 +726,14 @@ test("legacy reader provisioning grants only the reviewed bridge tables and exac
   assert.match(sql, /REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public/);
   assert.match(sql, /REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public/);
   assert.match(sql, /REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public/);
+  assert.match(sql, /REVOKE USAGE ON TYPE %I\.%I FROM %I/);
+  assert.match(sql, /dependency\.classid = 'pg_proc'::regclass/);
+  assert.match(sql, /dependency\.classid = 'pg_type'::regclass/);
+  assert.match(sql, /has_type_privilege\('portfolio_legacy_reader', type\.oid, 'USAGE'\)/);
+  assert.match(sql, /extension\.extname = 'vector'/);
+  assert.match(sql, /extension_owner\.rolname = 'supabase_admin'/);
+  assert.match(sql, /inherits EXECUTE on a non-vector public function/);
+  assert.match(sql, /inherits USAGE on a non-vector public standalone type/);
   assert.match(sql, /CREATE POLICY portfolio_legacy_reader_full_read/);
   assert.match(
     sql,

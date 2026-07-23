@@ -27,7 +27,7 @@ const bundle = {
   SUPABASE_PROJECT_REF: "qvbpgvazqfyhwjsfulsb",
 } satisfies PortfolioDatabaseBootstrapBundle;
 
-test("one-time bootstrap creates roles, rotates every login, migrates, reconciles ACLs, then proves all boundaries", async () => {
+test("one-time bootstrap creates roles, rotates every login, migrates, reconciles target and bridge ACLs, then proves all boundaries", async () => {
   const events: string[] = [];
   const dependencies: DatabaseBootstrapDependencies = {
     async executeAdministratorSql(filename) { events.push(filename); },
@@ -51,6 +51,7 @@ test("one-time bootstrap creates roles, rotates every login, migrates, reconcile
     "wait-for-login-propagation",
     "digest-pinned-migrations",
     "portfolio-role-acls.sql",
+    "legacy-reader.sql",
     "verify-all-scoped-boundaries",
   ]);
 });
@@ -99,7 +100,8 @@ test("a pre-generated source-fence URL is consumed only after its scoped role ex
     dependencies,
   );
   assert.equal(events[0], "portfolio-pre-migration.sql");
-  assert.equal(events.at(-1), "portfolio-role-acls.sql");
+  assert.equal(events.at(-2), "portfolio-role-acls.sql");
+  assert.equal(events.at(-1), "legacy-reader.sql");
 });
 
 test("bootstrap waits through bounded Supabase password propagation before migrations", async () => {

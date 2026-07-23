@@ -126,6 +126,43 @@ REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM portfolio_legacy_re
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM portfolio_legacy_reader_login;
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM portfolio_legacy_reader;
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM portfolio_legacy_reader_login;
+DO $type_acl_reconciliation$
+DECLARE
+  unexpected_type record;
+  grantee_name text;
+BEGIN
+  FOR unexpected_type IN
+    SELECT namespace.nspname AS schema_name, type.typname AS type_name
+    FROM pg_type type
+    JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(type.typacl, acldefault('T', type.typowner))
+    ) privilege
+    JOIN pg_roles grantee ON grantee.oid = privilege.grantee
+    WHERE namespace.nspname = 'public'
+      AND type.typrelid = 0
+      AND type.typelem = 0
+      AND grantee.rolname IN (
+        'portfolio_legacy_reader',
+        'portfolio_legacy_reader_login'
+      )
+      AND privilege.privilege_type = 'USAGE'
+  LOOP
+    FOREACH grantee_name IN ARRAY ARRAY[
+      'portfolio_legacy_reader',
+      'portfolio_legacy_reader_login'
+    ]
+    LOOP
+      EXECUTE format(
+        'REVOKE USAGE ON TYPE %I.%I FROM %I',
+        unexpected_type.schema_name,
+        unexpected_type.type_name,
+        grantee_name
+      );
+    END LOOP;
+  END LOOP;
+END
+$type_acl_reconciliation$;
 GRANT USAGE ON SCHEMA public TO portfolio_legacy_reader;
 
 GRANT SELECT ON TABLE
@@ -173,9 +210,47 @@ BEGIN
     JOIN pg_namespace namespace ON namespace.oid = routine.pronamespace
     WHERE namespace.nspname = 'public'
       AND has_function_privilege('portfolio_legacy_reader', routine.oid, 'EXECUTE')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend dependency
+        JOIN pg_extension extension ON extension.oid = dependency.refobjid
+        JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner
+        WHERE dependency.classid = 'pg_proc'::regclass
+          AND dependency.objid = routine.oid
+          AND dependency.refclassid = 'pg_extension'::regclass
+          AND dependency.deptype = 'e'
+          AND extension.extname = 'vector'
+          AND extension.extnamespace = namespace.oid
+          AND extension_owner.rolname = 'supabase_admin'
+      )
   ) THEN
     RAISE EXCEPTION
-      'portfolio_legacy_reader still inherits EXECUTE on a public function; review and revoke the supplying grant';
+      'portfolio_legacy_reader inherits EXECUTE on a non-vector public function; review and revoke the supplying grant';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_type type
+    JOIN pg_namespace namespace ON namespace.oid = type.typnamespace
+    WHERE namespace.nspname = 'public'
+      AND type.typrelid = 0
+      AND type.typelem = 0
+      AND has_type_privilege('portfolio_legacy_reader', type.oid, 'USAGE')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_depend dependency
+        JOIN pg_extension extension ON extension.oid = dependency.refobjid
+        JOIN pg_roles extension_owner ON extension_owner.oid = extension.extowner
+        WHERE dependency.classid = 'pg_type'::regclass
+          AND dependency.objid = type.oid
+          AND dependency.refclassid = 'pg_extension'::regclass
+          AND dependency.deptype = 'e'
+          AND extension.extname = 'vector'
+          AND extension.extnamespace = namespace.oid
+          AND extension_owner.rolname = 'supabase_admin'
+      )
+  ) THEN
+    RAISE EXCEPTION
+      'portfolio_legacy_reader inherits USAGE on a non-vector public standalone type; review and revoke the supplying grant';
   END IF;
 END
 $$;
