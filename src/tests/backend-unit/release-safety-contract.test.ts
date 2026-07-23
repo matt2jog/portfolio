@@ -121,6 +121,37 @@ test("database bootstrap preserves the managed Supabase pgvector installation", 
   assert.match(ledger, /pg_temp, public, extensions/);
   assert.doesNotMatch(`${pre}\n${post}\n${ledger}`, /ALTER EXTENSION vector SET SCHEMA|DROP EXTENSION vector/);
   assert.match(ledger, /managed Supabase pgvector contract/);
+  const vectorGrantStart = post.indexOf(
+    "IF to_regtype('extensions.vector') IS NOT NULL THEN",
+  );
+  const publicGrantStart = post.indexOf(
+    "ELSIF to_regtype('public.vector') IS NOT NULL THEN",
+    vectorGrantStart,
+  );
+  const vectorGrantEnd = post.indexOf("END IF;", publicGrantStart);
+  assert.ok(
+    vectorGrantStart >= 0
+      && publicGrantStart > vectorGrantStart
+      && vectorGrantEnd > publicGrantStart,
+    "reviewed vector grant branches must exist in order",
+  );
+  const extensionsBranch = post.slice(vectorGrantStart, publicGrantStart);
+  const publicBranch = post.slice(publicGrantStart, vectorGrantEnd);
+  assert.match(extensionsBranch, /GRANT USAGE ON SCHEMA extensions/);
+  assert.match(extensionsBranch, /GRANT USAGE ON TYPE extensions\.vector/);
+  assert.doesNotMatch(extensionsBranch, /SCHEMA public|TYPE public\.vector/);
+  assert.match(publicBranch, /GRANT USAGE ON SCHEMA public/);
+  assert.match(publicBranch, /GRANT USAGE ON TYPE public\.vector/);
+  assert.doesNotMatch(publicBranch, /SCHEMA extensions|TYPE extensions\.vector/);
+  assert.equal(
+    [...post.matchAll(/GRANT USAGE ON SCHEMA extensions/g)].length,
+    1,
+    "extensions usage must exist only inside its reviewed vector branch",
+  );
+  assert.match(
+    publicBranch,
+    /ELSE[\s\S]*RAISE EXCEPTION 'vector type is not installed in a reviewed schema'/,
+  );
 });
 
 test("managed ACL reconciliation mutates only objects with explicit Portfolio grants", () => {

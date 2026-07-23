@@ -215,6 +215,14 @@ test("runtime boundary uses an explicit namespace allowlist and exact ACL catalo
   assert.match(statement, /schemaAclIsValid/);
   assert.match(statement, /aclexplode/);
   assert.match(statement, /effective_relation_acl/);
+  const effectiveRelationAcl = statement.slice(
+    statement.indexOf("effective_relation_acl AS"),
+    statement.indexOf("column_acl AS"),
+  );
+  assert.match(
+    effectiveRelationAcl,
+    /has_schema_privilege\(current_user, namespace\.oid, 'USAGE'\)/,
+  );
   assert.match(statement, /expected_portfolio_acl/);
   assert.match(statement, /expected_portfolio_routine_acl/);
   assert.match(statement, /portfolioAclIsExact/);
