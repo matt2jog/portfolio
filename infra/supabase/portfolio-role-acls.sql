@@ -293,9 +293,12 @@ $$;
 -- A private service schema has one global ACL matrix, not merely an ACL for
 -- the role performing this preflight. Strip every direct non-owner grant from
 -- Portfolio objects before rebuilding the reviewed runtime/legal grants.
--- Object owners retain their ordinary privileges: PostgreSQL permits owners to
--- revoke those privileges from themselves, which would make later migrations
--- unable to read their own ledger or update their own tables.
+-- Relation, sequence, schema, and type owners retain their ordinary privileges:
+-- PostgreSQL permits owners to revoke those privileges from themselves, which
+-- would make later migrations unable to read their own ledger or update their
+-- own tables. Routine EXECUTE is the deliberate exception. Pre-migration
+-- restores owner execution while migrations run; post-migration removes it
+-- again unless the routine is part of the explicit deployment capability.
 DO $portfolio_acl_scrub$
 DECLARE
   schema_acl record;
@@ -381,7 +384,6 @@ BEGIN
     )) privilege
     LEFT JOIN pg_roles grantee ON grantee.oid = privilege.grantee
     WHERE namespace.nspname = 'portfolio'
-      AND privilege.grantee <> routine.proowner
   LOOP
     EXECUTE format(
       'REVOKE ALL PRIVILEGES ON ROUTINE portfolio.%I(%s) FROM %s CASCADE',
@@ -719,6 +721,12 @@ BEGIN
     GRANT USAGE, CREATE ON SCHEMA portfolio
       TO portfolio_migrator WITH GRANT OPTION;
   ELSE
+    -- The clean-target phase temporarily needs schema grant options so
+    -- migration 0016 can install its separated audit owners. Once the audit
+    -- boundary exists, remove that transitional ACL bit explicitly without
+    -- revoking the owner's ordinary schema or relation privileges.
+    REVOKE GRANT OPTION FOR USAGE, CREATE ON SCHEMA portfolio
+      FROM portfolio_migrator CASCADE;
     GRANT USAGE, CREATE ON SCHEMA portfolio TO portfolio_migrator;
   END IF;
 END

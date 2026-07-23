@@ -210,11 +210,19 @@ test("Portfolio ACL reconciliation preserves and repairs ordinary owner privileg
   assert.match(pre, /GRANT ALL PRIVILEGES ON TYPE portfolio\.%I TO %I/);
   assert.match(scrub, /privilege\.grantee <> namespace\.nspowner/);
   assert.match(scrub, /privilege\.grantee <> object\.relowner/);
-  assert.match(scrub, /privilege\.grantee <> routine\.proowner/);
+  assert.match(
+    scrub,
+    /Routine EXECUTE is the deliberate exception[\s\S]*REVOKE ALL PRIVILEGES ON ROUTINE portfolio\.%I\(%s\) FROM %s CASCADE/,
+  );
+  assert.doesNotMatch(scrub, /privilege\.grantee <> routine\.proowner/);
   assert.doesNotMatch(scrub, /FOR grantee IN SELECT rolname FROM pg_roles/);
   assert.match(
     post,
     /namespace\.nspname = 'portfolio'\s+AND privilege\.grantee <> object\.relowner\s+LOOP/,
+  );
+  assert.match(
+    post,
+    /REVOKE GRANT OPTION FOR USAGE, CREATE ON SCHEMA portfolio\s+FROM portfolio_migrator CASCADE/,
   );
 });
 
