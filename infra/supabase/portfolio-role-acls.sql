@@ -655,16 +655,18 @@ GRANT USAGE ON SCHEMA portfolio
   TO portfolio_audit_owner, portfolio_compensation_operator;
 DO $$
 BEGIN
-  GRANT USAGE ON SCHEMA extensions
-    TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
   IF to_regtype('extensions.vector') IS NOT NULL THEN
+    GRANT USAGE ON SCHEMA extensions
+      TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
     GRANT USAGE ON TYPE extensions.vector
       TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
-  ELSE
+  ELSIF to_regtype('public.vector') IS NOT NULL THEN
     GRANT USAGE ON SCHEMA public
       TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
     GRANT USAGE ON TYPE public.vector
       TO portfolio_migrator, portfolio_runtime, legal_audit_writer;
+  ELSE
+    RAISE EXCEPTION 'vector type is not installed in a reviewed schema';
   END IF;
 END
 $$;

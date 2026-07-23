@@ -121,6 +121,10 @@ test("database bootstrap preserves the managed Supabase pgvector installation", 
   assert.match(ledger, /pg_temp, public, extensions/);
   assert.doesNotMatch(`${pre}\n${post}\n${ledger}`, /ALTER EXTENSION vector SET SCHEMA|DROP EXTENSION vector/);
   assert.match(ledger, /managed Supabase pgvector contract/);
+  assert.match(
+    post,
+    /IF to_regtype\('extensions\.vector'\) IS NOT NULL THEN[\s\S]*GRANT USAGE ON SCHEMA extensions[\s\S]*ELSIF to_regtype\('public\.vector'\) IS NOT NULL THEN[\s\S]*GRANT USAGE ON SCHEMA public[\s\S]*ELSE[\s\S]*RAISE EXCEPTION 'vector type is not installed in a reviewed schema'/,
+  );
 });
 
 test("managed ACL reconciliation mutates only objects with explicit Portfolio grants", () => {

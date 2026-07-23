@@ -451,6 +451,7 @@ async function databaseSessionEvidence(
       "  WHERE object.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')",
       "    AND namespace.nspname <> 'information_schema'",
       "    AND namespace.nspname NOT LIKE 'pg_%'",
+      "    AND has_schema_privilege(current_user, namespace.oid, 'USAGE')",
       "    AND CASE WHEN object.relkind = 'S'",
       "      THEN has_sequence_privilege(current_user, object.oid, requested.privilege_type)",
       "      ELSE has_table_privilege(current_user, object.oid, requested.privilege_type)",
