@@ -19,16 +19,14 @@ function jobBlock(workflow: string, jobId: string): string {
   return match[0];
 }
 
-test("production mutation depends on the reusable legal audit gate", () => {
+test("candidate preparation depends on the reusable legal audit gate", () => {
   const deploy = read(".github/workflows/deploy.yml");
   const gate = jobBlock(deploy, "legal_audit");
-  const prepare = jobBlock(deploy, "prepare_release");
-  const release = jobBlock(deploy, "release");
+  const candidate = jobBlock(deploy, "candidate");
 
   assert.match(gate, /uses:\s*\.\/\.github\/workflows\/legal-audit\.yml/);
   assert.match(gate, /source_sha:\s*\$\{\{\s*github\.sha\s*\}\}/);
-  assert.match(prepare, /needs:\s*legal_audit/);
-  assert.match(release, /needs:\s*prepare_release/);
+  assert.match(candidate, /needs:\s*legal_audit/);
 });
 
 test("legal audit cannot drift to a moving or stale checkout", () => {
@@ -66,16 +64,16 @@ test("audit failures cannot be converted into a successful production release", 
   const deploy = read(".github/workflows/deploy.yml");
   const legal = read(".github/workflows/legal-audit.yml");
   const gate = jobBlock(deploy, "legal_audit");
-  const release = jobBlock(deploy, "release");
+  const candidate = jobBlock(deploy, "candidate");
   const record = jobBlock(legal, "record");
-  const releaseHeader = release.slice(0, release.indexOf("\n    steps:"));
+  const candidateHeader = candidate.slice(0, candidate.indexOf("\n    steps:"));
 
   assert.doesNotMatch(
     record.slice(0, record.indexOf("\n    steps:")),
     /\n\s+if:/,
   );
   assert.doesNotMatch(gate, /continue-on-error|if:\s*always\(\)|\|\|\s*true/);
-  assert.doesNotMatch(releaseHeader, /if:\s*always\(\)|if:\s*failure\(\)/);
+  assert.doesNotMatch(candidateHeader, /if:\s*always\(\)|if:\s*failure\(\)/);
   assert.doesNotMatch(record, /continue-on-error|\|\|\s*true/);
   assert.match(record, /set -euo pipefail/);
   assert.match(record, /gcloud secrets versions access/);

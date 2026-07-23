@@ -198,6 +198,7 @@ test("production mutation helpers are gated to Portfolio main GitHub Actions", (
   );
 
   for (const relativePath of [
+    ".github/scripts/deploy-candidate.sh",
     ".github/scripts/deploy-cloud-run.sh",
     ".github/scripts/deploy-portfolio-edge.sh",
   ]) {
@@ -532,9 +533,9 @@ test("release-image security gates block only Critical vulnerabilities and all d
   );
 });
 
-test("main delivery uses repository-bound WIF, a dedicated registry, digest pinning, and causal rollback", () => {
+test("main delivery prepares an identity-attested zero-traffic candidate without promotion", () => {
   const workflow = read(".github/workflows/deploy.yml");
-  const release = read(".github/scripts/deploy-cloud-run.sh");
+  const candidate = read(".github/scripts/deploy-candidate.sh");
 
   assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
   assert.match(workflow, /personal-brand-github\/providers\/portfolio-main/);
@@ -555,9 +556,14 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.match(workflow, /run-database-release-from-bundle\.ts/);
   assert.match(
     workflow,
-    /run-deployment-command\.ts[^\n]+deploy-cloud-run\.sh/,
+    /run-deployment-command\.ts[\s\S]+deploy-candidate\.sh/,
   );
   assert.match(workflow, /steps\.image\.outputs\.uri/);
+  assert.match(workflow, /print-identity-token/);
+  assert.match(workflow, /release-controller-hqojlnvxwa-uk\.a\.run\.app/);
+  assert.match(workflow, /\/v1\/candidates/);
+  assert.match(workflow, /portfolio-controller-response\.json/);
+  assert.match(workflow, /portfolio-migration-evidence\.json/);
 
   assert.match(
     workflow,
@@ -580,67 +586,58 @@ test("main delivery uses repository-bound WIF, a dedicated registry, digest pinn
   assert.ok(
     workflow.indexOf("Validate exact secret bundle versions") <
       workflow.indexOf("Consume the one approved immutable image handoff"),
-    "bundle versions must be pinned and validated before migration or traffic mutation",
+    "bundle versions must be pinned before consuming the approved image",
   );
-  assert.match(workflow, /Preflight production dependencies/);
-  assert.match(workflow, /preflight-release\.sh/);
   assert.ok(
-    workflow.indexOf("Preflight production dependencies") <
-      workflow.indexOf("Consume the one approved immutable image handoff"),
-    "Cloud Run, IAM, and Cloudflare dependencies must be read-verified before image consumption or migration",
+    workflow.indexOf("Consume the one approved immutable image handoff") <
+      workflow.indexOf("Run additive migrations using the approved image")
+      && workflow.indexOf("Run additive migrations using the approved image") <
+        workflow.indexOf("Deploy and smoke-test green at zero traffic")
+      && workflow.indexOf("Deploy and smoke-test green at zero traffic") <
+        workflow.indexOf("Publish identity-attested candidate to release controller"),
+    "image provenance, migrations, candidate smoke, and publication must remain ordered",
   );
 
-  assert.match(release, /--no-traffic/);
-  assert.match(release, /candidate_tag="candidate-/);
-  assert.match(release, /--tag="\$\{candidate_tag\}"/);
-  assert.match(release, /https:\/\/2jog\.dev/);
-  assert.match(release, /status\.url/);
-  assert.match(release, /--to-revisions/);
-  assert.match(release, /OBSERVATION_SECONDS:-600/);
-  assert.match(release, /current_revision.*candidate_revision/s);
-  assert.match(release, /rollback_url/s);
-  assert.match(release, /imageDigest.*IMAGE_DIGEST/s);
-  assert.match(release, /gcloud run services update "\$SERVICE_NAME"/);
-  assert.doesNotMatch(release, /gcloud beta run services update/);
-  assert.match(release, /--min=0/);
-  assert.match(release, /--max=1/);
-  assert.match(release, /--cpu-throttling/);
-  assert.match(release, /GCP_PROJECT_NUMBER/);
-  assert.doesNotMatch(release, /--allow-unauthenticated/);
-  assert.match(release, /get-iam-policy/);
-  assert.match(release, /set-iam-policy/);
-  assert.match(release, /restore_cloud_run_state/);
-  assert.match(release, /X-2jog-Origin-Token/);
-  assert.match(release, /EDGE_ORIGIN_PREVIOUS_TOKEN/);
-  assert.match(release, /smoke_raw_denial/);
-  const releaseMain = release.slice(release.indexOf("initial_service_json="));
-  assert.ok(
-    releaseMain.indexOf('--to-revisions "${candidate_revision}=100"') <
-      releaseMain.indexOf("deploy-portfolio-edge.sh deploy"),
-    "the candidate must accept the prior edge credential before the Worker rotates to the new credential",
-  );
-  assert.match(release, /rollback_coordinated_release/);
-  const coordinatedRollback = release.slice(
-    release.indexOf("rollback_coordinated_release()"),
-    release.indexOf("initial_service_json="),
-  );
-  assert.ok(
-    coordinatedRollback.indexOf("restore_previous_edge") <
-      coordinatedRollback.indexOf("rollback_if_causal"),
-    "rollback must restore the previous Worker while the candidate still accepts its credential",
-  );
-  assert.match(
-    release,
-    /current_revision.*previous_revision[\s\S]+Production origin still runs the previous revision/,
-    "an edge-only cutover must remain recoverable when Cloud Run promotion never completed",
-  );
-  assert.doesNotMatch(release, /rollback_coordinated_release\s*\|\|\s*true/);
+  for (const exactBoundary of [
+    /test "\$GCP_PROJECT_ID" = "personal-brand-501801"/,
+    /test "\$GCP_REGION" = "us-east4"/,
+    /test "\$SERVICE_NAME" = "portfolio--prod"/,
+    /portfolio-runtime@personal-brand-501801\.iam\.gserviceaccount\.com/,
+  ]) {
+    assert.match(candidate, exactBoundary);
+  }
+  assert.match(candidate, /--no-traffic/);
+  assert.match(candidate, /candidate_tag="candidate-/);
+  assert.match(candidate, /--tag "\$candidate_tag"/);
+  assert.match(candidate, /--min-instances 0/);
+  assert.match(candidate, /--max-instances 1/);
+  assert.match(candidate, /--cpu-throttling/);
+  assert.doesNotMatch(candidate, /--allow-unauthenticated/);
+  assert.match(candidate, /candidate_digest.*IMAGE_DIGEST/s);
+  assert.match(candidate, /release-sha.*GITHUB_SHA/s);
+  assert.match(candidate, /latestCreatedRevisionName/);
+  assert.match(candidate, /expected_candidate_revision/);
+  assert.match(candidate, /status\.conditions/);
+  assert.match(candidate, /candidate.*percent.*0/s);
+  assert.match(candidate, /blue_revision/);
+  assert.match(candidate, /canonical_iam/);
+  assert.match(candidate, /X-2jog-Origin-Token/);
+  assert.match(candidate, /EDGE_ORIGIN_PREVIOUS_TOKEN/);
+  assert.match(candidate, /raw_status/);
+  assert.match(candidate, /rawUnauthenticatedStatus/);
+  assert.match(candidate, /MIGRATION_EVIDENCE_SHA256/);
+  assert.match(candidate, /workflowRef/);
+  assert.match(candidate, /edge:\s*\{\s*changed:\s*false\s*\}/);
   assert.doesNotMatch(
-    release,
-    /deploy-portfolio-edge\.sh rollback\s*\|\|\s*true/,
+    candidate,
+    /update-traffic|--to-revisions|deploy-portfolio-edge|wrangler|OBSERVATION_SECONDS/,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /update-traffic|--to-revisions|deploy-cloud-run\.sh|deploy-portfolio-edge|wrangler/,
   );
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/);
-  assert.match(workflow, /portfolio-edge-rollback-state\.json/);
+  assert.match(workflow, /portfolio-cloud-run-rollback-state\.json/);
 });
 
 test("privileged deploy relies on PR CI and the production migration bundle, not localhost Postgres", () => {
@@ -874,7 +871,11 @@ test("Portfolio owns a tested, observable Cloudflare front door", () => {
   assert.match(edgeAuth, /__Secure-2jog-admin/);
   assert.match(edgeAuth, /payload\.exp - payload\.iat !== 900/);
   assert.match(edgeProxy, /requiresAdminIdentity/);
-  assert.match(workflow, /portfolio-edge/);
+  assert.doesNotMatch(
+    workflow,
+    /deploy-portfolio-edge|wrangler/,
+    "an application-only candidate must leave the existing edge version untouched",
+  );
   assert.match(edgeRelease, /wrangler deploy/);
   assert.match(edgeRelease, /wrangler rollback/);
   assert.match(edgeRelease, /ROUTE_TOOL" snapshot/);
@@ -953,7 +954,7 @@ test("legal audit delivery verifies TLS and keeps its history view under invoker
 
 test("deployment consumes the exact approved release-image run without rebuilding", () => {
   const workflow = read(".github/workflows/deploy.yml");
-  const release = read(".github/scripts/deploy-cloud-run.sh");
+  const candidate = read(".github/scripts/deploy-candidate.sh");
 
   assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
   assert.doesNotMatch(workflow, /workflow_run:/);
@@ -962,6 +963,8 @@ test("deployment consumes the exact approved release-image run without rebuildin
   assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
   assert.doesNotMatch(workflow, /docker build/);
   assert.doesNotMatch(workflow, /docker push/);
-  assert.match(release, /gcloud run services update "\$SERVICE_NAME"/);
-  assert.doesNotMatch(release, /gcloud beta run services update/);
+  assert.match(candidate, /gcloud run deploy "\$SERVICE_NAME"/);
+  assert.match(candidate, /--image "\$IMAGE_DIGEST_URI"/);
+  assert.doesNotMatch(candidate, /gcloud beta run services update/);
+  assert.doesNotMatch(candidate, /update-traffic|--to-revisions/);
 });
