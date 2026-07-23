@@ -195,6 +195,29 @@ test("managed ACL reconciliation mutates only objects with explicit Portfolio gr
   }
 });
 
+test("Portfolio ACL reconciliation preserves and repairs ordinary owner privileges", () => {
+  const pre = read("infra/supabase/portfolio-pre-migration.sql");
+  const post = read("infra/supabase/portfolio-role-acls.sql");
+  const scrubStart = post.indexOf("-- A private service schema has one global ACL matrix");
+  const scrubEnd = post.indexOf("$portfolio_acl_scrub$;", scrubStart);
+  const scrub = post.slice(scrubStart, scrubEnd + "$portfolio_acl_scrub$;".length);
+
+  assert.ok(scrubStart >= 0 && scrubEnd > scrubStart, "private ACL scrub must exist");
+  assert.match(pre, /Repair ordinary owner privileges stripped by bootstrap versions/);
+  assert.match(pre, /GRANT ALL PRIVILEGES ON TABLE portfolio\.%I TO %I/);
+  assert.match(pre, /GRANT ALL PRIVILEGES ON SEQUENCE portfolio\.%I TO %I/);
+  assert.match(pre, /GRANT ALL PRIVILEGES ON ROUTINE portfolio\.%I\(%s\) TO %I/);
+  assert.match(pre, /GRANT ALL PRIVILEGES ON TYPE portfolio\.%I TO %I/);
+  assert.match(scrub, /privilege\.grantee <> namespace\.nspowner/);
+  assert.match(scrub, /privilege\.grantee <> object\.relowner/);
+  assert.match(scrub, /privilege\.grantee <> routine\.proowner/);
+  assert.doesNotMatch(scrub, /FOR grantee IN SELECT rolname FROM pg_roles/);
+  assert.match(
+    post,
+    /namespace\.nspname = 'portfolio'\s+AND privilege\.grantee <> object\.relowner\s+LOOP/,
+  );
+});
+
 test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {
   const session = read("src/shared/postgres-session.ts");
 
