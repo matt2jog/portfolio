@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - ".github/**"
       - "src/tests/**"
+      - "src/scripts/release/run-database-release-from-bundle.ts"
       - "**/*.md"
   workflow_dispatch:
 

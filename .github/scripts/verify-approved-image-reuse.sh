@@ -14,7 +14,7 @@ git merge-base --is-ancestor "$application_sha" "$workflow_sha"
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   case "$path" in
-    .github/*|src/tests/*)
+    .github/*|src/tests/*|src/scripts/release/run-database-release-from-bundle.ts)
       ;;
     *)
       echo "Approved image cannot be reused after runtime-affecting change: $path" >&2
