@@ -326,11 +326,12 @@ without `CREATE`; `vector` and its type must be in `extensions` and owned by
 `postgres`. The migrator alone requires database `TEMPORARY` for its expected
 schema proof. The source-only
 `portfolio_legacy_reader` has `SELECT` on exactly the 23 allowlisted base or
-partitioned tables with `search_path=public`. The sole RLS exception is
-`public.legal_document_versions`, which must have exactly one applicable
+partitioned tables with `search_path=public`. Every allowlisted table that
+already has RLS enabled keeps RLS enabled and receives exactly one applicable
 permissive `SELECT` policy named `portfolio_legacy_reader_full_read`, scoped only
-to the reader with `USING (true)` and no `WITH CHECK`; unrelated writer-only
-policies may remain. Every other allowlisted table has RLS disabled. The reader
+to the reader with `USING (true)` and no `WITH CHECK`; unrelated policies that
+do not apply to the reader may remain. An allowlisted table with RLS disabled
+must have no policy applicable to the reader. The bridge never disables RLS. The reader
 has no column writes, unexpected public relations or sequences, executable public
 functions, object ownership, DDL, administrative membership, or sibling-schema
 access. Apply the source-side contract at

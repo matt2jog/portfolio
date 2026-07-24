@@ -191,16 +191,63 @@ GRANT SELECT ON TABLE
   public.xyz_bullets
 TO portfolio_legacy_reader;
 
-ALTER TABLE public.legal_document_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.legal_document_versions NO FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS portfolio_legacy_reader_full_read
-  ON public.legal_document_versions;
-CREATE POLICY portfolio_legacy_reader_full_read
-  ON public.legal_document_versions
-  AS PERMISSIVE
-  FOR SELECT
-  TO portfolio_legacy_reader
-  USING (true);
+DO $reader_rls_reconciliation$
+DECLARE
+  allowed_table text;
+  rls_enabled boolean;
+BEGIN
+  FOREACH allowed_table IN ARRAY ARRAY[
+    'admin_policy_acceptance',
+    'ai_models',
+    'all_skills',
+    'audit_logs',
+    'bio',
+    'bio_paragraphs',
+    'browser_request_logs',
+    'browser_tracking',
+    'browser_tracking_ips',
+    'education',
+    'experiences',
+    'github_timeline_events',
+    'ip_rate_logs',
+    'legal_document_versions',
+    'linkedin_timeline_events',
+    'personal_information',
+    'portfolio_skills',
+    'projects',
+    'session',
+    'skills_group',
+    'users',
+    'welcome_messages',
+    'xyz_bullets'
+  ]
+  LOOP
+    SELECT object.relrowsecurity
+    INTO STRICT rls_enabled
+    FROM pg_class object
+    JOIN pg_namespace namespace ON namespace.oid = object.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND object.relname = allowed_table
+      AND object.relkind IN ('r', 'p');
+
+    EXECUTE format(
+      'ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY',
+      allowed_table
+    );
+    EXECUTE format(
+      'DROP POLICY IF EXISTS portfolio_legacy_reader_full_read ON public.%I',
+      allowed_table
+    );
+    IF rls_enabled THEN
+      EXECUTE format(
+        'CREATE POLICY portfolio_legacy_reader_full_read ON public.%I '
+        || 'AS PERMISSIVE FOR SELECT TO portfolio_legacy_reader USING (true)',
+        allowed_table
+      );
+    END IF;
+  END LOOP;
+END
+$reader_rls_reconciliation$;
 
 DO $$
 BEGIN

@@ -441,7 +441,7 @@ test("legacy reader accepts only exact allowlisted public SELECT access", async 
   }
 });
 
-test("legacy reader query requires the exact legal RLS and managed-vector public ACL boundary", async () => {
+test("legacy reader query requires one exact policy on every RLS-enabled allowed table", async () => {
   const base = legacyReaderQueryable();
   const statements: string[] = [];
   await assertPortfolioLegacyReaderDatabaseSession(
@@ -465,7 +465,9 @@ test("legacy reader query requires the exact legal RLS and managed-vector public
     /pg_get_expr\(policy\.polqual, policy\.polrelid\) = 'true'/,
   );
   assert.match(statement, /policy\.polwithcheck IS NULL/);
-  assert.match(statement, /allowed\.table_name = 'legal_document_versions'/);
+  assert.match(statement, /allowed\.relrowsecurity/);
+  assert.match(statement, /NOT allowed\.relrowsecurity/);
+  assert.match(statement, /0::oid = ANY\(policy\.polroles\)/);
   assert.match(statement, /dependency\.classid = 'pg_proc'::regclass/);
   assert.match(statement, /dependency\.classid = 'pg_type'::regclass/);
   assert.match(statement, /has_type_privilege\(current_user, type\.oid, 'USAGE'\)/);
