@@ -154,7 +154,7 @@ jobs:
           gcloud secrets versions access "$DEPLOYMENT_BUNDLE_VERSION" \
             --secret "$DEPLOYMENT_SECRET_NAME" --project "$GCP_PROJECT_ID" >"$bundle_file"
           npx tsx src/scripts/release/run-database-release-from-bundle.ts \
-            "$bundle_file" "$IMAGE_DIGEST_URI"
+            "$bundle_file" "$IMAGE_DIGEST_URI" "$APPLICATION_RELEASE_SHA"
           jq -S -n \
             --arg releaseSha "$APPLICATION_RELEASE_SHA" \
             --arg imageDigestUri "$IMAGE_DIGEST_URI" \

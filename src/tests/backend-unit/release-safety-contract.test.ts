@@ -263,6 +263,18 @@ test("bootstrap owns administrator reconciliation while delivery publishes a mig
   );
   assert.match(databaseRelease, /runMigrationsFromBundle/);
   assert.doesNotMatch(databaseRelease, /portfolio-pre-migration\.sql|portfolio-role-acls\.sql/);
+  assert.match(
+    databaseRelease,
+    /applicationReleaseSha !== process\.env\.APPLICATION_RELEASE_SHA/,
+  );
+  assert.match(
+    databaseRelease,
+    /assertLocalPortfolioImageProvenance\(imageDigestUri, applicationReleaseSha\)/,
+  );
+  assert.doesNotMatch(
+    databaseRelease,
+    /assertLocalPortfolioImageProvenance\(imageDigestUri, process\.env\.GITHUB_SHA/,
+  );
   assert.match(workflow, /candidate:[\s\S]+needs:\s*legal_audit/);
   assert.ok(
     workflow.indexOf("Run additive migrations using the approved image")

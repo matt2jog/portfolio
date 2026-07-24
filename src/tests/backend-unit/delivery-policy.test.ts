@@ -568,6 +568,10 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(workflow, /run-database-release-from-bundle\.ts/);
   assert.match(
     workflow,
+    /run-database-release-from-bundle\.ts[\s\S]*?"\$APPLICATION_RELEASE_SHA"/,
+  );
+  assert.match(
+    workflow,
     /run-deployment-command\.ts[\s\S]+deploy-candidate\.sh/,
   );
   assert.match(workflow, /steps\.image\.outputs\.uri/);

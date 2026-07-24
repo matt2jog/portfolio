@@ -97,8 +97,14 @@ async function main(): Promise<void> {
   assertProductionMutationAllowed(process.env, 'Portfolio database release');
   const bundlePath = process.argv[2];
   const imageDigestUri = process.argv[3];
-  if (!bundlePath || !imageDigestUri) throw new Error('A deployment bundle path and image digest are required');
-  assertLocalPortfolioImageProvenance(imageDigestUri, process.env.GITHUB_SHA ?? '');
+  const applicationReleaseSha = process.argv[4];
+  if (!bundlePath || !imageDigestUri || !applicationReleaseSha) {
+    throw new Error('A deployment bundle path, image digest, and application release SHA are required');
+  }
+  if (applicationReleaseSha !== process.env.APPLICATION_RELEASE_SHA) {
+    throw new Error('Application release SHA does not match the approved workflow handoff');
+  }
+  assertLocalPortfolioImageProvenance(imageDigestUri, applicationReleaseSha);
   const bundle = parseDeploymentBundle(await readAndDeleteBundle(bundlePath));
   await runDatabaseRelease(bundle, imageDigestUri);
 }
