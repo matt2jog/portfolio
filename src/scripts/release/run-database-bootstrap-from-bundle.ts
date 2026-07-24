@@ -229,7 +229,7 @@ function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): Datab
         await assertPortfolioLegacyReaderDatabaseSession(client, PORTFOLIO_DATA_TABLES);
       });
       await withClient(connectionConfig(value, value.SOURCE_FENCE_DATABASE_URL, "portfolio_fence_login", "portfolio_fence_operator"), async (client) => {
-        await client.query("RESET ROLE");
+        await client.query("SET ROLE NONE");
         const login = await client.query<{ sessionUser: string; currentUser: string }>(
           `SELECT session_user AS "sessionUser", current_user AS "currentUser"`,
         );
@@ -249,7 +249,7 @@ function productionDependencies(bundle: PortfolioDatabaseBootstrapBundle): Datab
           || !capability.rows[0].abort
           || !capability.rows[0].commit
         ) throw new Error("Portfolio source-fence capability boundary is invalid");
-        await client.query("RESET ROLE");
+        await client.query("SET ROLE NONE");
       });
     },
   };

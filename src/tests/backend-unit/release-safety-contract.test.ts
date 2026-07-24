@@ -229,11 +229,12 @@ test("Portfolio ACL reconciliation preserves and repairs ordinary owner privileg
   assert.doesNotMatch(`${post}\n${session}`, /object\.relkind = 'S' THEN 'S'::/);
 });
 
-test("production session verification proves login, SET ROLE, capability, and RESET ROLE", () => {
+test("production session verification proves login, capability, and explicit SET ROLE NONE", () => {
   const session = read("src/shared/postgres-session.ts");
 
   assert.match(session, /SET ROLE/);
-  assert.match(session, /RESET ROLE/);
+  assert.match(session, /SET ROLE NONE/);
+  assert.doesNotMatch(session, /query\("RESET ROLE"\)/);
   assert.match(session, /portfolio_runtime_login/);
   assert.match(session, /portfolio_migrator_login/);
   assert.match(session, /portfolio_legal_login/);
