@@ -526,6 +526,11 @@ test("release-image security gates block only Critical vulnerabilities and all d
 
   assert.match(workflow, /paths-ignore:[\s\S]*"\.github\/\*\*"/);
   assert.match(workflow, /paths-ignore:[\s\S]*"src\/tests\/\*\*"/);
+  assert.match(
+    workflow,
+    /paths-ignore:[\s\S]*"src\/scripts\/release\/run-database-release-from-bundle\.ts"/,
+  );
+  assert.doesNotMatch(workflow, /"src\/scripts\/\*\*"/);
   assert.doesNotMatch(workflow, /scanners:\s*vuln,secret/);
   assert.match(
     workflow,
@@ -646,6 +651,11 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(candidate, /APPLICATION_RELEASE_SHA/);
   assert.match(imageReuse, /git merge-base --is-ancestor/);
   assert.match(imageReuse, /\.github\/\*\|src\/tests\/\*/);
+  assert.match(
+    imageReuse,
+    /src\/scripts\/release\/run-database-release-from-bundle\.ts/,
+  );
+  assert.doesNotMatch(imageReuse, /src\/scripts\/\*/);
   assert.doesNotMatch(imageReuse, /\*\*\/\*\.md/);
   assert.match(candidate, /latestCreatedRevisionName/);
   assert.match(candidate, /expected_candidate_revision/);
