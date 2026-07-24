@@ -196,7 +196,7 @@ jobs:
           CANDIDATE_MANIFEST_FILE: ${{ runner.temp }}/portfolio-candidate-manifest.json
           CONTROLLER_RESPONSE_FILE: ${{ runner.temp }}/portfolio-controller-response.json
           CONTROLLER_ID_TOKEN: ${{ steps.google_auth.outputs.id_token }}
-          EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
+          EXPECTED_CANDIDATE_SHA: ${{ env.APPLICATION_RELEASE_SHA }}
         shell: bash
         run: bash .github/scripts/publish-candidate.sh
 

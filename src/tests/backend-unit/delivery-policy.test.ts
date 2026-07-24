@@ -585,6 +585,10 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(workflow, /id_token_audience:\s*\$\{\{ env\.RELEASE_CONTROLLER_URL \}\}/);
   assert.match(workflow, /id_token_include_email:\s*true/);
   assert.match(workflow, /steps\.google_auth\.outputs\.id_token/);
+  assert.match(
+    workflow,
+    /EXPECTED_CANDIDATE_SHA:\s*\$\{\{ env\.APPLICATION_RELEASE_SHA \}\}/,
+  );
   assert.match(workflow, /release-controller-hqojlnvxwa-uk\.a\.run\.app/);
   assert.match(publisher, /\/v1\/candidates/);
   assert.match(workflow, /portfolio-controller-response\.json/);
@@ -596,6 +600,9 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(recovery, /outsideUsOriginAttestedStatus == 451/);
   assert.match(recovery, /rawUnauthenticatedStatus == 401/);
   assert.match(recovery, /iamBefore == \.iamAfterCandidate/);
+  assert.match(recovery, /release_sha=.*manifest\.releaseSha/s);
+  assert.match(recovery, /candidate_sha=%s\\n' "\$release_sha"/);
+  assert.doesNotMatch(recovery, /--arg releaseSha "\$head_sha"/);
 
   assert.match(
     workflow,
