@@ -720,7 +720,7 @@ test("migration ledger proves exact DDL without allowing catalog or temporary-sc
   }
 });
 
-test("legacy reader provisioning grants only the reviewed bridge tables and exact legal RLS policy", () => {
+test("legacy reader provisioning grants only the reviewed bridge tables and exact RLS policies", () => {
   const sql = read("infra/supabase/legacy-reader.sql");
 
   assert.match(sql, /REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public/);
@@ -735,6 +735,8 @@ test("legacy reader provisioning grants only the reviewed bridge tables and exac
   assert.match(sql, /inherits EXECUTE on a non-vector public function/);
   assert.match(sql, /inherits USAGE on a non-vector public standalone type/);
   assert.match(sql, /CREATE POLICY portfolio_legacy_reader_full_read/);
+  assert.match(sql, /IF rls_enabled THEN/);
+  assert.match(sql, /DROP POLICY IF EXISTS portfolio_legacy_reader_full_read ON public\.%I/);
   assert.match(
     sql,
     /AS PERMISSIVE\s+FOR SELECT\s+TO portfolio_legacy_reader\s+USING \(true\)/s,
@@ -750,6 +752,16 @@ test("legacy reader provisioning grants only the reviewed bridge tables and exac
   assert.equal(
     [...grantBlock.matchAll(/public\.([a-z_]+)(?:,|\s)/g)].length,
     PORTFOLIO_DATA_TABLES.length,
+  );
+  const rlsAllowlist = sql.match(
+    /FOREACH allowed_table IN ARRAY ARRAY\[([\s\S]+?)\]\s+LOOP/,
+  )?.[1];
+  assert.ok(rlsAllowlist, "the RLS reconciliation allowlist must exist");
+  assert.deepEqual(
+    [...rlsAllowlist.matchAll(/'([a-z_]+)'/g)]
+      .map((match) => match[1])
+      .sort(),
+    [...PORTFOLIO_DATA_TABLES].sort(),
   );
 });
 

@@ -863,6 +863,10 @@ test("legacy reader remains confined to its exact public table allowlist", async
       GRANT USAGE ON SCHEMA public TO portfolio_legacy_reader;
       GRANT SELECT ON public.boundary_source, public.legal_document_versions
         TO portfolio_legacy_reader;
+      ALTER TABLE public.boundary_source ENABLE ROW LEVEL SECURITY;
+      CREATE POLICY portfolio_legacy_reader_full_read
+        ON public.boundary_source AS PERMISSIVE FOR SELECT
+        TO portfolio_legacy_reader USING (true);
       ALTER TABLE public.legal_document_versions ENABLE ROW LEVEL SECURITY;
       CREATE POLICY portfolio_legacy_reader_full_read
         ON public.legal_document_versions AS PERMISSIVE FOR SELECT
@@ -880,6 +884,19 @@ test("legacy reader remains confined to its exact public table allowlist", async
     await reader.connect();
     const tables = ["boundary_source", "legal_document_versions"];
     await assertPortfolioLegacyReaderDatabaseSession(reader, tables);
+
+    await admin.query(
+      "DROP POLICY portfolio_legacy_reader_full_read ON public.boundary_source",
+    );
+    await assert.rejects(
+      assertPortfolioLegacyReaderDatabaseSession(reader, tables),
+      /allowed-table-row-security/i,
+    );
+    await admin.query(`
+      CREATE POLICY portfolio_legacy_reader_full_read
+        ON public.boundary_source AS PERMISSIVE FOR SELECT
+        TO portfolio_legacy_reader USING (true)
+    `);
 
     await admin.query(
       "GRANT UPDATE (id) ON public.boundary_source TO portfolio_legacy_reader",

@@ -108,6 +108,7 @@ test("legacy Portfolio import is exact, isolated, and refuses a non-empty target
         VALUES ('portfolio-skill-fixture', 'skill-fixture');
         INSERT INTO public.ai_models (id, label, model_id, provider)
         VALUES ('model-fixture', 'Fixture model', 'fixture/model', 'fixture');
+        ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
       `);
       await setup.query(
         `ALTER ROLE portfolio_legacy_reader_login PASSWORD '${readerPassword}'`,
