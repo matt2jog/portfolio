@@ -7,7 +7,13 @@ on:
     inputs:
       image_build_run_id:
         description: Successful Build Approved Release Image run for the current main commit
-        required: true
+        required: false
+        default: ""
+        type: string
+      candidate_run_id:
+        description: Failed candidate run whose successful deployment should only be republished
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -38,7 +44,7 @@ env:
 
 jobs:
   legal_audit:
-    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.candidate_run_id == ''
     permissions:
       contents: read
       id-token: write
@@ -49,7 +55,7 @@ jobs:
 
   candidate:
     needs: legal_audit
-    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.candidate_run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: production
@@ -71,10 +77,14 @@ jobs:
         run: npm ci --include=dev
 
       - name: Authenticate through repository-bound WIF
+        id: google_auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ env.RELEASE_CONTROLLER_URL }}
+          id_token_include_email: true
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
@@ -176,37 +186,10 @@ jobs:
         env:
           CANDIDATE_MANIFEST_FILE: ${{ runner.temp }}/portfolio-candidate-manifest.json
           CONTROLLER_RESPONSE_FILE: ${{ runner.temp }}/portfolio-controller-response.json
+          CONTROLLER_ID_TOKEN: ${{ steps.google_auth.outputs.id_token }}
+          EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
         shell: bash
-        run: |
-          set -euo pipefail
-          identity_token="$(gcloud auth print-identity-token \
-            --audiences="$RELEASE_CONTROLLER_URL" --include-email)"
-          status="$(curl --silent --show-error \
-            --connect-timeout 10 --max-time 60 \
-            --output "$CONTROLLER_RESPONSE_FILE" --write-out '%{http_code}' \
-            --request POST "${RELEASE_CONTROLLER_URL}/v1/candidates" \
-            --header "Authorization: Bearer ${identity_token}" \
-            --header "Content-Type: application/json" \
-            --data-binary "@${CANDIDATE_MANIFEST_FILE}")"
-          unset identity_token
-          case "$status" in
-            200|201) ;;
-            *)
-              jq -c '{error: .error // "candidate_publish_failed"}' \
-                "$CONTROLLER_RESPONSE_FILE" >&2 || true
-              exit 1
-              ;;
-          esac
-          jq -e --arg publisher "$DEPLOY_SERVICE_ACCOUNT" '
-            .candidate.publisherEmail == $publisher
-            and (.candidate.manifestId | test(
-              "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-            ))
-            and (.candidate.manifestSha256 | test("^[0-9a-f]{64}$"))
-          ' "$CONTROLLER_RESPONSE_FILE" >/dev/null
-          diff \
-            <(jq -cS '.manifest' "$CANDIDATE_MANIFEST_FILE") \
-            <(jq -cS '.candidate.manifest' "$CONTROLLER_RESPONSE_FILE")
+        run: bash .github/scripts/publish-candidate.sh
 
       - name: Retain candidate handoff evidence
         if: always()
@@ -230,3 +213,56 @@ jobs:
           rm -f \
             "${RUNNER_TEMP}/portfolio-deployment-bundle.json" \
             "${RUNNER_TEMP}/portfolio-database-bootstrap-bundle.json"
+
+  publish_existing_candidate:
+    if: github.repository == 'matt2jog/portfolio' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Check out publication recovery logic
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Authenticate publisher and mint controller identity
+        id: google_auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ env.RELEASE_CONTROLLER_URL }}
+          id_token_include_email: true
+
+      - name: Verify failed publication handoff without redeploying
+        id: handoff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          bash .github/scripts/fetch-candidate-handoff.sh \
+            "${{ inputs.candidate_run_id }}" \
+            "${RUNNER_TEMP}/portfolio-candidate-recovery"
+
+      - name: Publish the verified existing candidate
+        env:
+          CANDIDATE_MANIFEST_FILE: ${{ steps.handoff.outputs.manifest_file }}
+          CONTROLLER_RESPONSE_FILE: ${{ runner.temp }}/portfolio-controller-response.json
+          CONTROLLER_ID_TOKEN: ${{ steps.google_auth.outputs.id_token }}
+          EXPECTED_CANDIDATE_SHA: ${{ steps.handoff.outputs.candidate_sha }}
+        shell: bash
+        run: bash .github/scripts/publish-candidate.sh
+
+      - name: Retain recovery publication evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: portfolio-candidate-publication-${{ inputs.candidate_run_id }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/portfolio-candidate-recovery/portfolio-candidate-manifest.json
+            ${{ runner.temp }}/portfolio-controller-response.json
+          if-no-files-found: warn
+          retention-days: 30

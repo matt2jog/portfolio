@@ -7,6 +7,10 @@ name: Build Approved Release Image
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - ".github/**"
+      - "src/tests/**"
+      - "**/*.md"
   workflow_dispatch:
 
 permissions:

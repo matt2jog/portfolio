@@ -201,6 +201,8 @@ test("production mutation helpers are gated to Portfolio main GitHub Actions", (
     ".github/scripts/deploy-candidate.sh",
     ".github/scripts/deploy-cloud-run.sh",
     ".github/scripts/deploy-portfolio-edge.sh",
+    ".github/scripts/fetch-candidate-handoff.sh",
+    ".github/scripts/publish-candidate.sh",
   ]) {
     assert.match(read(relativePath), /GITHUB_REPOSITORY.*matt2jog\/portfolio/);
     assert.match(read(relativePath), /GITHUB_REF.*refs\/heads\/main/);
@@ -522,6 +524,8 @@ test("fork-safe pull request CI exercises coverage, integration, UI, build, and 
 test("release-image security gates block only Critical vulnerabilities and all detected secrets", () => {
   const workflow = read(".github/workflows/release-image.yml");
 
+  assert.match(workflow, /paths-ignore:[\s\S]*"\.github\/\*\*"/);
+  assert.match(workflow, /paths-ignore:[\s\S]*"src\/tests\/\*\*"/);
   assert.doesNotMatch(workflow, /scanners:\s*vuln,secret/);
   assert.match(
     workflow,
@@ -536,6 +540,8 @@ test("release-image security gates block only Critical vulnerabilities and all d
 test("main delivery prepares an identity-attested zero-traffic candidate without promotion", () => {
   const workflow = read(".github/workflows/deploy.yml");
   const candidate = read(".github/scripts/deploy-candidate.sh");
+  const publisher = read(".github/scripts/publish-candidate.sh");
+  const recovery = read(".github/scripts/fetch-candidate-handoff.sh");
 
   assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
   assert.match(workflow, /personal-brand-github\/providers\/portfolio-main/);
@@ -559,11 +565,22 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
     /run-deployment-command\.ts[\s\S]+deploy-candidate\.sh/,
   );
   assert.match(workflow, /steps\.image\.outputs\.uri/);
-  assert.match(workflow, /print-identity-token/);
+  assert.doesNotMatch(workflow, /gcloud auth print-identity-token/);
+  assert.match(workflow, /token_format:\s*id_token/);
+  assert.match(workflow, /id_token_audience:\s*\$\{\{ env\.RELEASE_CONTROLLER_URL \}\}/);
+  assert.match(workflow, /id_token_include_email:\s*true/);
+  assert.match(workflow, /steps\.google_auth\.outputs\.id_token/);
   assert.match(workflow, /release-controller-hqojlnvxwa-uk\.a\.run\.app/);
-  assert.match(workflow, /\/v1\/candidates/);
+  assert.match(publisher, /\/v1\/candidates/);
   assert.match(workflow, /portfolio-controller-response\.json/);
   assert.match(workflow, /portfolio-migration-evidence\.json/);
+  assert.match(publisher, /candidate\.publisherEmail/);
+  assert.match(publisher, /candidate\.manifestSha256/);
+  assert.match(recovery, /Deploy and smoke-test green at zero traffic/);
+  assert.match(recovery, /Publish identity-attested candidate to release controller/);
+  assert.match(recovery, /outsideUsOriginAttestedStatus == 451/);
+  assert.match(recovery, /rawUnauthenticatedStatus == 401/);
+  assert.match(recovery, /iamBefore == \.iamAfterCandidate/);
 
   assert.match(
     workflow,
@@ -642,6 +659,15 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   );
   assert.match(workflow, /actions\/upload-artifact@[0-9a-f]{40}/);
   assert.match(workflow, /portfolio-cloud-run-rollback-state\.json/);
+  assert.match(workflow, /candidate_run_id:/);
+  assert.match(workflow, /publish_existing_candidate:/);
+  assert.match(workflow, /fetch-candidate-handoff\.sh/);
+  assert.match(workflow, /publish-candidate\.sh/);
+  assert.match(workflow, /Verify failed publication handoff without redeploying/);
+  assert.doesNotMatch(
+    workflow.slice(workflow.indexOf("publish_existing_candidate:")),
+    /gcloud run deploy|deploy-candidate\.sh|run-database-release-from-bundle/,
+  );
 });
 
 test("privileged deploy relies on PR CI and the production migration bundle, not localhost Postgres", () => {
