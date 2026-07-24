@@ -17,7 +17,8 @@ async function main(): Promise<void> {
   if (!bundlePath) throw new Error("Deployment bundle path is required");
 
   await loadDeploymentBundle(bundlePath);
-  await import("./record-versions");
+  const { recordLegalVersions } = await import("./record-versions");
+  await recordLegalVersions();
 }
 
 void main().catch((error) => {

@@ -40,6 +40,8 @@ const DOCS: Array<{ docType: string; filename: string }> = [
 
 const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1_000;
+const LEGAL_VERSION_UNIQUE_CONSTRAINT =
+  "legal_document_versions_doc_type_content_hash_key";
 
 function required(name: string): string {
   const v = process.env[name];
@@ -64,7 +66,16 @@ function legalAuditDatabaseUrl(): string {
   throw new Error("Missing required env var: LEGAL_AUDIT_DATABASE_URL");
 }
 
-async function insertWithRetry(
+function isExistingLegalVersion(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && error.code === "23505"
+    && "constraint" in error
+    && error.constraint === LEGAL_VERSION_UNIQUE_CONSTRAINT;
+}
+
+export async function insertLegalVersionWithRetry(
   client: Client,
   row: {
     doc_type: string;
@@ -99,8 +110,7 @@ async function insertWithRetry(
       const result = await client.query(
         `INSERT INTO portfolio.legal_document_versions
            (doc_type, content, content_hash, commit_sha, committed_at)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (doc_type, content_hash) DO NOTHING`,
+         VALUES ($1, $2, $3, $4, $5)`,
         [
           row.doc_type,
           row.content,
@@ -109,10 +119,14 @@ async function insertWithRetry(
           row.committed_at,
         ],
       );
+      if (result.rowCount !== 1) {
+        throw new Error("Legal audit INSERT did not create exactly one row");
+      }
       await client.query("COMMIT");
-      return result.rowCount === 0 ? "duplicate" : "inserted";
+      return "inserted";
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
+      if (isExistingLegalVersion(err)) return "duplicate";
       lastErr = err;
       const delay = BASE_DELAY_MS * 2 ** (attempt - 1);
       console.error(
@@ -131,7 +145,7 @@ async function insertWithRetry(
     : new Error(`Insert failed for ${row.doc_type}`);
 }
 
-async function main() {
+export async function recordLegalVersions(): Promise<void> {
   assertProductionMutationAllowed(process.env, "Legal audit recording", [
     LEGAL_AUDIT_WORKFLOW_REF,
   ]);
@@ -175,7 +189,7 @@ async function main() {
       const filePath = path.join(legalDir, filename);
       const content = await readFile(filePath, "utf8");
       const contentHash = sha256(content);
-      const result = await insertWithRetry(client, {
+      const result = await insertLegalVersionWithRetry(client, {
         doc_type: docType,
         content,
         content_hash: contentHash,
@@ -203,7 +217,9 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error("[legal-audit] FAILED:", err);
-  process.exit(1);
-});
+if (path.basename(process.argv[1] ?? "") === "record-versions.ts") {
+  void recordLegalVersions().catch((err) => {
+    console.error("[legal-audit] FAILED:", err);
+    process.exit(1);
+  });
+}

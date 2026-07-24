@@ -958,8 +958,17 @@ test("legal audit delivery verifies TLS and keeps its history view under invoker
   assert.doesNotMatch(recorder, /rejectUnauthorized:\s*false/);
   assert.match(recorder, /postgresConnectionConfig/);
   assert.match(recorder, /INSERT INTO portfolio\.legal_document_versions/);
-  assert.match(recorder, /ON CONFLICT \(doc_type, content_hash\) DO NOTHING/);
-  assert.doesNotMatch(recorder, /code\?\:\s*string[^}]+23505/s);
+  assert.doesNotMatch(recorder, /ON CONFLICT/);
+  assert.match(recorder, /error\.code === "23505"/);
+  assert.match(
+    recorder,
+    /error\.constraint === LEGAL_VERSION_UNIQUE_CONSTRAINT/,
+  );
+  assert.match(
+    recorder,
+    /legal_document_versions_doc_type_content_hash_key/,
+  );
+  assert.match(recorderLoader, /await recordLegalVersions\(\)/);
   assert.match(recorder, /"portfolio, extensions"/);
   assert.match(postgresTls, /rejectUnauthorized:\s*true/);
   assert.doesNotMatch(postgresTls, /rejectUnauthorized:\s*false/);
