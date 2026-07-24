@@ -406,7 +406,7 @@ END
 $$;
 
 -- PostgreSQL grants PUBLIC routine execution and type usage by default. Establish
--- the exact global baseline before the first migration so RESET ROLE cannot
+-- the exact global baseline before the first migration so SET ROLE NONE cannot
 -- expose a login identity through objects created by any Portfolio DDL owner.
 ALTER DEFAULT PRIVILEGES FOR ROLE portfolio_migrator
   REVOKE EXECUTE ON ROUTINES FROM PUBLIC;

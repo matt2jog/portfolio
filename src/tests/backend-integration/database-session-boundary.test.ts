@@ -306,6 +306,7 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
   const migratorPassword = fixturePassword();
   const legalPassword = fixturePassword();
   let runtime: Client | undefined;
+  let runtimeWithConnectionRole: Client | undefined;
   let legal: Client | undefined;
   let migratorPool: Pool | undefined;
   let migrator: PoolClient | undefined;
@@ -528,6 +529,31 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
       "portfolio_runtime",
       "Portfolio runtime",
     );
+    runtimeWithConnectionRole = new Client({
+      ...postgresConnectionConfig(
+        roleUrl("portfolio_runtime_login", runtimePassword),
+        undefined,
+        "portfolio, extensions",
+      ),
+      options:
+        "-c role=portfolio_runtime -c search_path=portfolio,extensions -c TimeZone=UTC",
+    });
+    await runtimeWithConnectionRole.connect();
+    const connectionDefault = await runtimeWithConnectionRole.query<{
+      sessionUser: string;
+      currentUser: string;
+    }>(
+      `SELECT session_user AS "sessionUser", current_user AS "currentUser"`,
+    );
+    assert.deepEqual(connectionDefault.rows, [{
+      sessionUser: "portfolio_runtime_login",
+      currentUser: "portfolio_runtime",
+    }]);
+    await assertUnprivilegedDatabaseSession(
+      runtimeWithConnectionRole,
+      "portfolio_runtime",
+      "Portfolio runtime with a connection-time role",
+    );
     await assertUnprivilegedDatabaseSession(
       legal,
       "legal_audit_writer",
@@ -743,7 +769,7 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
         "portfolio_runtime",
         "Portfolio runtime",
       ),
-      /LOGIN\/RESET ROLE|namespace-allowlist|relation-acl|column-acl|routine-acl|type-acl|legal-exposure|legal-writer-policy/i,
+      /LOGIN\/SET ROLE NONE|namespace-allowlist|relation-acl|column-acl|routine-acl|type-acl|legal-exposure|legal-writer-policy/i,
     );
     await assert.rejects(
       assertUnprivilegedDatabaseSession(
@@ -751,11 +777,11 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
         "legal_audit_writer",
         "Portfolio legal audit",
       ),
-      /LOGIN\/RESET ROLE|relation-acl|legal-exposure/i,
+      /LOGIN\/SET ROLE NONE|relation-acl|legal-exposure/i,
     );
     await assert.rejects(
       assertPortfolioMigratorDatabaseSession(migrator),
-      /LOGIN\/RESET ROLE|audit-role|portfolio-acl-matrix/i,
+      /LOGIN\/SET ROLE NONE|audit-role|portfolio-acl-matrix/i,
     );
 
     await reconcilePortfolioDatabase(admin);
@@ -785,7 +811,7 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
         "SELECT * FROM future_service.audit_role_escape",
       );
     } finally {
-      await migrator.query("RESET ROLE");
+      await migrator.query("SET ROLE NONE");
     }
     await assertPermissionDenied(
       legal,
@@ -793,6 +819,7 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
     );
   } finally {
     await runtime?.end().catch(() => undefined);
+    await runtimeWithConnectionRole?.end().catch(() => undefined);
     await legal?.end().catch(() => undefined);
     migrator?.release();
     await migratorPool?.end().catch(() => undefined);

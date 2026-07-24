@@ -246,7 +246,7 @@ test("the audited pool verifies each physical login once and reapplies its capab
     capabilityRole: "portfolio_runtime",
     initializeConnection: async (client) => {
       initializations += 1;
-      await client.query("RESET ROLE");
+      await client.query("SET ROLE NONE");
       await client.query("SET ROLE portfolio_runtime");
     },
   });
@@ -254,7 +254,7 @@ test("the audited pool verifies each physical login once and reapplies its capab
     await pool.query("SELECT 1");
     await pool.query("SELECT 2");
     assert.equal(initializations, 1);
-    assert.equal(statements.filter((statement) => statement === "RESET ROLE").length, 1);
+    assert.equal(statements.filter((statement) => statement === "SET ROLE NONE").length, 1);
     assert.equal(
       statements.filter((statement) => statement === "SET ROLE portfolio_runtime").length,
       2,

@@ -1496,7 +1496,7 @@ async function capabilitySessionEvidence(
   expectedCapability: BoundaryRole,
 ): Promise<DatabaseSessionEvidence | undefined> {
   const expectedLogin = CAPABILITY_LOGIN[expectedCapability];
-  await queryable.query("RESET ROLE");
+  await queryable.query("SET ROLE NONE");
   const beforeSet = await loginTransitionEvidence(queryable, expectedLogin, expectedCapability);
   const beforeViolations = loginTransitionViolations(beforeSet, expectedLogin);
   if (beforeViolations.length > 0) {
@@ -1505,11 +1505,11 @@ async function capabilitySessionEvidence(
   await queryable.query(`SET ROLE ${expectedCapability}`);
   try {
     const capability = await databaseSessionEvidence(queryable, expectedCapability);
-    await queryable.query("RESET ROLE");
-    const afterReset = await loginTransitionEvidence(queryable, expectedLogin, expectedCapability);
-    const afterViolations = loginTransitionViolations(afterReset, expectedLogin);
+    await queryable.query("SET ROLE NONE");
+    const afterNone = await loginTransitionEvidence(queryable, expectedLogin, expectedCapability);
+    const afterViolations = loginTransitionViolations(afterNone, expectedLogin);
     if (afterViolations.length > 0) {
-      throw new Error(`Portfolio database LOGIN boundary failed after RESET ROLE: ${afterViolations.join(",")}`);
+      throw new Error(`Portfolio database LOGIN boundary failed after SET ROLE NONE: ${afterViolations.join(",")}`);
     }
     await queryable.query(`SET ROLE ${expectedCapability}`);
     return capability;
@@ -1913,7 +1913,7 @@ export async function assertUnprivilegedDatabaseSession(
   try {
     evidence = await capabilitySessionEvidence(queryable, expectations.role);
   } catch (error) {
-    throw new Error(`${boundary} database session boundary rejected the LOGIN/RESET ROLE contract`, {
+    throw new Error(`${boundary} database session boundary rejected the LOGIN/SET ROLE NONE contract`, {
       cause: error,
     });
   }
@@ -1948,7 +1948,7 @@ export async function assertPortfolioMigratorDatabaseSession(
   try {
     evidence = await capabilitySessionEvidence(queryable, "portfolio_migrator");
   } catch (error) {
-    throw new Error("Portfolio migration database session boundary rejected the LOGIN/RESET ROLE contract", {
+    throw new Error("Portfolio migration database session boundary rejected the LOGIN/SET ROLE NONE contract", {
       cause: error,
     });
   }
@@ -2036,7 +2036,7 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
       "Portfolio legacy reader database session boundary rejected an invalid table allowlist",
     );
   }
-  await queryable.query("RESET ROLE");
+  await queryable.query("SET ROLE NONE");
   const login = await queryable.query(`
     WITH login AS (
       SELECT oid, rolcanlogin, rolinherit
@@ -2154,7 +2154,7 @@ export async function assertPortfolioLegacyReaderDatabaseSession(
       violations.push("public-type-usage");
     if (evidence.searchPath !== "public") violations.push("search-path");
   }
-  await queryable.query("RESET ROLE");
+  await queryable.query("SET ROLE NONE");
   const reset = await queryable.query(`
     WITH login AS (
       SELECT oid FROM pg_roles WHERE rolname = 'portfolio_legacy_reader_login'
