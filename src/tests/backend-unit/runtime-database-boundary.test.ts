@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertRuntimeDatabaseSession } from "../../backend/data/runtime-database-boundary";
+import {
+  assertRuntimeDatabasePool,
+  assertRuntimeDatabaseSession,
+} from "../../backend/data/runtime-database-boundary";
 import {
   assertPortfolioLegacyReaderDatabaseSession,
   assertPortfolioMigratorDatabaseSession,
@@ -152,6 +155,47 @@ test("runtime database boundary accepts only the exact unprivileged runtime sess
   await assert.doesNotReject(
     assertRuntimeDatabaseSession(queryable({ hasDatabaseTempPrivilege: true })),
   );
+});
+
+test("runtime startup verifies one checked-out physical session and always releases it", async () => {
+  let connects = 0;
+  let releases = 0;
+  const client = {
+    ...queryable(),
+    release() {
+      releases += 1;
+    },
+  };
+
+  await assertRuntimeDatabasePool({
+    async connect() {
+      connects += 1;
+      return client;
+    },
+  });
+
+  assert.equal(connects, 1);
+  assert.equal(releases, 1);
+});
+
+test("runtime startup releases a checked-out session when verification fails", async () => {
+  let releases = 0;
+  const client = {
+    ...queryable({ roleIsSuperuser: true }),
+    release() {
+      releases += 1;
+    },
+  };
+
+  await assert.rejects(
+    assertRuntimeDatabasePool({
+      async connect() {
+        return client;
+      },
+    }),
+    /runtime database session boundary/i,
+  );
+  assert.equal(releases, 1);
 });
 
 test("runtime database boundary rejects admin, switched, inherited, and DDL-capable sessions", async () => {
