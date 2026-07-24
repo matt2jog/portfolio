@@ -622,7 +622,11 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(candidate, /blue_revision/);
   assert.match(candidate, /canonical_iam/);
   assert.match(candidate, /X-2jog-Origin-Token/);
+  assert.match(candidate, /X-2jog-Client-Country: US/);
+  assert.match(candidate, /X-2jog-Client-Country: CA/);
   assert.match(candidate, /EDGE_ORIGIN_PREVIOUS_TOKEN/);
+  assert.match(candidate, /outside_us_origin_status/);
+  assert.match(candidate, /outsideUsOriginAttestedStatus/);
   assert.match(candidate, /raw_status/);
   assert.match(candidate, /rawUnauthenticatedStatus/);
   assert.match(candidate, /MIGRATION_EVIDENCE_SHA256/);

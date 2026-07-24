@@ -54,14 +54,25 @@ fi
 
 origin_config="$(mktemp)"
 previous_origin_config="$(mktemp)"
+outside_us_origin_config="$(mktemp)"
 cleanup() {
-  rm -f "$origin_config" "$previous_origin_config"
+  rm -f "$origin_config" "$previous_origin_config" "$outside_us_origin_config"
 }
 trap cleanup EXIT
-chmod 600 "$origin_config" "$previous_origin_config"
+chmod 600 "$origin_config" "$previous_origin_config" "$outside_us_origin_config"
+# Candidate probes emulate the trusted Cloudflare edge contract. The origin token
+# authenticates these client metadata headers; the raw-origin probe below proves
+# that an unauthenticated caller cannot forge them.
 printf 'header = "X-2jog-Origin-Token: %s"\n' "$EDGE_ORIGIN_TOKEN" >"$origin_config"
+printf 'header = "X-2jog-Client-IP: 192.0.2.1"\n' >>"$origin_config"
+printf 'header = "X-2jog-Client-Country: US"\n' >>"$origin_config"
 printf 'header = "X-2jog-Origin-Token: %s"\n' \
   "${EDGE_ORIGIN_PREVIOUS_TOKEN:-$EDGE_ORIGIN_TOKEN}" >"$previous_origin_config"
+printf 'header = "X-2jog-Client-IP: 192.0.2.1"\n' >>"$previous_origin_config"
+printf 'header = "X-2jog-Client-Country: US"\n' >>"$previous_origin_config"
+printf 'header = "X-2jog-Origin-Token: %s"\n' "$EDGE_ORIGIN_TOKEN" >"$outside_us_origin_config"
+printf 'header = "X-2jog-Client-IP: 198.51.100.1"\n' >>"$outside_us_origin_config"
+printf 'header = "X-2jog-Client-Country: CA"\n' >>"$outside_us_origin_config"
 
 service_json() {
   gcloud run services describe "$SERVICE_NAME" \
@@ -211,6 +222,11 @@ if [[ -n "${EDGE_ORIGIN_PREVIOUS_TOKEN:-}" ]]; then
     --output /dev/null --write-out '%{http_code}' "${candidate_url%/}/")"
   test "$previous_origin_status" = "200"
 fi
+outside_us_origin_status="$(curl --config "$outside_us_origin_config" --silent --show-error \
+  --retry 8 --retry-delay 3 --retry-max-time 90 --retry-all-errors \
+  --connect-timeout 10 --max-time 30 \
+  --output /dev/null --write-out '%{http_code}' "${candidate_url%/}/")"
+test "$outside_us_origin_status" = "451"
 raw_status="$(curl --silent --show-error \
   --retry 8 --retry-delay 3 --retry-max-time 90 --retry-all-errors \
   --connect-timeout 10 --max-time 30 \
@@ -225,6 +241,7 @@ jq -S -n \
   --arg imageDigest "$candidate_digest" \
   --arg originStatus "$origin_status" \
   --arg previousOriginStatus "$previous_origin_status" \
+  --arg outsideUsOriginStatus "$outside_us_origin_status" \
   --arg rawStatus "$raw_status" \
   '{
     schemaVersion: 1,
@@ -234,6 +251,7 @@ jq -S -n \
     imageDigest: $imageDigest,
     originAttestedStatus: ($originStatus | tonumber),
     previousOriginAttestedStatus: ($previousOriginStatus | tonumber),
+    outsideUsOriginAttestedStatus: ($outsideUsOriginStatus | tonumber),
     rawUnauthenticatedStatus: ($rawStatus | tonumber)
   }' >"$CANDIDATE_SMOKE_FILE"
 smoke_sha256="$(sha256sum "$CANDIDATE_SMOKE_FILE" | awk '{print $1}')"
