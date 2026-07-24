@@ -15,6 +15,7 @@ import {
   applyPortfolioMigrations,
   loadMigrationPlan,
 } from "../../scripts/migration-ledger";
+import { insertLegalVersionWithRetry } from "../../scripts/legal/record-versions";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl)
@@ -553,11 +554,20 @@ test("provisioned migrator reruns migrations and runtime/legal roles enforce exa
     );
 
     const suffix = randomBytes(12).toString("hex");
-    await legal.query(
-      `INSERT INTO portfolio.legal_document_versions
-         (doc_type, content, content_hash, commit_sha, committed_at)
-       VALUES ('privacy', $1, $2, $3, now())`,
-      [`content-${suffix}`, `hash-${suffix}`, suffix.padEnd(40, "0")],
+    const legalVersion = {
+      doc_type: "privacy",
+      content: `content-${suffix}`,
+      content_hash: `hash-${suffix}`,
+      commit_sha: suffix.padEnd(40, "0"),
+      committed_at: new Date().toISOString(),
+    };
+    assert.equal(
+      await insertLegalVersionWithRetry(legal, legalVersion),
+      "inserted",
+    );
+    assert.equal(
+      await insertLegalVersionWithRetry(legal, legalVersion),
+      "duplicate",
     );
     await assertPermissionDenied(
       legal,
