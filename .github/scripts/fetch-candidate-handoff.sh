@@ -98,9 +98,13 @@ rollback_file="${destination}/portfolio-cloud-run-rollback-state.json"
 smoke_sha256="$(sha256sum "$smoke_file" | awk '{print $1}')"
 migration_sha256="$(sha256sum "$migration_file" | awk '{print $1}')"
 image_release_run_id="$(jq -er '.workflowRunId' "$image_file")"
+release_sha="$(jq -er '
+  .manifest.releaseSha
+  | select(test("^[0-9a-f]{40}$"))
+' "$manifest_file")"
 
 jq -e \
-  --arg releaseSha "$head_sha" \
+  --arg releaseSha "$release_sha" \
   --arg workflowRunId "$source_run_id" \
   --arg workflowRunAttempt "$run_attempt" \
   --arg imageReleaseRunId "$image_release_run_id" \
@@ -126,7 +130,7 @@ jq -e \
   ' "$manifest_file" >/dev/null
 
 jq -e \
-  --arg releaseSha "$head_sha" \
+  --arg releaseSha "$release_sha" \
   --slurpfile manifest "$manifest_file" '
     .schemaVersion == 1
     and .repository == "matt2jog/portfolio"
@@ -186,6 +190,6 @@ jq -e --slurpfile manifest "$manifest_file" '
   ] | length) == 1
 ' "$rollback_file" >/dev/null
 
-printf 'candidate_sha=%s\n' "$head_sha" >>"$GITHUB_OUTPUT"
+printf 'candidate_sha=%s\n' "$release_sha" >>"$GITHUB_OUTPUT"
 printf 'manifest_file=%s\n' "$manifest_file" >>"$GITHUB_OUTPUT"
 echo "Verified candidate handoff from failed publication run ${source_run_id}."
