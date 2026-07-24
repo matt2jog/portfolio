@@ -542,8 +542,10 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   const candidate = read(".github/scripts/deploy-candidate.sh");
   const publisher = read(".github/scripts/publish-candidate.sh");
   const recovery = read(".github/scripts/fetch-candidate-handoff.sh");
+  const imageReuse = read(".github/scripts/verify-approved-image-reuse.sh");
 
   assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
+  assert.match(workflow, /application_release_sha:/);
   assert.match(workflow, /personal-brand-github\/providers\/portfolio-main/);
   assert.match(
     workflow,
@@ -556,7 +558,11 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.doesNotMatch(workflow, /workflow_run:/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow, /IMAGE_RELEASE_RUN_ID:\s*\$\{\{ inputs\.image_build_run_id \}\}/);
-  assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
+  assert.match(
+    workflow,
+    /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$APPLICATION_RELEASE_SHA"/,
+  );
+  assert.match(workflow, /verify-approved-image-reuse\.sh/);
   assert.doesNotMatch(workflow, /docker build/);
   assert.doesNotMatch(workflow, /docker push/);
   assert.match(workflow, /run-database-release-from-bundle\.ts/);
@@ -631,7 +637,12 @@ test("main delivery prepares an identity-attested zero-traffic candidate without
   assert.match(candidate, /--cpu-throttling/);
   assert.doesNotMatch(candidate, /--allow-unauthenticated/);
   assert.match(candidate, /candidate_digest.*IMAGE_DIGEST/s);
-  assert.match(candidate, /release-sha.*GITHUB_SHA/s);
+  assert.match(candidate, /release-sha.*APPLICATION_RELEASE_SHA/s);
+  assert.match(candidate, /GITHUB_WORKFLOW_SHA.*GITHUB_SHA/s);
+  assert.match(candidate, /APPLICATION_RELEASE_SHA/);
+  assert.match(imageReuse, /git merge-base --is-ancestor/);
+  assert.match(imageReuse, /\.github\/\*\|src\/tests\/\*/);
+  assert.doesNotMatch(imageReuse, /\*\*\/\*\.md/);
   assert.match(candidate, /latestCreatedRevisionName/);
   assert.match(candidate, /expected_candidate_revision/);
   assert.match(candidate, /status\.conditions/);
@@ -1014,12 +1025,18 @@ test("legal audit delivery verifies TLS and keeps its history view under invoker
 test("deployment consumes the exact approved release-image run without rebuilding", () => {
   const workflow = read(".github/workflows/deploy.yml");
   const candidate = read(".github/scripts/deploy-candidate.sh");
+  const imageReuse = read(".github/scripts/verify-approved-image-reuse.sh");
 
   assert.match(workflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*image_build_run_id:/);
   assert.doesNotMatch(workflow, /workflow_run:/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow, /ref:\s*\$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$GITHUB_SHA"/);
+  assert.match(
+    workflow,
+    /fetch-release-image\.sh "\$IMAGE_RELEASE_RUN_ID" "\$APPLICATION_RELEASE_SHA"/,
+  );
+  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.match(imageReuse, /git diff --name-only/);
   assert.doesNotMatch(workflow, /docker build/);
   assert.doesNotMatch(workflow, /docker push/);
   assert.match(candidate, /gcloud run deploy "\$SERVICE_NAME"/);

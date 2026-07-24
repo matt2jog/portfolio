@@ -8,6 +8,7 @@ if [[
   || "${GITHUB_WORKFLOW_REF:-}" != "matt2jog/portfolio/.github/workflows/deploy.yml@refs/heads/main"
   || ! "${GITHUB_SHA:-}" =~ ^[0-9a-f]{40}$
   || "${GITHUB_WORKFLOW_SHA:-}" != "${GITHUB_SHA:-}"
+  || ! "${APPLICATION_RELEASE_SHA:-}" =~ ^[0-9a-f]{40}$
 ]]; then
   echo "Portfolio candidate deployment is allowed only from the main GitHub delivery workflow." >&2
   exit 2
@@ -127,7 +128,7 @@ mkdir -p \
   "$(dirname "$CANDIDATE_SMOKE_FILE")" \
   "$(dirname "$CLOUD_RUN_ROLLBACK_STATE_FILE")"
 jq -S -n \
-  --arg releaseSha "$GITHUB_SHA" \
+  --arg releaseSha "$APPLICATION_RELEASE_SHA" \
   --arg blueRevision "$blue_revision" \
   --arg blueDigest "$blue_digest" \
   --arg serviceGeneration "$(jq -er '.metadata.generation | tostring' <<<"$initial_service")" \
@@ -144,7 +145,7 @@ jq -S -n \
   }' >"$CLOUD_RUN_ROLLBACK_STATE_FILE"
 chmod 600 "$CLOUD_RUN_ROLLBACK_STATE_FILE"
 
-revision_suffix="gh-${GITHUB_SHA:0:8}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+revision_suffix="gh-${APPLICATION_RELEASE_SHA:0:8}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 candidate_tag="candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 expected_candidate_revision="${SERVICE_NAME}-${revision_suffix}"
 gcloud run deploy "$SERVICE_NAME" \
@@ -153,7 +154,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --platform managed \
   --image "$IMAGE_DIGEST_URI" \
   --revision-suffix "$revision_suffix" \
-  --labels "service=portfolio,environment=production,release-sha=${GITHUB_SHA}" \
+  --labels "service=portfolio,environment=production,release-sha=${APPLICATION_RELEASE_SHA}" \
   --port 8080 \
   --service-account "$RUNTIME_SERVICE_ACCOUNT" \
   --min-instances 0 \
@@ -192,7 +193,7 @@ candidate_digest="${candidate_image##*@}"
 test "$candidate_revision" != "$blue_revision"
 test "$candidate_revision" = "$expected_candidate_revision"
 test "$candidate_digest" = "$IMAGE_DIGEST"
-test "$(jq -er '.metadata.labels["release-sha"]' <<<"$candidate_revision_json")" = "$GITHUB_SHA"
+test "$(jq -er '.metadata.labels["release-sha"]' <<<"$candidate_revision_json")" = "$APPLICATION_RELEASE_SHA"
 test "$(jq -er '[.status.conditions[] | select(.type == "Ready" and .status == "True")] | length' <<<"$candidate_revision_json")" = "1"
 test "$(jq -r '.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"' <<<"$candidate_revision_json")" = "0"
 test "$(jq -er '.metadata.annotations["autoscaling.knative.dev/maxScale"]' <<<"$candidate_revision_json")" = "1"
@@ -259,7 +260,7 @@ smoke_sha256="$(sha256sum "$CANDIDATE_SMOKE_FILE" | awk '{print $1}')"
 created_at="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
 expires_at="$(date -u -d '+6 hours' +'%Y-%m-%dT%H:%M:%S.000Z')"
 jq -S -n \
-  --arg releaseSha "$GITHUB_SHA" \
+  --arg releaseSha "$APPLICATION_RELEASE_SHA" \
   --arg imageReleaseRunId "$IMAGE_RELEASE_RUN_ID" \
   --arg workflowRunId "$GITHUB_RUN_ID" \
   --arg workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
