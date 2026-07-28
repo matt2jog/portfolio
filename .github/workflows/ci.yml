@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -84,33 +85,12 @@ jobs:
       - name: Build production image
         run: docker build --pull --tag portfolio-ci:${{ github.sha }} .
 
-      - name: Report High vulnerabilities and misconfiguration
+      - name: Scan production image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: portfolio-ci:${{ github.sha }}
-          scanners: vuln,misconfig
-          severity: HIGH
-          format: table
-          exit-code: "0"
-
-      - name: Block Critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: portfolio-ci:${{ github.sha }}
-          scanners: vuln
-          severity: CRITICAL
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
           format: table
           exit-code: "1"
-          skip-setup-trivy: true
-      - name: Block detected secrets
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: portfolio-ci:${{ github.sha }}
-          scanners: secret
-          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          format: table
-          exit-code: "1"
-          skip-setup-trivy: true

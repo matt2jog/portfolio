@@ -1,7 +1,7 @@
 import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
 
 interface Queryable {
-  query(text: string): Promise<{ rows: unknown[] }>;
+  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
 }
 
 interface ReleasableQueryable extends Queryable {

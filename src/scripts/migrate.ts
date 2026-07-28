@@ -11,7 +11,7 @@ import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-sess
 function migrationsFolder(): string {
   if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
   const containerFolder = path.resolve(process.cwd(), "migrations");
-  if (existsSync(path.join(containerFolder, "meta", "_journal.json"))) return containerFolder;
+  if (existsSync(containerFolder)) return containerFolder;
   return path.resolve(process.cwd(), "src", "migrations");
 }
 
@@ -46,18 +46,15 @@ async function main(): Promise<void> {
 
   const client = await pool.connect();
   try {
-    if (process.env.NODE_ENV !== "production") {
-      await client.query("SET portfolio.test_admin_migration = 'on'");
-    }
     if (process.env.NODE_ENV === "production") {
       await assertPortfolioMigratorBootstrapSession(client);
+    } else {
+      await client.query("SET ROLE portfolio_migrator");
     }
     const plan = loadMigrationPlan(migrationsFolder());
-    const result = await applyPortfolioMigrations(client, plan, {
-      allowSchemaBootstrap: process.env.NODE_ENV !== "production",
-    });
+    const result = await applyPortfolioMigrations(client, plan);
     console.log(
-      `Portfolio migrations complete: adopted=${result.adopted} applied=${result.applied} total=${result.total}.`,
+      `Portfolio migrations complete: applied=${result.applied} total=${result.total}.`,
     );
   } finally {
     client.release();

@@ -105,12 +105,6 @@ export const auditLogs = portfolioSchema.table("audit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const session = portfolioSchema.table("session", {
-  sid: varchar("sid").primaryKey(),
-  sess: jsonb("sess").notNull(),
-  expire: timestamp("expire").notNull(),
-});
-
 export const insertProjectSchema = createInsertSchema(projects).pick({
   title: true,
   category: true,
@@ -257,9 +251,8 @@ export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 export type AiModel = typeof aiModels.$inferSelect;
 
-// Portfolio-local read-model table for Admin-owned public career data. Declaring it here
-// does not transfer canonical ownership to Portfolio; only the disabled compatibility
-// Portfolio keeps local display order while career fields remain directly editable.
+// Resume reads this career presentation data through the private views in the
+// Portfolio schema.
 export const education = portfolioSchema.table("education", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   school: text("school").notNull(),

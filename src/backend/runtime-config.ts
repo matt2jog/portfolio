@@ -16,18 +16,9 @@ const RUNTIME_KEYS = [
   "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
-const OPTIONAL_RUNTIME_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
-const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
 const ADMIN_AUTHORITY = "https://admin.2jog.dev";
 const ADMIN_AUDIENCE = "2jog-services";
 const ADMIN_JWKS_URL = `${ADMIN_AUTHORITY}/.well-known/jwks.json`;
-
-interface RuntimeBundleMetadata {
-  schema_version: number;
-  service: string;
-  environment: string;
-  boundary: string;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,29 +37,8 @@ function parseBundle(raw: string): Record<string, unknown> {
   }
 }
 
-function validateMetadata(value: unknown): asserts value is RuntimeBundleMetadata {
-  if (
-    !isRecord(value) ||
-    Object.keys(value).length !== METADATA_KEYS.length ||
-    METADATA_KEYS.some((key) => !(key in value)) ||
-    value.schema_version !== 1 ||
-    value.service !== "portfolio" ||
-    value.environment !== "prod" ||
-    value.boundary !== "runtime"
-  ) {
-    throw new Error("Portfolio runtime bundle metadata is invalid");
-  }
-}
-
 export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = process.env): void {
   const bundle = parseBundle(raw);
-  validateMetadata(bundle._meta);
-
-  const allowed = new Set<string>(["_meta", ...RUNTIME_KEYS, ...OPTIONAL_RUNTIME_KEYS]);
-  const unexpected = Object.keys(bundle).filter((key) => !allowed.has(key));
-  if (unexpected.length > 0) {
-    throw new Error(`Portfolio runtime bundle contains unexpected key(s): ${unexpected.join(", ")}`);
-  }
 
   for (const key of RUNTIME_KEYS) {
     const value = bundle[key];

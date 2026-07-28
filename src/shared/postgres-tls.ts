@@ -28,6 +28,7 @@ function postgresOptions(searchPath?: PortfolioSearchPath, capabilityRole?: stri
   }
   return [
     ...(searchPath ? [`-c search_path=${searchPath.replaceAll(" ", "")}`] : []),
+    ...(capabilityRole ? [`-c role=${capabilityRole}`] : []),
     "-c TimeZone=UTC",
   ].join(" ");
 }

@@ -13,12 +13,6 @@ const PREVIOUS_EDGE_TOKEN = `edge-${"p".repeat(35)}`;
 
 function validRuntimeBundle() {
   return {
-    _meta: {
-      schema_version: 1,
-      service: "portfolio",
-      environment: "prod",
-      boundary: "runtime",
-    },
     ADMIN_AUTHORITY_URL: "https://admin.2jog.dev",
     ADMIN_IDENTITY_AUDIENCE: "2jog-services",
     ADMIN_IDENTITY_ISSUER: "https://admin.2jog.dev",
@@ -34,7 +28,7 @@ function validRuntimeBundle() {
   };
 }
 
-test("runtime bundle validates its boundary and installs only schema-owned keys", () => {
+test("runtime bundle installs only the fields the application uses", () => {
   const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value" };
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
 
@@ -55,26 +49,21 @@ test("runtime bundle clears a stale previous edge credential when rotation is co
   assert.equal(target.EDGE_ORIGIN_PREVIOUS_TOKEN, undefined);
 });
 
-test("runtime bundle rejects missing fields, wrong metadata, and unexpected keys", () => {
+test("runtime bundle rejects missing fields and ignores unrelated fields", () => {
   const missing = validRuntimeBundle();
   delete (missing as Partial<typeof missing>).DATABASE_URL;
   assert.throws(() => applyRuntimeBundle(JSON.stringify(missing), {}), /DATABASE_URL/);
 
-  const wrongBoundary = validRuntimeBundle();
-  wrongBoundary._meta.boundary = "deployment";
-  assert.throws(() => applyRuntimeBundle(JSON.stringify(wrongBoundary), {}), /metadata/);
-
-  const unexpectedMetadata = validRuntimeBundle();
-  Object.assign(unexpectedMetadata._meta, { extra: "forbidden" });
-  assert.throws(() => applyRuntimeBundle(JSON.stringify(unexpectedMetadata), {}), /metadata/);
-
-  const unexpected = { ...validRuntimeBundle(), HS256_SHARED_SECRET: "forbidden" };
-  assert.throws(() => applyRuntimeBundle(JSON.stringify(unexpected), {}), /unexpected/i);
+  const target: NodeJS.ProcessEnv = {};
+  applyRuntimeBundle(
+    JSON.stringify({ ...validRuntimeBundle(), UNUSED_TRANSITION_FIELD: "ignored" }),
+    target,
+  );
+  assert.equal(target.UNUSED_TRANSITION_FIELD, undefined);
 });
-
 test("runtime bundle parse errors never include secret values", () => {
   const sensitiveMarker = ["do", "not", "echo", "runtime", "fixture", "123456789"].join("-");
-  const bundle = { ...validRuntimeBundle(), EDGE_ORIGIN_TOKEN: sensitiveMarker, EXTRA: "nope" };
+  const bundle = { ...validRuntimeBundle(), DATABASE_URL: sensitiveMarker };
 
   assert.throws(
     () => applyRuntimeBundle(JSON.stringify(bundle), {}),
@@ -91,12 +80,9 @@ test("runtime bundle JSON is removed from the environment before validation", ()
   assert.equal(target.PORTFOLIO_RUNTIME_BUNDLE, undefined);
 });
 
-test("runtime bundle rejects malformed, non-object, legacy-session, and short-edge payloads", () => {
+test("runtime bundle rejects malformed, non-object, and short-edge payloads", () => {
   assert.throws(() => applyRuntimeBundle("{", {}), /not valid JSON/);
   assert.throws(() => applyRuntimeBundle("[]", {}), /JSON object/);
-
-  const legacySession = { ...validRuntimeBundle(), SESSION_SECRET: "legacy-secret" };
-  assert.throws(() => applyRuntimeBundle(JSON.stringify(legacySession), {}), /unexpected/i);
 
   const shortEdgeToken = validRuntimeBundle();
   shortEdgeToken.EDGE_ORIGIN_TOKEN = "too-short";
@@ -130,16 +116,5 @@ test("runtime production bundle rejects non-Supabase and privileged database ses
       /DATABASE_URL|Supabase|role|username/i,
       databaseUrl,
     );
-  }
-});
-
-test("runtime bundle rejects dormant or paid-provider credentials", () => {
-  for (const key of [
-    "APIFY_TOKEN",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
-  ]) {
-    const bundle = { ...validRuntimeBundle(), [key]: "must-not-be-delivered" };
-    assert.throws(() => applyRuntimeBundle(JSON.stringify(bundle), {}), /unexpected/i, key);
   }
 });

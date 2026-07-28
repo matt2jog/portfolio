@@ -77,9 +77,9 @@ test("production Supabase validation binds direct and pooler URLs to one project
     assert.doesNotMatch(config.connectionString, /sslmode|sslrootcert/i);
     assert.equal(
       config.options,
-      "-c search_path=portfolio,extensions -c TimeZone=UTC",
+      "-c search_path=portfolio,extensions -c role=portfolio_runtime -c TimeZone=UTC",
     );
-    assert.doesNotMatch(config.options ?? "", /(?:^|\s)-c\s+role=/);
+    assert.match(config.options ?? "", /(?:^|\s)-c\s+role=portfolio_runtime/);
   }
 });
 

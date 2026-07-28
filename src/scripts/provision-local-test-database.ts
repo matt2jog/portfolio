@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     throw new Error("Local role provisioning is disabled in production");
   }
   const sql = await readFile(
-    path.resolve(process.cwd(), "infra", "supabase", "portfolio-pre-migration.sql"),
+    path.resolve(process.cwd(), "infra", "supabase", "bootstrap.sql"),
     "utf8",
   );
   const client = new Client({ connectionString: databaseUrl });
@@ -19,6 +19,15 @@ async function main(): Promise<void> {
   try {
     await client.query("CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION postgres");
     await client.query("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions");
+    await client.query(`
+      DO $resume_test_role$
+      BEGIN
+        IF to_regrole('resume_app') IS NULL THEN
+          CREATE ROLE resume_app NOLOGIN NOINHERIT;
+        END IF;
+      END
+      $resume_test_role$
+    `);
     await client.query(sql);
   } finally {
     await client.end();

@@ -7,9 +7,6 @@ import { setupAuth } from "./auth";
 import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
 import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
 import { createOriginAccessMiddleware } from "./origin-access";
-import {
-  createDatabaseAuditContextMiddleware,
-} from "./data/database-audit";
 
 const app = express();
 const httpServer = createServer(app);
@@ -40,7 +37,6 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
 app.use(uuidCookieMiddleware);
-app.use(createDatabaseAuditContextMiddleware());
 app.use(requestLogMiddleware);
 app.use(ipRateLogMiddleware);
 
@@ -115,15 +111,25 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Internal Server Error:", err);
+    const isServerError = status >= 500;
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? String(err.code)
+      : null;
+    console.error(JSON.stringify({
+      event: "portfolio.request.error",
+      status,
+      code,
+    }));
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    return res.status(status).json({
+      message: isServerError
+        ? "Internal Server Error"
+        : (typeof err?.message === "string" ? err.message : "Request failed"),
+    });
   });
 
   // importantly only setup vite in development and after

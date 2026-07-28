@@ -5,7 +5,6 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { eq, sql } from "drizzle-orm";
-import { withDatabaseAuditContext } from "../../backend/data/database-audit";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (!databaseUrl) {
@@ -16,21 +15,6 @@ process.env.DATABASE_URL = databaseUrl;
 const { db, pool } = await import("../../backend/data/db");
 const { allSkills, auditLogs, portfolioSkills, skillsGroup, users } = await import("../../shared/schema");
 const { registerRoutes } = await import("../../backend/routes");
-
-function withIntegrationAuditContext<T>(operation: string, run: () => T): T {
-  const requestId = randomUUID();
-  return withDatabaseAuditContext({
-    requestId,
-    traceId: requestId,
-    actorKind: "integration-test",
-    actorId: "portfolio-integration",
-    operation,
-    correlationId: null,
-    causationId: null,
-    releaseId: "integration-test",
-    authenticationAssertionDigest: null,
-  }, run);
-}
 
 after(async () => {
   await pool.end();
@@ -56,10 +40,8 @@ test("skill presentation updates reject missing skills and dangling groups", asy
   const groupId = randomUUID();
   const missingGroupId = randomUUID();
 
-  await withIntegrationAuditContext("skill-fixture-setup", async () => {
-    await db.insert(skillsGroup).values({ id: groupId, name: "Integration group" });
-    await db.insert(allSkills).values({ id: skillId, name: "Integration skill" });
-  });
+  await db.insert(skillsGroup).values({ id: groupId, name: "Integration group" });
+  await db.insert(allSkills).values({ id: skillId, name: "Integration skill" });
 
   const app = express();
   app.use(express.json());
@@ -73,10 +55,6 @@ test("skill presentation updates reject missing skills and dangling groups", asy
     };
     next();
   });
-  app.use((_req, _res, next) => withIntegrationAuditContext(
-    "admin-skill-update",
-    next,
-  ));
   const server = createServer(app);
   await registerRoutes(server, app);
   await new Promise<void>((resolve, reject) => {
@@ -113,17 +91,14 @@ test("skill presentation updates reject missing skills and dangling groups", asy
     assert.deepEqual(await missing.json(), { message: "Skill not found" });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    await withIntegrationAuditContext("skill-fixture-cleanup", async () => {
-      await db.delete(auditLogs).where(eq(auditLogs.userId, adminId));
-      await db.delete(allSkills).where(eq(allSkills.id, skillId));
-      await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
-    });
+    await db.delete(auditLogs).where(eq(auditLogs.userId, adminId));
+    await db.delete(allSkills).where(eq(allSkills.id, skillId));
+    await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
   }
 });
 
 test("skill relationships are enforced by the database and remain safe across deletes", async () => {
-  await withIntegrationAuditContext("skill-relationship-proof", async () => {
-    const constraints = await pool.query<{ conname: string }>(`
+  const constraints = await pool.query<{ conname: string }>(`
     SELECT conname
     FROM pg_constraint
     WHERE conname IN (
@@ -132,22 +107,22 @@ test("skill relationships are enforced by the database and remain safe across de
     )
     ORDER BY conname
   `);
-    assert.deepEqual(constraints.rows.map((row) => row.conname), [
+  assert.deepEqual(constraints.rows.map((row) => row.conname), [
       "all_skills_grouping_id_skills_group_id_fk",
       "portfolio_skills_all_skill_id_all_skills_id_fk",
     ]);
 
-    const groupId = randomUUID();
-    const skillId = randomUUID();
-    const portfolioSkillId = randomUUID();
-    const missingGroupId = randomUUID();
+  const groupId = randomUUID();
+  const skillId = randomUUID();
+  const portfolioSkillId = randomUUID();
+  const missingGroupId = randomUUID();
 
-    await db.insert(skillsGroup).values({ id: groupId, name: "Integrity group" });
-    await db.insert(allSkills).values({ id: skillId, name: "Integrity skill", groupingId: groupId });
-    await db.insert(portfolioSkills).values({ id: portfolioSkillId, allSkillId: skillId });
+  await db.insert(skillsGroup).values({ id: groupId, name: "Integrity group" });
+  await db.insert(allSkills).values({ id: skillId, name: "Integrity skill", groupingId: groupId });
+  await db.insert(portfolioSkills).values({ id: portfolioSkillId, allSkillId: skillId });
 
-    try {
-      await assert.rejects(
+  try {
+    await assert.rejects(
       db.insert(allSkills).values({ id: randomUUID(), name: "Dangling skill", groupingId: missingGroupId }),
       (error: unknown) => {
         const cause = error instanceof Error && error.cause && typeof error.cause === "object"
@@ -171,10 +146,9 @@ test("skill relationships are enforced by the database and remain safe across de
       .from(portfolioSkills)
       .where(eq(portfolioSkills.id, portfolioSkillId));
       assert.equal(orphanedPortfolioSkill, undefined);
-    } finally {
-      await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
-      await db.delete(allSkills).where(eq(allSkills.id, skillId));
-      await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
-    }
-  });
+  } finally {
+    await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
+    await db.delete(allSkills).where(eq(allSkills.id, skillId));
+    await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
+  }
 });

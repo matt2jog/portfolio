@@ -218,10 +218,7 @@ export async function registerRoutes(
   });
 
   // ========== LEGAL DOCUMENTS ==========
-  // Returns { html, lastUpdated, effectiveDate }. The two date fields are
-  // maintained by the legal-audit GitHub Actions workflow (sed on push to
-  // prod); the server just surfaces them. The SPA routes
-  // (/privacy, /terms, /tracking) are served by the client-side app.
+  // The API serves the checked-in legal text used by the matching SPA routes.
   const sendLegalDoc = (filename: string, notFoundMsg: string) => (_req: Request, res: Response) => {
     const doc = loadLegalDoc(filename);
     if (!doc) return res.status(404).json({ message: notFoundMsg });
@@ -332,8 +329,9 @@ export async function registerRoutes(
     try {
       const data = await getGithubActivity();
       res.json(data);
-    } catch (err: any) {
-      res.status(500).json({ error: "Failed to fetch GitHub activity", details: err.message });
+    } catch {
+      console.error(JSON.stringify({ event: "portfolio.github.activity_failed" }));
+      res.status(500).json({ error: "Failed to fetch GitHub activity" });
     }
   });
 
@@ -342,8 +340,9 @@ export async function registerRoutes(
       const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
       const data = await getGithubTimeline(page);
       res.json(data);
-    } catch (err: any) {
-      res.status(500).json({ error: "Failed to fetch GitHub timeline", details: err.message });
+    } catch {
+      console.error(JSON.stringify({ event: "portfolio.github.timeline_failed" }));
+      res.status(500).json({ error: "Failed to fetch GitHub timeline" });
     }
   });
 
@@ -351,11 +350,12 @@ export async function registerRoutes(
     try {
       const data = await getLinkedinActivity();
       res.json(data);
-    } catch (err: any) {
-      if (err.message && err.message.includes("403")) {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("403")) {
         return res.status(403).json({ error: "LinkedIn features in maintenence" });
       }
-      res.status(500).json({ error: "Failed to fetch LinkedIn activity", details: err.message });
+      console.error(JSON.stringify({ event: "portfolio.linkedin.activity_failed" }));
+      res.status(500).json({ error: "Failed to fetch LinkedIn activity" });
     }
   });
 
@@ -364,11 +364,12 @@ export async function registerRoutes(
       const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
       const data = await getLinkedinTimeline(page);
       res.json(data);
-    } catch (err: any) {
-      if (err.message && err.message.includes("403")) {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("403")) {
         return res.status(403).json({ error: "LinkedIn features in maintenence" });
       }
-      res.status(500).json({ error: "Failed to fetch LinkedIn timeline", details: err.message });
+      console.error(JSON.stringify({ event: "portfolio.linkedin.timeline_failed" }));
+      res.status(500).json({ error: "Failed to fetch LinkedIn timeline" });
     }
   });
 
@@ -540,9 +541,9 @@ export async function registerRoutes(
       const suggestions = await computePromise;
       promptSuggestionsCache.set(cacheKey, suggestions);
       res.json({ hash: promptInputsHash, suggestions });
-    } catch (err: any) {
+    } catch (error) {
       const fallback = fallbackPromptSuggestions(project.title);
-      const rateLimited = suggestionsAgent.isRateLimitError(err);
+      const rateLimited = suggestionsAgent.isRateLimitError(error);
       if (!rateLimited) {
         promptSuggestionsCache.set(cacheKey, fallback);
       }
@@ -550,7 +551,7 @@ export async function registerRoutes(
         hash: promptInputsHash,
         suggestions: fallback,
         fallback: true,
-        error: rateLimited ? suggestionsAgent.rateLimitMessage : err.message,
+        error: rateLimited ? suggestionsAgent.rateLimitMessage : "Suggestions unavailable",
       });
     } finally {
       promptSuggestionsInflight.delete(cacheKey);
@@ -901,15 +902,16 @@ export async function registerRoutes(
         await chatRun.patchRun().catch(() => {});
       }
       return;
-    } catch (err: any) {
-      if (agent.isRateLimitError(err)) {
+    } catch (error) {
+      if (agent.isRateLimitError(error)) {
         writeSseAssistantMessage(res, agent.rateLimitMessage);
         res.end();
         return;
       }
 
       if (!res.headersSent) {
-        res.status(500).json({ error: "AI request failed", details: err.message });
+        console.error(JSON.stringify({ event: "portfolio.ai.request_failed" }));
+        res.status(500).json({ error: "AI request failed" });
       } else {
         res.end();
       }
