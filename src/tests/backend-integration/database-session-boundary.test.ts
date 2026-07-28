@@ -29,8 +29,17 @@ test("Portfolio has only migrator and runtime database boundaries", async () => 
     "portfolio_runtime_login",
   ]);
 
-  const memberships = await pool.query<{ grantedRole: string; member: string }>(`
-    SELECT parent.rolname AS "grantedRole", member.rolname AS member
+  const memberships = await pool.query<{
+    grantedRole: string;
+    member: string;
+    inheritOption: boolean;
+    setOption: boolean;
+  }>(`
+    SELECT
+      parent.rolname AS "grantedRole",
+      member.rolname AS member,
+      membership.inherit_option AS "inheritOption",
+      membership.set_option AS "setOption"
     FROM pg_catalog.pg_auth_members AS membership
     JOIN pg_catalog.pg_roles AS parent ON parent.oid = membership.roleid
     JOIN pg_catalog.pg_roles AS member ON member.oid = membership.member
@@ -38,8 +47,18 @@ test("Portfolio has only migrator and runtime database boundaries", async () => 
     ORDER BY parent.rolname, member.rolname
   `);
   assert.deepEqual(memberships.rows, [
-    { grantedRole: "portfolio_migrator", member: "portfolio_migrator_login" },
-    { grantedRole: "portfolio_runtime", member: "portfolio_runtime_login" },
+    {
+      grantedRole: "portfolio_migrator",
+      member: "portfolio_migrator_login",
+      inheritOption: false,
+      setOption: true,
+    },
+    {
+      grantedRole: "portfolio_runtime",
+      member: "portfolio_runtime_login",
+      inheritOption: true,
+      setOption: true,
+    },
   ]);
 });
 

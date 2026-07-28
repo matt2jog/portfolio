@@ -10,7 +10,7 @@ BEGIN
     CREATE ROLE portfolio_runtime NOLOGIN NOINHERIT;
   END IF;
   IF to_regrole('portfolio_runtime_login') IS NULL THEN
-    CREATE ROLE portfolio_runtime_login LOGIN NOINHERIT;
+    CREATE ROLE portfolio_runtime_login LOGIN INHERIT;
   END IF;
 END
 $roles$;
@@ -22,10 +22,11 @@ ALTER ROLE portfolio_migrator_login
 ALTER ROLE portfolio_runtime
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOLOGIN NOINHERIT;
 ALTER ROLE portfolio_runtime_login
-  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN NOINHERIT;
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN INHERIT;
 
 GRANT portfolio_migrator TO portfolio_migrator_login;
-GRANT portfolio_runtime TO portfolio_runtime_login;
+GRANT portfolio_runtime TO portfolio_runtime_login
+  WITH INHERIT TRUE, SET TRUE;
 
 CREATE SCHEMA IF NOT EXISTS portfolio AUTHORIZATION portfolio_migrator;
 ALTER SCHEMA portfolio OWNER TO portfolio_migrator;
