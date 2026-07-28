@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   await seedBrowserState(page);
 });
 
-test("About never substitutes invented experience when the projection is empty", async ({ page }) => {
+test("About never substitutes invented experience when career data is empty", async ({ page }) => {
   await page.unroute("**/api/public/experiences");
   await page.route("**/api/public/experiences", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),

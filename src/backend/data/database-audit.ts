@@ -270,24 +270,6 @@ export function createDatabaseAuditContextMiddleware(): RequestHandler {
   };
 }
 
-export function createServiceDatabaseAuditContextMiddleware(): RequestHandler {
-  return (request, response, next) => {
-    const principal = response.locals.careerPushPrincipal;
-    const assertionDigest = response.locals.careerPushAssertionDigest;
-    if (
-      typeof principal !== "string" || principal.length === 0 ||
-      typeof assertionDigest !== "string" || !/^[0-9a-f]{64}$/.test(assertionDigest)
-    ) {
-      response.status(403).json({ error: "service_audit_identity_missing" });
-      return;
-    }
-    return withDatabaseAuditContext(
-      requestContext(request, response, { kind: "gcp-service", id: principal }, "consume-career-event"),
-      next,
-    );
-  };
-}
-
 export function verifiedAdminDatabaseAuditContext(
   request: Request,
   response: Response,

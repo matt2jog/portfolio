@@ -57,7 +57,7 @@ export const projectsFixture = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 export const skillsConstellationFixture = [
-  ["Infrastructure", "PostgreSQL", "Kafka", "Docker", "Kubernetes", "Terraform", "Redis"],
+  ["Infrastructure", "PostgreSQL", "Docker", "Kubernetes", "Terraform", "Redis"],
   ["Frontend", "React", "TypeScript", "Tailwind", "Three.js", "Framer Motion"],
   ["AI Systems", "Agents", "RAG", "Prompt Eval", "Vector Search", "Tool Calling"],
   ["Backend", "Node.js", "Express", "Python", "FastAPI", "Drizzle"],

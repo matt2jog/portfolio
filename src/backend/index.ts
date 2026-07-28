@@ -4,66 +4,16 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
-import { db } from "./data/db";
 import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
 import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
-import {
-  CAREER_PUBSUB_PATH,
-  createCareerPubSubHandler,
-  createPostgresCareerEventStore,
-} from "./consumers/career-pubsub";
-import {
-  createCareerPushIdentityMiddleware,
-  validateCareerPushIdentityConfig,
-} from "./consumers/career-pubsub-auth";
 import { createOriginAccessMiddleware } from "./origin-access";
 import {
   createDatabaseAuditContextMiddleware,
-  createServiceDatabaseAuditContextMiddleware,
 } from "./data/database-audit";
 
 const app = express();
 const httpServer = createServer(app);
 const isProd = process.env.NODE_ENV === "production";
-
-const careerPushAudience = process.env.CAREER_PUBSUB_PUSH_AUDIENCE;
-const careerPushServiceAccount = process.env.CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT;
-const careerPushSubscription = process.env.CAREER_PUBSUB_SUBSCRIPTION;
-const careerPushSettingCount = [
-  careerPushAudience,
-  careerPushServiceAccount,
-  careerPushSubscription,
-].filter(Boolean).length;
-
-if (careerPushSettingCount > 0 && careerPushSettingCount < 3) {
-  throw new Error("Career Pub/Sub runtime settings must be configured together");
-}
-
-if (careerPushAudience && careerPushServiceAccount && careerPushSubscription) {
-  const identityConfig = validateCareerPushIdentityConfig({
-    audience: careerPushAudience,
-    serviceAccountEmail: careerPushServiceAccount,
-  });
-  app.post(
-    CAREER_PUBSUB_PATH,
-    createCareerPushIdentityMiddleware(identityConfig),
-    express.json({ limit: "2mb", strict: true }),
-    createServiceDatabaseAuditContextMiddleware(),
-    createCareerPubSubHandler(
-      createPostgresCareerEventStore(db),
-      careerPushSubscription,
-    ),
-  );
-} else if (isProd || Boolean(process.env.K_SERVICE)) {
-  throw new Error(
-    "CAREER_PUBSUB_PUSH_AUDIENCE, CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT, and "
-      + "CAREER_PUBSUB_SUBSCRIPTION are required in Cloud Run",
-  );
-} else {
-  app.post(CAREER_PUBSUB_PATH, (_request, response) => {
-    response.status(503).json({ error: "career_pubsub_not_configured" });
-  });
-}
 
 if (isProd || Boolean(process.env.K_SERVICE)) {
   app.use(createOriginAccessMiddleware(

@@ -259,7 +259,7 @@ export type AiModel = typeof aiModels.$inferSelect;
 
 // Portfolio-local read-model table for Admin-owned public career data. Declaring it here
 // does not transfer canonical ownership to Portfolio; only the disabled compatibility
-// projector may update canonical fields, while Portfolio keeps local display order.
+// Portfolio keeps local display order while career fields remain directly editable.
 export const education = portfolioSchema.table("education", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   school: text("school").notNull(),

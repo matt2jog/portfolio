@@ -23,7 +23,6 @@
     "test:coverage": "c8 --check-coverage --lines 70 --branches 70 --functions 70 --statements 70 --reporter text --reporter json-summary npm run test:backend-unit",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:test:provision": "tsx src/scripts/provision-local-test-database.ts",
-    "db:migrate-legacy-data": "tsx src/scripts/bootstrap-legacy-data.ts",
     "legal:record": "tsx --env-file=.env src/scripts/legal/record-versions.ts",
     "legal:record:bundle": "tsx src/scripts/legal/record-versions-from-bundle.ts"
   },

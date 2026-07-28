@@ -44,15 +44,6 @@ const RUNTIME_RELATION_ACL: readonly RelationAclExpectation[] = [
     privileges: ["SELECT", "INSERT", "UPDATE"],
   },
   {
-    relationName: "career_event_checkpoints",
-    privileges: ["SELECT", "INSERT", "UPDATE"],
-  },
-  {
-    relationName: "career_event_inbox",
-    privileges: ["SELECT", "INSERT", "UPDATE"],
-  },
-  { relationName: "career_event_quarantine", privileges: ["INSERT"] },
-  {
     relationName: "education",
     privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   },
@@ -106,9 +97,6 @@ const AUDIT_OPERATOR_MUTATION_RELATIONS = [
   "browser_request_logs",
   "ip_rate_logs",
   "welcome_messages",
-  "career_event_inbox",
-  "career_event_checkpoints",
-  "career_event_quarantine",
 ] as const;
 
 const AUDIT_OPERATOR_RELATION_ACL: readonly RelationAclExpectation[] = [

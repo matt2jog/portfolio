@@ -774,9 +774,6 @@ BEGIN
       ('browser_request_logs', ARRAY['INSERT']::text[]),
       ('browser_tracking', ARRAY['SELECT', 'INSERT', 'UPDATE']::text[]),
       ('browser_tracking_ips', ARRAY['SELECT', 'INSERT', 'UPDATE']::text[]),
-      ('career_event_checkpoints', ARRAY['SELECT', 'INSERT', 'UPDATE']::text[]),
-      ('career_event_inbox', ARRAY['SELECT', 'INSERT', 'UPDATE']::text[]),
-      ('career_event_quarantine', ARRAY['INSERT']::text[]),
       ('education', ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]),
       ('experiences', ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]),
       ('github_timeline_events', ARRAY['SELECT', 'INSERT']::text[]),
@@ -806,6 +803,26 @@ BEGIN
 END
 $$;
 
+DO $resume_reads$
+BEGIN
+  IF to_regrole('resume_app') IS NOT NULL THEN
+    GRANT USAGE ON SCHEMA portfolio TO resume_app;
+    GRANT SELECT ON TABLE
+      portfolio.resume_cv_profile,
+      portfolio.resume_education,
+      portfolio.resume_experiences,
+      portfolio.resume_experience_bullets,
+      portfolio.resume_projects,
+      portfolio.resume_project_bullets,
+      portfolio.resume_skill_concepts,
+      portfolio.resume_skill_variants,
+      portfolio.resume_skill_taxonomy_categories,
+      portfolio.resume_skill_concept_categories
+    TO resume_app;
+  END IF;
+END
+$resume_reads$;
+
 -- Migration 0016 transfers immutable audit objects to non-login owner/operator
 -- roles. Rebuild its exact grants after the global ACL scrub while remaining a
 -- no-op before those objects exist.
@@ -834,10 +851,7 @@ BEGIN
       ('browser_tracking_ips'),
       ('browser_request_logs'),
       ('ip_rate_logs'),
-      ('welcome_messages'),
-      ('career_event_inbox'),
-      ('career_event_checkpoints'),
-      ('career_event_quarantine')
+      ('welcome_messages')
     ) AS matrix(relation_name)
   LOOP
     IF to_regclass(format('portfolio.%I', expected.relation_name)) IS NOT NULL THEN
@@ -1268,7 +1282,8 @@ BEGIN
       AND privilege.grantee <> object.relowner
       AND COALESCE(grantee.rolname, 'PUBLIC') NOT IN (
         'portfolio_runtime', 'legal_audit_writer',
-        'portfolio_audit_owner', 'portfolio_compensation_operator'
+        'portfolio_audit_owner', 'portfolio_compensation_operator',
+        'resume_app'
       )
   ) THEN
     RAISE EXCEPTION 'Portfolio effective relation ACL contains an unexpected grantee, including PUBLIC';

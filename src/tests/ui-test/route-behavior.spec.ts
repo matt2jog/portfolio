@@ -269,7 +269,7 @@ test("activity surfaces provider errors and empty timelines", async ({ page }) =
 });
 
 for (const route of ["/privacy", "/terms", "/tracking"] as const) {
-  test(`${route} renders the versioned legal projection`, async ({ page }) => {
+  test(`${route} renders the versioned legal document`, async ({ page }) => {
     await page.goto(route);
     await expect(page.getByRole("heading", { name: "Policy Document" })).toBeVisible();
     await expect(page.getByText("March 27, 2026").first()).toBeVisible();
