@@ -126,11 +126,15 @@ test("skill relationships are enforced by the database and remain safe across de
 
   const groupId = randomUUID();
   const skillId = randomUUID();
+  const danglingSkillId = randomUUID();
   const portfolioSkillId = randomUUID();
   const missingGroupId = randomUUID();
 
   await db.insert(skillsGroup).values({ id: groupId, name: "Integrity group" });
-  await db.insert(allSkills).values({ id: skillId, name: "Integrity skill" });
+  await db.insert(allSkills).values([
+    { id: skillId, name: "Integrity skill" },
+    { id: danglingSkillId, name: "Dangling integrity skill" },
+  ]);
   await db.insert(portfolioSkills).values({ id: portfolioSkillId, allSkillId: skillId, groupId });
 
   try {
@@ -138,6 +142,21 @@ test("skill relationships are enforced by the database and remain safe across de
       db.insert(portfolioSkills).values({
         id: randomUUID(),
         allSkillId: skillId,
+        groupId,
+      }),
+      (error: unknown) => {
+        const cause = error instanceof Error && error.cause && typeof error.cause === "object"
+          ? error.cause as { code?: unknown; constraint?: unknown }
+          : undefined;
+        return cause?.code === "23505"
+          && cause.constraint === "portfolio_skills_active_skill_uidx";
+      },
+    );
+
+    await assert.rejects(
+      db.insert(portfolioSkills).values({
+        id: randomUUID(),
+        allSkillId: danglingSkillId,
         groupId: missingGroupId,
       }),
       (error: unknown) => {
@@ -149,22 +168,22 @@ test("skill relationships are enforced by the database and remain safe across de
       },
     );
 
-      await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
-      const [unlinked] = await db
+    await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
+    const [unlinked] = await db
       .select({ groupId: portfolioSkills.groupId })
       .from(portfolioSkills)
       .where(eq(portfolioSkills.id, portfolioSkillId));
-      assert.equal(unlinked.groupId, null);
+    assert.equal(unlinked.groupId, null);
 
-      await db.delete(allSkills).where(eq(allSkills.id, skillId));
-      const [orphanedPortfolioSkill] = await db
+    await db.delete(allSkills).where(eq(allSkills.id, skillId));
+    const [orphanedPortfolioSkill] = await db
       .select({ id: portfolioSkills.id })
       .from(portfolioSkills)
       .where(eq(portfolioSkills.id, portfolioSkillId));
-      assert.equal(orphanedPortfolioSkill, undefined);
+    assert.equal(orphanedPortfolioSkill, undefined);
   } finally {
     await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
-    await db.delete(allSkills).where(eq(allSkills.id, skillId));
+    await db.delete(allSkills).where(sql`${allSkills.id} IN (${skillId}, ${danglingSkillId})`);
     await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
   }
 });

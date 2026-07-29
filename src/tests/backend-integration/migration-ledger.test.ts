@@ -20,6 +20,7 @@ test("all migrations are checksummed and idempotent", async () => {
   assert.ok(plan.length >= 3);
   assert.equal(plan[0]?.version, "001_initial");
   assert.ok(plan.some((migration) => migration.version === "002_portfolio_skill_groups"));
+  assert.ok(plan.some((migration) => migration.version === "003_canonical_skill_presentation"));
   assert.ok(plan.some((migration) => migration.version === "004_remove_raw_request_tracking"));
 
   const ledger = await pool.query<{ version: string; checksum: string }>(

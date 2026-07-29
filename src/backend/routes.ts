@@ -40,7 +40,7 @@ import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./
 import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
 import { evaluateResponse, randomEvaluatorStatus, randomDiagramStatus } from "./agent/evaluator";
-import { pushPromptVersion, createRun } from "./agent/tracing";
+import { createRun } from "./agent/tracing";
 import {
   GitHubRepoTool,
   GitHubFileTreeTool,
@@ -603,13 +603,6 @@ export async function registerRoutes(
       || `You are an AI assistant for the project "${project.title}". Full project details have been loaded into this conversation as tool results — refer to them. Use the GitHub tools to fetch repository details and dig deeper whenever a question requires verified source-level information. Be professional yet conversational.`;
 
     const systemPrompt = basePrompt + generalInformation + rules;
-
-    // Push system prompt as a versioned entry in LangSmith Hub (fire-and-forget)
-    const promptIdentifier = `project-${project.id}-system`;
-    pushPromptVersion(promptIdentifier, systemPrompt, {
-      description: `System prompt for project: ${project.title}`,
-      tags: ["project-chat", project.title],
-    });
 
     const tools = [
       new ProjectContextTool(),

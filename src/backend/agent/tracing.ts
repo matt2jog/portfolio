@@ -15,7 +15,7 @@ export function tracingEnabled(): boolean {
 const project = process.env.LANGSMITH_PROJECT ?? "default";
 
 /* ------------------------------------------------------------------ */
-/*  Run factories                                                       */
+/*  Run factories                                                     */
 /* ------------------------------------------------------------------ */
 
 export interface RunMeta {
@@ -58,7 +58,11 @@ export async function withRun<T>(
 ): Promise<T> {
   if (!run) return fn();
 
-  try { await run.postRun(); } catch { /* never block real work */ }
+  try {
+    await run.postRun();
+  } catch {
+    // Tracing must never block application work.
+  }
 
   let result: T;
   try {
@@ -66,60 +70,17 @@ export async function withRun<T>(
     try {
       await run.end(getOutput(result));
       await run.patchRun();
-    } catch { /* trace failed silently */ }
+    } catch {
+      // Tracing must never block application work.
+    }
     return result;
-  } catch (err: any) {
+  } catch (error: unknown) {
     try {
-      await run.end({}, err?.message ?? "unknown error");
+      await run.end({}, error instanceof Error ? error.message : "unknown error");
       await run.patchRun();
-    } catch { /* */ }
-    throw err;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Prompt versioning                                                   */
-/* ------------------------------------------------------------------ */
-
-/**
- * Push the system prompt to LangSmith Hub as a versioned prompt.
- * identifier example: "project-abc123-system"
- * Fails silently — prompt versioning must never break chat.
- */
-export async function pushPromptVersion(
-  identifier: string,
-  systemPrompt: string,
-  meta?: { description?: string; tags?: string[] },
-): Promise<void> {
-  if (!tracingEnabled()) return;
-  try {
-    await lsClient.pushPrompt(identifier, {
-      object: {
-        lc: 1,
-        type: "constructor",
-        id: ["langchain", "prompts", "chat", "ChatPromptTemplate"],
-        kwargs: {
-          messages: [
-            {
-              lc: 1,
-              type: "constructor",
-              id: ["langchain", "prompts", "messages", "SystemMessagePromptTemplate"],
-              kwargs: {
-                prompt: {
-                  lc: 1,
-                  type: "constructor",
-                  id: ["langchain", "prompts", "prompt", "PromptTemplate"],
-                  kwargs: { template: systemPrompt, input_variables: [] },
-                },
-              },
-            },
-          ],
-        },
-      },
-      description: meta?.description,
-      tags: meta?.tags,
-    });
-  } catch {
-    /* silent — tracing must never break chat */
+    } catch {
+      // Tracing must never block application work.
+    }
+    throw error;
   }
 }
