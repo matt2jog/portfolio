@@ -62,7 +62,12 @@ jobs:
             --region "${GCP_REGION}" \
             --format=json)"
           [[ "$(jq -r '.status.conditions[] | select(.type == "Ready") | .status' <<<"${service_json}")" == "True" ]]
-          staging_revision="$(jq -er '.status.traffic[] | select(.percent == 100) | .revisionName' <<<"${service_json}")"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          staging_revision="$(jq -er '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")"
+          commit_sha="$(jq -er '.metadata.labels["commit-sha"]' <<<"${service_json}")"
+          [[ "${commit_sha}" =~ ^[0-9a-f]{40}$ ]]
           digest_uri="$(gcloud run revisions describe "${staging_revision}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -72,12 +77,10 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-all-errors \
             --retry-delay 2 "${staging_url}/healthz" >/dev/null
           digest="${digest_uri##*@}"
-          commit_sha="$(gcloud artifacts docker tags list "${IMAGE_URI}" \
+          tagged_digest="$(gcloud artifacts docker images describe "${IMAGE_URI}:${commit_sha}" \
             --project "${GCP_PROJECT_ID}" \
-            --filter="version~'${digest}'" \
-            --format='value(tag)' |
-            awk -F/ '$NF ~ /^[0-9a-f]{40,64}$/ { print $NF; exit }')"
-          [[ "${commit_sha}" =~ ^[0-9a-f]{40,64}$ ]]
+            --format='value(image_summary.digest)')"
+          [[ "${tagged_digest}" == "${digest}" ]]
           git fetch --no-tags origin main
           git merge-base --is-ancestor "${commit_sha}" origin/main
           echo "digest_uri=${digest_uri}" >> "${GITHUB_OUTPUT}"
@@ -90,22 +93,45 @@ jobs:
           COMMIT_SHA: ${{ steps.staged.outputs.commit_sha }}
         run: |
           set -euo pipefail
-          previous_revision="$(gcloud run services describe "${PROD_SERVICE}" \
+          prod_json="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --format=json |
-            jq -er '.status.traffic[] | select(.percent == 100) | .revisionName')"
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${prod_json}")" == "1" ]]
+          previous_revision="$(jq -er '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${prod_json}")"
           shifted=0
           rollback() {
             status=$?
             if [[ ${status} -ne 0 && ${shifted} -eq 1 ]]; then
               set +e
               echo "::warning::Post-shift verification failed; restoring ${previous_revision}."
-              gcloud run services update-traffic "${PROD_SERVICE}" \
+              rollback_failed=0
+              if ! gcloud run services update-traffic "${PROD_SERVICE}" \
                 --project "${GCP_PROJECT_ID}" \
                 --region "${GCP_REGION}" \
                 --to-revisions "${previous_revision}=100" \
-                --quiet
+                --quiet; then
+                rollback_failed=1
+              fi
+              if restored_json="$(gcloud run services describe "${PROD_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --format=json)"; then
+                restored_count="$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+                  <<<"${restored_json}")"
+                restored_revision="$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+                  <<<"${restored_json}")"
+                if [[ "${restored_count}" != "1" || "${restored_revision}" != "${previous_revision}" ]]; then
+                  rollback_failed=1
+                fi
+              else
+                rollback_failed=1
+              fi
+              if [[ ${rollback_failed} -ne 0 ]]; then
+                echo "::error::Automatic rollback failed to restore ${previous_revision} at 100% traffic."
+              fi
             fi
             exit "${status}"
           }
@@ -121,8 +147,9 @@ jobs:
             --region "${GCP_REGION}" \
             --wait
 
-          candidate_tag="candidate-${COMMIT_SHA:0:7}"
-          suffix="candidate-${COMMIT_SHA:0:7}-${GITHUB_RUN_ID: -6}-${GITHUB_RUN_ATTEMPT}"
+          release_key="${COMMIT_SHA:0:12}-${GITHUB_RUN_ID: -6}-${GITHUB_RUN_ATTEMPT}"
+          candidate_tag="candidate-${release_key}"
+          suffix="c-${release_key}"
           gcloud run deploy "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -150,12 +177,12 @@ jobs:
           curl --fail --silent --show-error --retry 8 --retry-all-errors \
             --retry-delay 3 "${candidate_url}/healthz" >/dev/null
 
+          shifted=1
           gcloud run services update-traffic "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --to-revisions "${candidate_revision}=100" \
             --quiet
-          shifted=1
           service_url="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \

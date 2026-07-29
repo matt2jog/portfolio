@@ -223,38 +223,33 @@ jobs:
           registry="${GCP_REGION}-docker.pkg.dev"
           image_uri="${registry}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
           remote_image="${image_uri}:${COMMIT_SHA}"
-          temporary_image="${image_uri}:${COMMIT_SHA}-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cleanup() {
-            gcloud artifacts docker tags delete "${temporary_image}" \
-              --project "${GCP_PROJECT_ID}" \
-              --quiet >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
           gcloud auth configure-docker "${registry}" --quiet
-          docker tag "${LOCAL_IMAGE}" "${temporary_image}"
-          docker push "${temporary_image}"
-          digest="$(gcloud artifacts docker images describe "${temporary_image}" \
-            --project "${GCP_PROJECT_ID}" \
-            --format='value(image_summary.digest)')"
-          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
-          if existing_digest="$(gcloud artifacts docker images describe "${remote_image}" \
+          local_revision="$(docker image inspect "${LOCAL_IMAGE}" \
+            --format='{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          [[ "${local_revision}" == "${COMMIT_SHA}" ]]
+          if digest="$(gcloud artifacts docker images describe "${remote_image}" \
             --project "${GCP_PROJECT_ID}" \
             --format='value(image_summary.digest)' 2>/dev/null)"; then
-            if [[ "${existing_digest}" != "${digest}" ]]; then
-              echo "::error::The immutable commit tag ${COMMIT_SHA} already points to a different digest."
-              exit 1
-            fi
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           else
-            gcloud artifacts docker tags add "${image_uri}@${digest}" "${remote_image}" \
+            docker tag "${LOCAL_IMAGE}" "${remote_image}"
+            docker push "${remote_image}"
+            digest="$(gcloud artifacts docker images describe "${remote_image}" \
               --project "${GCP_PROJECT_ID}" \
-              --quiet
+              --format='value(image_summary.digest)')"
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          fi
+          docker pull "${remote_image}" >/dev/null
+          remote_revision="$(docker image inspect "${remote_image}" \
+            --format='{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          if [[ "${remote_revision}" != "${COMMIT_SHA}" ]]; then
+            echo "::error::The immutable commit tag ${COMMIT_SHA} does not carry its exact OCI revision label."
+            exit 1
           fi
           resolved_digest="$(gcloud artifacts docker images describe "${remote_image}" \
             --project "${GCP_PROJECT_ID}" \
             --format='value(image_summary.digest)')"
           [[ "${resolved_digest}" == "${digest}" ]]
-          cleanup
-          trap - EXIT
           echo "digest_uri=${image_uri}@${digest}" >> "${GITHUB_OUTPUT}"
 
   stage:
