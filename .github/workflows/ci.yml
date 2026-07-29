@@ -172,11 +172,11 @@ jobs:
           exit-code: "1"
 
       - name: Save the verified image
-        if: github.event_name == 'push'
+        if: github.actor_id == '81255678' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         run: docker save --output "${RUNNER_TEMP}/portfolio-image.tar" "${LOCAL_IMAGE}"
 
       - name: Hand the verified image to the trusted job
-        if: github.event_name == 'push'
+        if: github.actor_id == '81255678' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: portfolio-image-${{ env.COMMIT_SHA }}
@@ -185,22 +185,18 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-  stage:
-    name: Deploy staging and run live browser E2E
+  publish:
+    name: Publish immutable verified image
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.actor_id == '81255678' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
-    environment: staging
+    timeout-minutes: 15
     permissions:
-      contents: read
+      actions: read
       id-token: write
+    outputs:
+      digest_uri: ${{ steps.image.outputs.digest_uri }}
     steps:
-      - name: Check out source for live E2E
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
       - name: Download verified image
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
@@ -210,12 +206,11 @@ jobs:
       - name: Load verified image
         run: docker load --input "${RUNNER_TEMP}/portfolio-image.tar"
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Artifact Registry
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
@@ -262,12 +257,38 @@ jobs:
           trap - EXIT
           echo "digest_uri=${image_uri}@${digest}" >> "${GITHUB_OUTPUT}"
 
+  stage:
+    name: Deploy staging and run live browser E2E
+    needs: publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out source for live E2E
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
       - name: Run staging migration
         run: |
           gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --image "${{ steps.image.outputs.digest_uri }}" \
+            --image "${{ needs.publish.outputs.digest_uri }}" \
             --quiet
           gcloud run jobs execute "${STAGING_MIGRATION_JOB}" \
             --project "${GCP_PROJECT_ID}" \
@@ -282,7 +303,7 @@ jobs:
           gcloud run deploy "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --image "${{ steps.image.outputs.digest_uri }}" \
+            --image "${{ needs.publish.outputs.digest_uri }}" \
             --revision-suffix "${suffix}" \
             --quiet
           gcloud run services update-traffic "${STAGING_SERVICE}" \
