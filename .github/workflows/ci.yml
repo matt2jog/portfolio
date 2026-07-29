@@ -28,7 +28,6 @@ env:
 
 jobs:
   verify:
-    name: Verify exact production image
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     services:
