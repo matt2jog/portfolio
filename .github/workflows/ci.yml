@@ -305,6 +305,7 @@ jobs:
             --region "${GCP_REGION}" \
             --image "${{ needs.publish.outputs.digest_uri }}" \
             --revision-suffix "${suffix}" \
+            --update-labels "commit-sha=${COMMIT_SHA}" \
             --quiet
           gcloud run services update-traffic "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
