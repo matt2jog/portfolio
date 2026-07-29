@@ -1,6 +1,5 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { extractClientIp } from "./geoip";
 
 const SAFE_CORRELATION_VALUE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
@@ -66,43 +65,26 @@ export function createChatRateLimitMiddleware(options: {
   maxRequests?: number;
   windowMs?: number;
   now?: () => number;
-  keySalt?: Buffer;
 } = {}): RequestHandler {
-  const maxRequests = options.maxRequests ?? 20;
-  const windowMs = options.windowMs ?? 5 * 60_000;
+  const maxRequests = options.maxRequests ?? 60;
+  const windowMs = options.windowMs ?? 60_000;
   const now = options.now ?? Date.now;
-  const keySalt = options.keySalt ?? randomBytes(32);
-  const entries = new Map<string, RateLimitEntry>();
+  let entry: RateLimitEntry = { count: 0, resetAt: 0 };
 
   return (req, res, next) => {
     if (req.path !== "/api/public/chat") return next();
     const currentTime = now();
-    const key = createHmac("sha256", keySalt)
-      .update(extractClientIp(req) || req.socket.remoteAddress || "shared-anonymous")
-      .digest("base64url");
-    const existing = entries.get(key);
-    const entry = !existing || existing.resetAt <= currentTime
+    entry = entry.resetAt <= currentTime
       ? { count: 0, resetAt: currentTime + windowMs }
-      : existing;
+      : entry;
 
     entry.count += 1;
-    entries.set(key, entry);
 
     const remaining = Math.max(0, maxRequests - entry.count);
     const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - currentTime) / 1000));
     res.setHeader("RateLimit-Limit", String(maxRequests));
     res.setHeader("RateLimit-Remaining", String(remaining));
     res.setHeader("RateLimit-Reset", String(retryAfterSeconds));
-
-    if (entries.size >= 10_000) {
-      for (const [entryKey, candidate] of Array.from(entries.entries())) {
-        if (candidate.resetAt <= currentTime) entries.delete(entryKey);
-      }
-      if (entries.size >= 10_000) {
-        const oldestKey = entries.keys().next().value;
-        if (oldestKey) entries.delete(oldestKey);
-      }
-    }
 
     if (entry.count > maxRequests) {
       res.locals ??= {};

@@ -15,7 +15,7 @@ import {
   isForeignKeyViolation,
   projectPresentationUpdateSchema,
 } from "./career-authority";
-import { extractClientCountry, extractClientIp, isLocalIp } from "./geoip";
+import { publicGeoIpHint } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
@@ -217,10 +217,8 @@ export async function registerRoutes(
   app.get("/api/legal/tracking", sendLegalDoc("TRACKING_NOTICE_AND_CONSENT.md", "Tracking Notice not found"));
 
   // ========== GEOLOCATION ==========
-  app.get("/api/public/geoip", async (req, res) => {
-    const ip = extractClientIp(req);
-    const countryCode = isLocalIp(ip) ? "US" : extractClientCountry(req);
-    res.json({ country_code: countryCode });
+  app.get("/api/public/geoip", (_req, res) => {
+    res.json(publicGeoIpHint());
   });
 
   // ========== POLICY ACCEPTANCE ==========

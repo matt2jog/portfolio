@@ -44,20 +44,20 @@ after(() => {
   else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
 });
 
-test("GeoIP caches successful responses and preserves absent country codes", async () => {
+test("GeoIP caches only the explicit unknown-location hint", async () => {
   let calls = 0;
   globalThis.fetch = (async () => {
     calls += 1;
-    return Response.json({ ip: "203.0.113.9", country_code: "US" });
+    return Response.json({ country_code: null, status: "unknown" });
   }) as typeof fetch;
   const cached = await import("../../client/src/lib/geoip.ts?case=cached");
-  assert.equal((await cached.fetchGeoIP())?.country_code, "US");
-  assert.equal(await cached.detectJurisdiction(), "US");
+  assert.deepEqual(await cached.fetchGeoIP(), { country_code: null, status: "unknown" });
+  assert.equal(await cached.detectJurisdiction(), null);
   assert.equal(calls, 1);
 
-  globalThis.fetch = (async () => Response.json({ ip: "203.0.113.10" })) as typeof fetch;
-  const noCountry = await import("../../client/src/lib/geoip.ts?case=no-country");
-  assert.equal(await noCountry.detectJurisdiction(), null);
+  globalThis.fetch = (async () => Response.json({ country_code: "US" })) as typeof fetch;
+  const authoritativeCountry = await import("../../client/src/lib/geoip.ts?case=country");
+  assert.equal(await authoritativeCountry.fetchGeoIP(), null);
 });
 
 test("GeoIP fails closed for non-success and network failures", async () => {

@@ -5,7 +5,6 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { isSameOriginMutation } from "./auth0Web";
-import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
 import { createOriginAccessMiddleware } from "./origin-access";
 import {
   createChatRateLimitMiddleware,
@@ -56,7 +55,6 @@ if (isProd || Boolean(process.env.K_SERVICE)) {
     process.env.EDGE_ORIGIN_PREVIOUS_TOKEN,
     process.env.PUBLIC_BASE_URL,
   ));
-  app.use(markEdgeOriginAuthenticated);
 }
 app.use(createChatRateLimitMiddleware());
 
@@ -88,35 +86,6 @@ app.use((req, res, next) => {
   }
   return next();
 });
-const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
-
-if (enforceUsOnly) {
-  app.use((req, res, next) => {
-    // Exempt static files from geoblocking so asset bots (like LogRocket) can fetch styles
-    if (
-      req.path.startsWith("/assets/") || 
-      req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)
-    ) {
-      return next();
-    }
-
-    const ip = extractClientIp(req);
-    if (isLocalIp(ip)) {
-      return next();
-    }
-
-    const countryCode = extractClientCountry(req);
-    if (countryCode === "US") {
-      return next();
-    }
-
-    return res.status(451).json({
-      message: "This service is currently available only to users in the United States.",
-      country_code: countryCode || null,
-    });
-  });
-}
-
 export function log(event: string, fields: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ event, ...fields }));
 }
@@ -169,7 +138,7 @@ export function log(event: string, fields: Record<string, unknown> = {}) {
   // reusePort is not supported on Windows, so use simple listen for development
   if (process.platform === "win32") {
     httpServer.listen(port, () => {
-      log("portfolio.service_started", { port, us_only: enforceUsOnly });
+      log("portfolio.service_started", { port });
     });
   } else {
     httpServer.listen(
@@ -179,7 +148,7 @@ export function log(event: string, fields: Record<string, unknown> = {}) {
         reusePort: true,
       },
       () => {
-        log("portfolio.service_started", { port, us_only: enforceUsOnly });
+        log("portfolio.service_started", { port });
       },
     );
   }

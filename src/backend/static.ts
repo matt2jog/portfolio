@@ -2,6 +2,14 @@ import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
 
+const HASHED_ASSET_NAME = /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
+
+export function staticCacheControl(filePath: string): string {
+  return HASHED_ASSET_NAME.test(path.basename(filePath))
+    ? "public, max-age=31536000, immutable"
+    : "no-store";
+}
+
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
   if (!fs.existsSync(distPath)) {
@@ -12,12 +20,7 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath, {
     setHeaders(response, filePath) {
-      response.setHeader(
-        "Cache-Control",
-        filePath.includes(`${path.sep}assets${path.sep}`)
-          ? "public, max-age=31536000, immutable"
-          : "no-store",
-      );
+      response.setHeader("Cache-Control", staticCacheControl(filePath));
     },
   }));
 

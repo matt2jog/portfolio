@@ -153,7 +153,6 @@ async function localAuth0Admin(identity: Auth0BrowserIdentity): Promise<Express.
 }
 
 export function setupAuth(app: Express): void {
-  app.set("trust proxy", 1);
   app.use(async (req, _res, next) => {
     try {
       const auth0Identity = await auth0WebClient.session(req);

@@ -69,7 +69,7 @@ async function mockDbRoute(page: Page, url: string, body: JsonValue) {
 export async function installMockApi(page: Page) {
   await page.route("**/api/admin/**", (route) => fulfillJson(route, { ok: true }));
   await page.route("**/api/public/geoip", (route) =>
-    fulfillJson(route, { ip: "127.0.0.1", country_code: "US" }),
+    fulfillJson(route, { country_code: null, status: "unknown" }),
   );
   await page.route("**/api/public/ip", (route) =>
     fulfillJson(route, { ip: "127.0.0.1" }),

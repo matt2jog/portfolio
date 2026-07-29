@@ -42,12 +42,10 @@ test("chat rate limiter enforces a bounded in-memory window without persistence"
     maxRequests: 2,
     windowMs: 1_000,
     now: () => time,
-    keySalt: Buffer.alloc(32, 7),
   });
   const request = {
     path: "/api/public/chat",
-    edgeOriginAuthenticated: true,
-    headers: { "x-2jog-client-ip": "198.51.100.8" },
+    headers: {},
     requestId: "request-1",
     socket: {},
   } as any;
@@ -79,7 +77,6 @@ test("chat rate limiter enforces a bounded in-memory window without persistence"
 test("chat limiter does not throttle ordinary APIs", () => {
   const middleware = createChatRateLimitMiddleware({
     maxRequests: 0,
-    keySalt: Buffer.alloc(32, 9),
   });
   const response = responseFixture();
   let continued = false;
@@ -89,6 +86,41 @@ test("chat limiter does not throttle ordinary APIs", () => {
     socket: {},
   } as any, response as any, () => { continued = true; });
   assert.equal(continued, true);
+});
+
+test("chat limiter is one coarse process-local cap that ignores spoofed network metadata", () => {
+  const middleware = createChatRateLimitMiddleware({
+    maxRequests: 1,
+    windowMs: 60_000,
+    now: () => 1_000,
+  });
+  const first = responseFixture();
+  middleware({
+    path: "/api/public/chat",
+    headers: {
+      "x-2jog-client-ip": "198.51.100.1",
+      "cf-connecting-ip": "198.51.100.2",
+      "cf-ipcountry": "US",
+      "x-forwarded-for": "198.51.100.3",
+    },
+    requestId: "request-1",
+    socket: { remoteAddress: "198.51.100.4" },
+  } as any, first as any, () => undefined);
+
+  const spoofed = responseFixture();
+  middleware({
+    path: "/api/public/chat",
+    headers: {
+      "x-2jog-client-ip": "203.0.113.1",
+      "cf-connecting-ip": "203.0.113.2",
+      "cf-ipcountry": "CA",
+      "x-forwarded-for": "203.0.113.3",
+    },
+    requestId: "request-2",
+    socket: { remoteAddress: "203.0.113.4" },
+  } as any, spoofed as any, () => assert.fail("spoofed request bypassed the cap"));
+
+  assert.equal(spoofed.statusCode, 429);
 });
 
 test("completion log uses route templates, Auth0 subject, and no PII", () => {
