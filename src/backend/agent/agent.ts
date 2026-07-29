@@ -1,6 +1,4 @@
 import type { Tool } from "./tool";
-import { createRun, withRun } from "./tracing";
-import type { RunTree } from "langsmith/run_trees";
 import type { LLMProvider, ChatMessage, CompletionResponse, ToolCall, LLMCompletionParams } from "./providers/base";
 
 /* ------------------------------------------------------------------ */
@@ -28,10 +26,6 @@ export interface AgentConfig {
   maxTokens?: number;
   /** Temperature (default 0.7) */
   temperature?: number;
-  /** Optional metadata attached to every LangSmith trace */
-  tracingMeta?: Record<string, unknown>;
-  /** Optional tags attached to every LangSmith trace */
-  tracingTags?: string[];
 }
 
 // Re-export ChatMessage so callers don't need two import paths
@@ -53,8 +47,6 @@ export class Agent {
       maxToolRounds: config.maxToolRounds ?? 6,
       maxTokens: config.maxTokens ?? 4096,
       temperature: config.temperature ?? 0.7,
-      tracingMeta: config.tracingMeta ?? {},
-      tracingTags: config.tracingTags ?? [],
     };
 
     this.toolMap = new Map();
@@ -86,7 +78,6 @@ export class Agent {
    */
   async primeContext(
     calls: Array<{ name: string; args: Record<string, unknown> }>,
-    parentRun?: RunTree,
   ): Promise<ChatMessage[]> {
     const seed: ChatMessage[] = [];
     for (const call of calls) {
@@ -95,7 +86,7 @@ export class Agent {
         id: syntheticToolCallId,
         type: "function",
         function: { name: call.name, arguments: JSON.stringify(call.args) },
-      }, parentRun);
+      });
       // Skip failed tool calls - injecting error results causes the model to
       // hallucinate when the system prompt implies the data was loaded.
       try {
@@ -112,155 +103,94 @@ export class Agent {
     return seed;
   }
 
-  /**
-   * Non-streaming agentic loop. Creates a parent "chain" trace in
-   * LangSmith, with each LLM call and tool execution as child runs.
-   */
-  async run(userMessages: ChatMessage[], parentRun?: RunTree): Promise<string> {
+  /** Run the non-streaming agent/tool loop. */
+  async run(userMessages: ChatMessage[]): Promise<string> {
     const messages = this.buildMessages(userMessages);
+    let rounds = 0;
 
-    const run = createRun({
-      name: this.config.name,
-      runType: "chain",
-      inputs: { messages },
-      parent: parentRun,
-      tags: this.config.tracingTags,
-      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
+    while (rounds < this.config.maxToolRounds) {
+      const response = await this.complete(messages);
+      const choice = response.choices?.[0];
+      if (!choice) return "(no response)";
+
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content: choice.message.content,
+        tool_calls: choice.message.tool_calls,
+      };
+      messages.push(assistantMsg);
+
+      if (!choice.message.tool_calls?.length) {
+        return choice.message.content ?? "";
+      }
+
+      for (const call of choice.message.tool_calls) {
+        const result = await this.executeTool(call);
+        messages.push({ role: "tool", content: result, tool_call_id: call.id });
+      }
+
+      rounds++;
+    }
+
+    messages.push({
+      role: "user",
+      content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
     });
-
-    return withRun(
-      run,
-      async () => {
-        let rounds = 0;
-
-        while (rounds < this.config.maxToolRounds) {
-          const response = await this.complete(messages, run ?? undefined, `tool-round-${rounds + 1}`);
-          const choice = response.choices?.[0];
-          if (!choice) return "(no response)";
-
-          const assistantMsg: ChatMessage = {
-            role: "assistant",
-            content: choice.message.content,
-            tool_calls: choice.message.tool_calls,
-          };
-          messages.push(assistantMsg);
-
-          if (!choice.message.tool_calls?.length) {
-            return choice.message.content ?? "";
-          }
-
-          for (const call of choice.message.tool_calls) {
-            const result = await this.executeTool(call, run ?? undefined);
-            messages.push({ role: "tool", content: result, tool_call_id: call.id });
-          }
-
-          rounds++;
-        }
-
-        if (rounds >= this.config.maxToolRounds) {
-          messages.push({
-            role: "user",
-            content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
-          });
-        }
-
-        return this.forceTextReply(messages);
-      },
-      (result) => ({ output: result }),
-    );
+    return this.forceTextReply(messages);
   }
 
   /**
    * Streaming agentic loop. Tool rounds execute non-streaming. The
-   * final reply streams as text deltas. The whole conversation is
-   * traced as a parent chain run in LangSmith.
+   * final reply streams as text deltas.
    *
    * Yields AgentYield events: tool_call events before each tool executes,
    * then text deltas for the final reply.
    */
-  async *stream(userMessages: ChatMessage[], parentRun?: RunTree): AsyncGenerator<AgentYield> {
+  async *stream(userMessages: ChatMessage[]): AsyncGenerator<AgentYield> {
     const messages = this.buildMessages(userMessages);
+    let rounds = 0;
 
-    const run = createRun({
-      name: this.config.name,
-      runType: "chain",
-      inputs: { messages },
-      parent: parentRun,
-      tags: this.config.tracingTags,
-      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
-    });
+    while (rounds < this.config.maxToolRounds) {
+      const response = await this.complete(messages);
+      const choice = response.choices?.[0];
+      if (!choice) return;
 
-    if (run) {
-      try { await run.postRun(); } catch { /* silent */ }
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content: choice.message.content,
+        tool_calls: choice.message.tool_calls,
+      };
+      messages.push(assistantMsg);
+
+      if (!choice.message.tool_calls?.length) {
+        if (choice.message.content) {
+          yield { type: "text", delta: choice.message.content };
+        }
+        return;
+      }
+
+      for (const call of choice.message.tool_calls) {
+        let callArgs: Record<string, unknown>;
+        try {
+          callArgs = typeof call.function.arguments === "string"
+            ? JSON.parse(call.function.arguments)
+            : call.function.arguments;
+        } catch { callArgs = {}; }
+        yield { type: "tool_call", name: call.function.name, args: callArgs };
+
+        const result = await this.executeTool(call);
+        messages.push({ role: "tool", content: result, tool_call_id: call.id });
+      }
+
+      rounds++;
     }
 
-    let fullOutput = "";
-    let error: string | undefined;
-
-    try {
-      let rounds = 0;
-
-      while (rounds < this.config.maxToolRounds) {
-        const response = await this.complete(messages, run ?? undefined, `tool-round-${rounds + 1}`);
-        const choice = response.choices?.[0];
-        if (!choice) return;
-
-        const assistantMsg: ChatMessage = {
-          role: "assistant",
-          content: choice.message.content,
-          tool_calls: choice.message.tool_calls,
-        };
-        messages.push(assistantMsg);
-
-        if (!choice.message.tool_calls?.length) {
-          if (choice.message.content) {
-            fullOutput = choice.message.content;
-            yield { type: "text", delta: choice.message.content };
-          }
-          return;
-        }
-
-        for (const call of choice.message.tool_calls) {
-          let callArgs: Record<string, unknown>;
-          try {
-            callArgs = typeof call.function.arguments === "string"
-              ? JSON.parse(call.function.arguments)
-              : call.function.arguments;
-          } catch { callArgs = {}; }
-          yield { type: "tool_call", name: call.function.name, args: callArgs };
-
-          const result = await this.executeTool(call, run ?? undefined);
-          messages.push({ role: "tool", content: result, tool_call_id: call.id });
-        }
-
-        rounds++;
-      }
-
-      if (rounds >= this.config.maxToolRounds) {
-        messages.push({
-          role: "user",
-          content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
-        });
-      }
-
-      // Stream the final reply
-      for await (const delta of this.streamCompletion(messages, run ?? undefined)) {
-        fullOutput += delta;
-        yield { type: "text", delta };
-      }
-    } catch (err: any) {
-      error = err?.message ?? "unknown error";
-      throw err;
-    } finally {
-      if (run) {
-        try {
-          await run.end(
-            error ? {} : { output: fullOutput },
-            error,
-          );
-          await run.patchRun();
-        } catch { /* silent */ }
-      }
+    messages.push({
+      role: "user",
+      content: "System: You have run out of allowed tool invocations. You MUST provide a final response answering the user's request based only on the information you have gathered so far. You cannot invoke any more tools.",
+    });
+    for await (const delta of this.streamCompletion(messages)) {
+      yield { type: "text", delta };
     }
   }
 
@@ -275,42 +205,22 @@ export class Agent {
 
   private async complete(
     messages: ChatMessage[],
-    parentRun?: RunTree,
-    runNameSuffix?: string,
   ): Promise<CompletionResponse> {
-    const llmRun = createRun({
-      name: runNameSuffix ? `${this.config.name}:${runNameSuffix}` : `${this.config.name}:llm`,
-      runType: "llm",
-      inputs: { messages },
-      parent: parentRun,
-      tags: this.config.tracingTags,
-      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
+    const tools = this.config.tools.length > 0
+      ? (this.config.tools.map((t) => t.toJSON()) as LLMCompletionParams["tools"])
+      : undefined;
+
+    return this.config.provider.complete({
+      messages,
+      modelId: this.config.modelId,
+      maxTokens: this.config.maxTokens,
+      temperature: this.config.temperature,
+      tools,
+      toolChoice: tools ? "auto" : undefined,
     });
-
-    return withRun(
-      llmRun,
-      async () => {
-        const tools = this.config.tools.length > 0
-          ? (this.config.tools.map((t) => t.toJSON()) as LLMCompletionParams["tools"])
-          : undefined;
-
-        return this.config.provider.complete({
-          messages,
-          modelId: this.config.modelId,
-          maxTokens: this.config.maxTokens,
-          temperature: this.config.temperature,
-          tools,
-          toolChoice: tools ? "auto" : undefined,
-        });
-      },
-      (data) => ({
-        generations: data.choices?.map((c) => ({ text: c.message.content ?? "" })) ?? [],
-        llm_output: { token_usage: data.usage },
-      }),
-    );
   }
 
-  private async executeTool(call: ToolCall, parentRun?: RunTree): Promise<string> {
+  private async executeTool(call: ToolCall): Promise<string> {
     const tool = this.toolMap.get(call.function.name);
     if (!tool) {
       return JSON.stringify({ error: `Unknown tool: ${call.function.name}` });
@@ -323,27 +233,11 @@ export class Agent {
       return JSON.stringify({ error: "Invalid tool arguments JSON" });
     }
 
-    // Name is just the tool name - no model prefix needed
-    const toolRun = createRun({
-      name: call.function.name,
-      runType: "tool",
-      inputs: args,
-      parent: parentRun,
-      tags: this.config.tracingTags,
-      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
-    });
-
-    return withRun(
-      toolRun,
-      async () => {
-        try {
-          return await tool.execute(args);
-        } catch (err: any) {
-          return JSON.stringify({ error: err.message ?? "Tool execution failed" });
-        }
-      },
-      (output) => ({ output }),
-    );
+    try {
+      return await tool.execute(args);
+    } catch (err: any) {
+      return JSON.stringify({ error: err.message ?? "Tool execution failed" });
+    }
   }
 
   private async forceTextReply(messages: ChatMessage[]): Promise<string> {
@@ -358,48 +252,14 @@ export class Agent {
 
   private async *streamCompletion(
     messages: ChatMessage[],
-    parentRun?: RunTree,
   ): AsyncGenerator<string> {
-    const llmRun = createRun({
-      name: `${this.config.name}:llm-stream`,
-      runType: "llm",
-      inputs: { messages },
-      parent: parentRun,
-      tags: this.config.tracingTags,
-      metadata: { ...this.config.tracingMeta, modelId: this.config.modelId },
-    });
-
-    if (llmRun) {
-      try { await llmRun.postRun(); } catch { /* silent */ }
-    }
-
-    let fullText = "";
-
-    try {
-      for await (const delta of this.config.provider.streamCompletion({
-        messages,
-        modelId: this.config.modelId,
-        maxTokens: this.config.maxTokens,
-        temperature: this.config.temperature,
-      })) {
-        fullText += delta;
-        yield delta;
-      }
-
-      if (llmRun) {
-        try {
-          await llmRun.end({ generations: [{ text: fullText }] });
-          await llmRun.patchRun();
-        } catch { /* silent */ }
-      }
-    } catch (err: any) {
-      if (llmRun) {
-        try {
-          await llmRun.end({}, err?.message ?? "stream error");
-          await llmRun.patchRun();
-        } catch { /* silent */ }
-      }
-      throw err;
+    for await (const delta of this.config.provider.streamCompletion({
+      messages,
+      modelId: this.config.modelId,
+      maxTokens: this.config.maxTokens,
+      temperature: this.config.temperature,
+    })) {
+      yield delta;
     }
   }
 }

@@ -542,8 +542,7 @@ function GithubTimeline() {
       });
       setHasMore(data.hasMore);
       setInitialLoaded(true);
-    } catch (err) {
-      console.error("Timeline fetch error:", err);
+    } catch {
       setInitialLoaded(true);
     } finally {
       setIsLoading(false);
@@ -747,8 +746,7 @@ function LinkedinTimeline({ isMobile }: { isMobile: boolean }) {
       });
       setHasMore(data.hasMore);
       setInitialLoaded(true);
-    } catch (err) {
-      console.error("LinkedIn timeline fetch error:", err);
+    } catch {
       setInitialLoaded(true);
     } finally {
       setIsLoading(false);

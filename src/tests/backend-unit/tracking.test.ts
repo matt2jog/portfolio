@@ -30,6 +30,11 @@ test("cookie parsing and request lookup tolerate absent and encoded values", () 
     headers: { cookie: `session=abc; ${TRACKER_COOKIE_NAME}=${expected}` },
   } as any;
   assert.equal(getRequestTrackerUuid(request), expected);
+
+  const invalid = {
+    headers: { cookie: `${TRACKER_COOKIE_NAME}=readable-or-unbounded` },
+  } as any;
+  assert.equal(getRequestTrackerUuid(invalid), undefined);
 });
 
 test("the durable tracker uses the server-only cookie name", () => {

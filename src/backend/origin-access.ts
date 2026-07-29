@@ -34,15 +34,28 @@ export function authorizeOriginToken(
 export function createOriginAccessMiddleware(
   expectedToken: string | undefined,
   previousToken?: string,
+  publicBaseUrl = process.env.PUBLIC_BASE_URL || "https://2jog.dev",
 ): RequestHandler {
-  if (!validTokenShape(expectedToken)) {
+  if (expectedToken !== undefined && !validTokenShape(expectedToken)) {
     throw new Error("EDGE_ORIGIN_TOKEN must be a 32-256 character URL-safe token");
   }
   if (previousToken !== undefined && !validTokenShape(previousToken)) {
     throw new Error("EDGE_ORIGIN_PREVIOUS_TOKEN must be a 32-256 character URL-safe token when provided");
   }
 
+  const canonicalHost = new URL(publicBaseUrl).host.toLowerCase();
   return (request, response, next) => {
+    if (
+      request.method === "GET"
+      && (request.path === "/health" || request.path === "/healthz")
+    ) {
+      next();
+      return;
+    }
+    if ((request.headers.host ?? "").toLowerCase() === canonicalHost) {
+      next();
+      return;
+    }
     if (authorizeOriginToken(expectedToken, request.header(ORIGIN_TOKEN_HEADER), previousToken)) {
       next();
       return;

@@ -232,7 +232,10 @@ export async function getGithubActivity() {
     cache = { data, timestamp: Date.now() };
     return data;
   } catch (err) {
-    console.error("Failed to fetch GitHub activity:", err);
+    console.error(JSON.stringify({
+      event: "portfolio.github.activity_fetch_failed",
+      failure_code: "github_activity_unavailable",
+    }));
     if (cache) return cache.data;
     throw err;
   }
@@ -384,8 +387,12 @@ export async function syncGithubTimeline() {
         .values(eventsToInsert)
         .onConflictDoNothing({ target: githubTimelineEvents.extId });
     }
-  } catch (err) {
-    console.error("Failed to sync GitHub timeline via GraphQL:", err);
+  } catch {
+    console.error(JSON.stringify({
+      event: "portfolio.github.timeline_sync_failed",
+      mode: "graphql",
+      failure_code: "github_timeline_unavailable",
+    }));
   }
 }
 
@@ -448,11 +455,11 @@ async function syncGithubTimelineFromRest(username: string): Promise<void> {
         .values(eventsToInsert)
         .onConflictDoNothing({ target: githubTimelineEvents.extId });
     }
-  } catch (error) {
+  } catch {
     console.error(JSON.stringify({
       event: "portfolio.github.timeline_sync_failed",
       mode: "public_rest",
-      error: error instanceof Error ? error.message : "unknown",
+      failure_code: "github_timeline_unavailable",
     }));
   }
 }
@@ -505,8 +512,11 @@ export async function getGithubTimeline(page: number = 1, limit: number = 30): P
     }));
 
     return { events: formattedEvents, hasMore };
-  } catch (err) {
-    console.error("Failed to fetch timeline from DB:", err);
-    throw err;
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "portfolio.github.timeline_read_failed",
+      failure_code: "github_timeline_unavailable",
+    }));
+    throw error;
   }
 }

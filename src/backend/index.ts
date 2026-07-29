@@ -4,11 +4,11 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
+import { isSameOriginMutation } from "./auth0Web";
 import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
-import { uuidCookieMiddleware } from "./tracking";
 import { createOriginAccessMiddleware } from "./origin-access";
 import {
-  createApiRateLimitMiddleware,
+  createChatRateLimitMiddleware,
   requestContextMiddleware,
   structuredRequestLogMiddleware,
 } from "./request-observability";
@@ -17,13 +17,48 @@ const app = express();
 const httpServer = createServer(app);
 const isProd = process.env.NODE_ENV === "production";
 
+app.use(requestContextMiddleware);
+app.use(structuredRequestLogMiddleware);
+
+app.use((req, res, next) => {
+  const host = (req.headers.host ?? "").toLowerCase();
+  if (host !== "www.2jog.dev" && host !== "www.2jog.dev:443") return next();
+  const incoming = new URL(
+    `https://request.invalid${req.originalUrl.startsWith("/") ? req.originalUrl : "/"}`,
+  );
+  const target = new URL("https://2jog.dev");
+  target.pathname = incoming.pathname;
+  target.search = incoming.search;
+  return res.redirect(308, target.toString());
+});
+
+app.use((_req, res, next) => {
+  res.set({
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  });
+  next();
+});
+
+app.get("/healthz", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, service: "portfolio" });
+});
+app.get("/health", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, service: "portfolio" });
+});
+
 if (isProd || Boolean(process.env.K_SERVICE)) {
   app.use(createOriginAccessMiddleware(
     process.env.EDGE_ORIGIN_TOKEN,
     process.env.EDGE_ORIGIN_PREVIOUS_TOKEN,
+    process.env.PUBLIC_BASE_URL,
   ));
   app.use(markEdgeOriginAuthenticated);
 }
+app.use(createChatRateLimitMiddleware());
 
 declare module "http" {
   interface IncomingMessage {
@@ -41,11 +76,18 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
-app.use(requestContextMiddleware);
-app.use(uuidCookieMiddleware);
-app.use(createApiRateLimitMiddleware());
-app.use(structuredRequestLogMiddleware);
-
+app.use((req, res, next) => {
+  if (
+    req.user
+    && !isSameOriginMutation(
+      req,
+      process.env.PUBLIC_BASE_URL || (isProd ? "https://2jog.dev" : "http://localhost:3000"),
+    )
+  ) {
+    return res.status(403).json({ error: "cross_site_request_rejected" });
+  }
+  return next();
+});
 const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
 
 if (enforceUsOnly) {
@@ -75,15 +117,8 @@ if (enforceUsOnly) {
   });
 }
 
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+export function log(event: string, fields: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({ event, ...fields }));
 }
 
 (async () => {
@@ -93,11 +128,13 @@ export function log(message: string, source = "express") {
     const status = err.status || err.statusCode || 500;
     const isServerError = status >= 500;
     const code = typeof err === "object" && err !== null && "code" in err
-      ? String(err.code)
-      : null;
+      ? boundedFailureCode(err.code)
+      : "request_failed";
+    res.locals.failureCode = code;
     console.error(JSON.stringify({
       event: "portfolio.request.error",
       request_id: req.requestId,
+      correlation_id: req.correlationId,
       status,
       code,
     }));
@@ -132,8 +169,7 @@ export function log(message: string, source = "express") {
   // reusePort is not supported on Windows, so use simple listen for development
   if (process.platform === "win32") {
     httpServer.listen(port, () => {
-      log(`serving on port ${port}`);
-      log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+      log("portfolio.service_started", { port, us_only: enforceUsOnly });
     });
   } else {
     httpServer.listen(
@@ -143,9 +179,13 @@ export function log(message: string, source = "express") {
         reusePort: true,
       },
       () => {
-        log(`serving on port ${port}`);
-        log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+        log("portfolio.service_started", { port, us_only: enforceUsOnly });
       },
     );
   }
 })();
+
+function boundedFailureCode(value: unknown): string {
+  const candidate = String(value ?? "");
+  return /^[A-Za-z0-9._:-]{1,80}$/.test(candidate) ? candidate : "request_failed";
+}

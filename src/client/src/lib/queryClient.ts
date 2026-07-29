@@ -9,7 +9,12 @@ async function throwIfResNotOk(res: Response) {
         if (typeof loginUrl === "string") {
           const parsed = new URL(loginUrl);
           const safeScheme = parsed.protocol === "https:" || (parsed.protocol === "http:" && parsed.hostname === "localhost");
-          if (safeScheme && parsed.pathname === "/auth/google" && parsed.searchParams.has("returnTo")) {
+          if (
+            safeScheme
+            && parsed.origin === window.location.origin
+            && parsed.pathname === "/auth/login"
+            && parsed.searchParams.has("returnTo")
+          ) {
             window.location.assign(parsed.toString());
             throw new Error("Redirecting to sign in");
           }

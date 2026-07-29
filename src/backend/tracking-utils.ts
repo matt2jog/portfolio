@@ -19,5 +19,6 @@ export function generateHashedUuid(): string {
 }
 
 export function getRequestTrackerUuid(req: Request): string | undefined {
-  return parseCookies(req.headers.cookie)[TRACKER_COOKIE_NAME];
+  const value = parseCookies(req.headers.cookie)[TRACKER_COOKIE_NAME];
+  return /^[0-9a-f]{64}$/.test(value ?? "") ? value : undefined;
 }

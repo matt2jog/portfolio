@@ -8,6 +8,7 @@ import {
 import { applyPortfolioMigrations, loadMigrationPlan } from "./migration-ledger";
 import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-session";
 import { loadMigrationEnvironment } from "../backend/migration-config";
+import { portfolioDatabaseBoundary } from "../shared/database-boundary";
 
 function migrationsFolder(): string {
   if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
@@ -18,6 +19,7 @@ function migrationsFolder(): string {
 
 async function main(): Promise<void> {
   loadMigrationEnvironment();
+  const databaseBoundary = portfolioDatabaseBoundary(process.env);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
   if (
@@ -34,14 +36,14 @@ async function main(): Promise<void> {
         projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
         supabaseCaCert: process.env.SUPABASE_CA_CERT,
         expectedCaSha256: process.env.SUPABASE_CA_SHA256,
-        expectedRole: "portfolio_migrator_login",
-        capabilityRole: "portfolio_migrator",
-        searchPath: "portfolio, extensions",
+        expectedRole: databaseBoundary.migratorLogin,
+        capabilityRole: databaseBoundary.migratorRole,
+        searchPath: databaseBoundary.searchPath,
       })
       : postgresConnectionConfig(
         databaseUrl,
         process.env.SUPABASE_CA_CERT,
-        "portfolio, extensions",
+        databaseBoundary.searchPath,
       )),
     max: 1,
   });
@@ -49,12 +51,12 @@ async function main(): Promise<void> {
   const client = await pool.connect();
   try {
     if (process.env.NODE_ENV === "production") {
-      await assertPortfolioMigratorBootstrapSession(client);
+      await assertPortfolioMigratorBootstrapSession(client, databaseBoundary);
     } else {
-      await client.query("SET ROLE portfolio_migrator");
+      await client.query(`SET ROLE ${databaseBoundary.migratorRole}`);
     }
     const plan = loadMigrationPlan(migrationsFolder());
-    const result = await applyPortfolioMigrations(client, plan);
+    const result = await applyPortfolioMigrations(client, plan, databaseBoundary);
     console.log(
       `Portfolio migrations complete: applied=${result.applied} total=${result.total}.`,
     );

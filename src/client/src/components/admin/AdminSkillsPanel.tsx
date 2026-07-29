@@ -17,16 +17,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AdminCanonicalSkillLibrary,
+  type CanonicalSkill,
+} from "./AdminCanonicalSkillLibrary";
 
 type SkillGroup = {
   id: string;
   name: string;
   position: number;
-};
-
-type CanonicalSkill = {
-  id: string;
-  name: string;
 };
 
 type PortfolioSkill = {
@@ -238,8 +237,8 @@ export default function AdminSkillsPanel() {
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-cyan-300/75">Public skill map</p>
         <h2 className="text-2xl font-semibold">Curate what visitors see</h2>
         <p className="max-w-[70ch] text-sm leading-6 text-white/65">
-          Portfolio owns display groups, visible skills, and their order. Canonical skill names stay
-          managed in Admin Dashboard so Portfolio and Resume share one spelling.
+          Maintain one shared skill library, then choose which entries appear publicly and where.
+          Resume can reuse those names or tailor its own wording.
         </p>
       </div>
 
@@ -249,6 +248,12 @@ export default function AdminSkillsPanel() {
         </div>
       ) : (
         <>
+          <AdminCanonicalSkillLibrary
+            groups={groups}
+            skills={canonicalSkills}
+            onChanged={invalidateSkillQueries}
+          />
+
           <div className="grid gap-4 border border-white/10 bg-white/[0.02] p-4 lg:grid-cols-2">
             <form
               className="flex flex-col gap-3"

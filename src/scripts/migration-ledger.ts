@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { PoolClient } from "pg";
+import {
+  portfolioDatabaseBoundary,
+  renderPortfolioMigrationSql,
+  type PortfolioDatabaseBoundary,
+} from "../shared/database-boundary";
 
 export interface Migration {
   version: string;
@@ -44,14 +49,15 @@ export function loadMigrationPlan(folder: string): Migration[] {
 export async function applyPortfolioMigrations(
   client: Pick<PoolClient, "query">,
   migrations: readonly Migration[],
+  boundary: PortfolioDatabaseBoundary = portfolioDatabaseBoundary(),
 ): Promise<MigrationResult> {
   await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
   try {
     await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext($1))", [
-      MIGRATION_LOCK,
+      `${MIGRATION_LOCK}:${boundary.schema}`,
     ]);
     await client.query(`
-      CREATE TABLE IF NOT EXISTS portfolio.schema_migrations (
+      CREATE TABLE IF NOT EXISTS ${boundary.schema}.schema_migrations (
         version text PRIMARY KEY,
         checksum character(64) NOT NULL CHECK (checksum ~ '^[0-9a-f]{64}$'),
         applied_at timestamptz NOT NULL DEFAULT now()
@@ -59,7 +65,7 @@ export async function applyPortfolioMigrations(
     `);
 
     const existing = await client.query<{ version: string; checksum: string }>(
-      "SELECT version, checksum FROM portfolio.schema_migrations ORDER BY version",
+      `SELECT version, checksum FROM ${boundary.schema}.schema_migrations ORDER BY version`,
     );
     const known = new Map(migrations.map((migration) => [migration.version, migration]));
     for (const row of existing.rows) {
@@ -76,9 +82,9 @@ export async function applyPortfolioMigrations(
     let applied = 0;
     for (const migration of migrations) {
       if (appliedVersions.has(migration.version)) continue;
-      await client.query(migration.sql);
+      await client.query(renderPortfolioMigrationSql(migration.sql, boundary));
       await client.query(
-        "INSERT INTO portfolio.schema_migrations (version, checksum) VALUES ($1, $2)",
+        `INSERT INTO ${boundary.schema}.schema_migrations (version, checksum) VALUES ($1, $2)`,
         [migration.version, migration.checksum],
       );
       applied += 1;

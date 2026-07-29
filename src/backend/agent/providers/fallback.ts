@@ -65,10 +65,14 @@ export class FallbackProvider extends LLMProvider {
     const expiry = Date.now() + this.cooldownMs;
     this.cooldowns.set(modelId, expiry);
     const minutes = Math.round(this.cooldownMs / 60_000);
-    console.warn(
-      `[FallbackProvider] Rate limited on ${this.primary.providerName} for model "${modelId}". ` +
-      `Routing to ${this.fallback.providerName} for ${minutes}m.`,
-    );
+    console.warn(JSON.stringify({
+      event: "portfolio.ai.provider_cooldown",
+      failure_code: "provider_rate_limited",
+      primary_provider: this.primary.providerName,
+      fallback_provider: this.fallback.providerName,
+      model_id: modelId,
+      cooldown_minutes: minutes,
+    }));
   }
 
   private asFallbackParams(params: LLMCompletionParams): LLMCompletionParams {

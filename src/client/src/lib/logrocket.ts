@@ -4,7 +4,7 @@ import { getTrackerUuid } from "./tracking";
 
 type MaybeUser = {
   id?: string;
-  email?: string;
+  subject?: string;
   name?: string;
   role?: string;
 } | null | undefined;
@@ -14,7 +14,7 @@ let lastRoute = "";
 let lastIdentity = "";
 let uuidEmitted = false;
 
-const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/google/callback"];
+const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/callback", "/auth/google/callback"];
 
 declare global {
   interface Window {
@@ -47,7 +47,6 @@ export function initLogRocket() {
   }
 
   LogRocket.init("ltznbv/portfolio");
-  console.log("interest logging started");
   LogRocket.getSessionURL((url) => {
     (window as any).__logrocketSessionURL = url;
   });
@@ -66,7 +65,7 @@ export function identifyLogRocketUser(user: MaybeUser) {
     if (identity === lastIdentity) return;
 
     const traits: Record<string, string | number | boolean> = {};
-    if (user.email) traits.email = user.email;
+    if (user.subject) traits.subject = user.subject;
     if (user.name) traits.name = user.name;
     if (user.role) traits.role = user.role;
 

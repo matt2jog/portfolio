@@ -34,6 +34,14 @@ test("client IP extraction fails closed for malformed edge values and fallback s
 
 test("client country extraction accepts only authenticated edge-owned ISO metadata", () => {
   assert.equal(extractClientCountry(request({ "x-2jog-client-country": "us" }, "127.0.0.1", true)), "US");
+  assert.equal(extractClientCountry(request({ "cf-ipcountry": "us" }, "127.0.0.1", true)), "US");
+  assert.equal(
+    extractClientCountry(request({
+      "cf-ipcountry": "ca",
+      "x-2jog-client-country": "us",
+    }, "127.0.0.1", true)),
+    "CA",
+  );
   assert.equal(extractClientCountry(request({ "x-2jog-client-country": "us" })), undefined);
   assert.equal(extractClientCountry(request({ "x-2jog-client-country": "USA" }, "127.0.0.1", true)), undefined);
   assert.equal(extractClientCountry(request({ "x-2jog-client-country": "<script>" }, "127.0.0.1", true)), undefined);

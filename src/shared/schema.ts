@@ -2,13 +2,15 @@ import { sql } from "drizzle-orm";
 import { integer, jsonb, pgSchema, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { portfolioDatabaseBoundary } from "./database-boundary";
 
-const portfolioSchema = pgSchema("portfolio");
+const portfolioSchema = pgSchema(portfolioDatabaseBoundary().schema);
 
 export const users = portfolioSchema.table("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
-  googleSub: text("google_sub").notNull().unique(),
+  googleSub: text("google_sub").unique(),
+  auth0Sub: text("auth0_sub").unique(),
   name: text("name"),
   role: text("role").notNull().default("user"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -17,6 +19,7 @@ export const users = portfolioSchema.table("users", {
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   googleSub: true,
+  auth0Sub: true,
   name: true,
   role: true,
 });
@@ -91,7 +94,7 @@ export const allSkills = portfolioSchema.table("all_skills", {
 });
 export const portfolioSkills = portfolioSchema.table("portfolio_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "cascade" }),
+  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "restrict" }),
   groupId: varchar("group_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   position: integer("position").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
@@ -147,9 +150,22 @@ export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
 
 export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
 
+export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
+  name: true,
+  groupingId: true,
+}).extend({
+  name: z.string().trim().min(1).max(120),
+  groupingId: z.string().min(1).nullable().optional(),
+});
+
+export const updateAllSkillSchema = insertAllSkillSchema.partial();
+
 export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pick({
   allSkillId: true,
   groupId: true,
+}).extend({
+  allSkillId: z.string().min(1),
+  groupId: z.string().min(1),
 });
 
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();

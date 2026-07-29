@@ -110,8 +110,8 @@ test("Portfolio skill membership accepts valid groups and rejects dangling refer
 });
 
 test("skill relationships are enforced by the database and remain safe across deletes", async () => {
-  const constraints = await pool.query<{ conname: string }>(`
-    SELECT conname
+  const constraints = await pool.query<{ conname: string; confdeltype: string }>(`
+    SELECT conname, confdeltype
     FROM pg_constraint
     WHERE conname IN (
       'portfolio_skills_group_id_skills_group_id_fk',
@@ -119,10 +119,16 @@ test("skill relationships are enforced by the database and remain safe across de
     )
     ORDER BY conname
   `);
-  assert.deepEqual(constraints.rows.map((row) => row.conname), [
-      "portfolio_skills_all_skill_id_all_skills_id_fk",
-      "portfolio_skills_group_id_skills_group_id_fk",
-    ]);
+  assert.deepEqual(constraints.rows, [
+    {
+      conname: "portfolio_skills_all_skill_id_all_skills_id_fk",
+      confdeltype: "r",
+    },
+    {
+      conname: "portfolio_skills_group_id_skills_group_id_fk",
+      confdeltype: "n",
+    },
+  ]);
 
   const groupId = randomUUID();
   const skillId = randomUUID();
@@ -175,12 +181,21 @@ test("skill relationships are enforced by the database and remain safe across de
       .where(eq(portfolioSkills.id, portfolioSkillId));
     assert.equal(unlinked.groupId, null);
 
-    await db.delete(allSkills).where(eq(allSkills.id, skillId));
-    const [orphanedPortfolioSkill] = await db
+    await assert.rejects(
+      db.delete(allSkills).where(eq(allSkills.id, skillId)),
+      (error: unknown) => {
+        const cause = error instanceof Error && error.cause && typeof error.cause === "object"
+          ? error.cause as { code?: unknown; constraint?: unknown }
+          : undefined;
+        return cause?.code === "23503"
+          && cause.constraint === "portfolio_skills_all_skill_id_all_skills_id_fk";
+      },
+    );
+    const [preservedPortfolioSkill] = await db
       .select({ id: portfolioSkills.id })
       .from(portfolioSkills)
       .where(eq(portfolioSkills.id, portfolioSkillId));
-    assert.equal(orphanedPortfolioSkill, undefined);
+    assert.equal(preservedPortfolioSkill?.id, portfolioSkillId);
   } finally {
     await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
     await db.delete(allSkills).where(sql`${allSkills.id} IN (${skillId}, ${danglingSkillId})`);

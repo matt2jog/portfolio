@@ -41,6 +41,26 @@ test("runtime bundle installs only the fields the application uses", () => {
   assert.equal(target.PORT, undefined);
 });
 
+test("staging accepts a complete individual database boundary without a legacy bundle", () => {
+  const target: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    DEPLOYMENT_STAGE: "staging",
+    DATABASE_URL: testSupabaseDatabaseUrl("portfolio_staging_runtime_login"),
+    SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
+    SUPABASE_CA_SHA256: TEST_SUPABASE_CA_SHA256,
+    SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
+  };
+
+  assert.doesNotThrow(() => loadRuntimeEnvironment(target));
+  assert.throws(
+    () => loadRuntimeEnvironment({
+      ...target,
+      DATABASE_URL: testSupabaseDatabaseUrl("portfolio_runtime_login"),
+    }),
+    /scoped Supabase runtime role/,
+  );
+});
+
 test("runtime bundle clears a stale previous edge credential when rotation is complete", () => {
   const bundle = validRuntimeBundle();
   delete (bundle as Partial<typeof bundle>).EDGE_ORIGIN_PREVIOUS_TOKEN;
@@ -67,14 +87,25 @@ test("runtime bundle rejects missing fields and ignores unrelated fields", () =>
   assert.equal(target.UNUSED_TRANSITION_FIELD, undefined);
 });
 
-test("runtime bundle accepts an optional GitHub token and clears stale tokens when absent", () => {
+test("runtime bundle accepts a matching token and preserves individual secret delivery", () => {
   const withToken = { ...validRuntimeBundle(), GITHUB_TOKEN: "read-only-fixture" };
-  const target: NodeJS.ProcessEnv = { GITHUB_USERNAME: "matt2jog" };
+  const target: NodeJS.ProcessEnv = {
+    GITHUB_USERNAME: "matt2jog",
+    GITHUB_TOKEN: "read-only-fixture",
+  };
   applyRuntimeBundle(JSON.stringify(withToken), target);
   assert.equal(target.GITHUB_TOKEN, "read-only-fixture");
 
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
-  assert.equal(target.GITHUB_TOKEN, undefined);
+  assert.equal(target.GITHUB_TOKEN, "read-only-fixture");
+
+  assert.throws(
+    () => applyRuntimeBundle(
+      JSON.stringify({ ...validRuntimeBundle(), GITHUB_TOKEN: "different-token" }),
+      target,
+    ),
+    /must match during cutover/,
+  );
 });
 
 test("runtime requires the non-secret GitHub username outside the secret bundle", () => {

@@ -1,15 +1,18 @@
+import {
+  portfolioBoundaryForRole,
+  portfolioDatabaseBoundary,
+  type PortfolioDatabaseBoundary,
+} from "./database-boundary";
+
 interface Queryable {
   query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
 }
 
-type PortfolioRole = "portfolio_runtime" | "portfolio_migrator";
-
-const LOGIN_FOR_ROLE: Record<PortfolioRole, string> = {
-  portfolio_runtime: "portfolio_runtime_login",
-  portfolio_migrator: "portfolio_migrator_login",
-};
-
-const SAFE_ROLE = /^portfolio_(?:runtime|migrator)$/;
+export type PortfolioRole =
+  | "portfolio_runtime"
+  | "portfolio_migrator"
+  | "portfolio_staging_runtime"
+  | "portfolio_staging_migrator";
 
 interface SessionIdentity {
   sessionUser: string;
@@ -27,10 +30,14 @@ export async function assertUnprivilegedDatabaseSession(
   expectedRole: PortfolioRole,
   boundary: string,
 ): Promise<void> {
-  if (!SAFE_ROLE.test(expectedRole)) {
+  const databaseBoundary = portfolioBoundaryForRole(expectedRole);
+  if (!databaseBoundary) {
     throw new Error(`${boundary} database role is invalid`);
   }
-  const expectedLogin = LOGIN_FOR_ROLE[expectedRole];
+  const runtime = expectedRole === databaseBoundary.runtimeRole;
+  const expectedLogin = runtime
+    ? databaseBoundary.runtimeLogin
+    : databaseBoundary.migratorLogin;
 
   await queryable.query("RESET ROLE");
   const identity = await queryable.query(
@@ -76,7 +83,7 @@ export async function assertUnprivilegedDatabaseSession(
   const capability = await queryable.query(`
     SELECT
       current_user AS "currentUser",
-      pg_catalog.has_schema_privilege(current_user, 'portfolio', 'USAGE')
+      pg_catalog.has_schema_privilege(current_user, '${databaseBoundary.schema}', 'USAGE')
         AS "hasSchemaUsage",
       pg_catalog.has_database_privilege(current_user, current_database(), 'CREATE')
         AS "canCreateDatabaseObjects",
@@ -102,10 +109,11 @@ export async function assertUnprivilegedDatabaseSession(
 
 export async function assertPortfolioMigratorBootstrapSession(
   queryable: Queryable,
+  boundary: PortfolioDatabaseBoundary = portfolioDatabaseBoundary(),
 ): Promise<void> {
   await assertUnprivilegedDatabaseSession(
     queryable,
-    "portfolio_migrator",
+    boundary.migratorRole,
     "Portfolio migration",
   );
   const result = await queryable.query(`
@@ -114,7 +122,7 @@ export async function assertPortfolioMigratorBootstrapSession(
       pg_catalog.has_schema_privilege(current_user, namespace.oid, 'CREATE')
         AS "canCreateInSchema"
     FROM pg_catalog.pg_namespace AS namespace
-    WHERE namespace.nspname = 'portfolio'
+    WHERE namespace.nspname = '${boundary.schema}'
   `);
   const row = result.rows[0] as {
     ownsSchema: boolean;

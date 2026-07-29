@@ -1,4 +1,4 @@
-name: CI
+name: Verify, build, and stage
 
 on:
   pull_request:
@@ -9,13 +9,31 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: portfolio-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: personal-brand-501801
+  GCP_REGION: us-east4
+  COMMIT_SHA: ${{ github.sha }}
+  GAR_REPOSITORY: portfolio
+  IMAGE_NAME: portfolio
+  LOCAL_IMAGE: portfolio-ci:${{ github.sha }}
+  STAGING_SERVICE: portfolio--staging
+  STAGING_MIGRATION_JOB: portfolio-migrate--staging
+  STAGING_E2E_BASE_URL: ${{ vars.STAGING_E2E_BASE_URL || 'https://portfolio-staging.2jog.dev' }}
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
+  DEPLOY_SERVICE_ACCOUNT: portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com
+
 jobs:
   verify:
+    name: Verify exact production image
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 65
     services:
       postgres:
-        image: pgvector/pgvector:pg17@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: portfolio_test
           POSTGRES_PASSWORD: ${{ format('{0}-{1}', github.run_id, github.run_attempt) }}
@@ -26,71 +44,279 @@ jobs:
           --health-cmd "pg_isready -U postgres -d portfolio_test"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 8
     env:
       DATABASE_URL: ${{ format('postgresql://postgres:{0}-{1}@127.0.0.1:5432/portfolio_test', github.run_id, github.run_attempt) }}
       TEST_DATABASE_URL: ${{ format('postgresql://postgres:{0}-{1}@127.0.0.1:5432/portfolio_test', github.run_id, github.run_attempt) }}
-
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
+      - name: Block committed secrets
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          format: table
+          exit-code: "1"
+          hide-progress: true
+
+      - name: Report high filesystem findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,vuln
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"
+          hide-progress: true
+
+      - name: Block critical filesystem findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,vuln
+          severity: CRITICAL
+          format: table
+          exit-code: "1"
+          hide-progress: true
+
       - name: Set up Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: 22
+          node-version: "22"
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/cloudflare/portfolio-edge/package-lock.json
 
-      - name: Install dependencies
+      - name: Cache Playwright browser
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install locked dependencies
         run: |
           npm ci
           npm --prefix infra/cloudflare/portfolio-edge ci
+          npx playwright install --with-deps chromium
 
-      - name: Lint
-        run: npm run lint
+      - name: Lint, type-check, and enforce backend/client coverage
+        run: |
+          npm run lint
+          npm run check
+          npm run test:coverage
+          npm run test:client-coverage
 
-      - name: Type check
-        run: npm run check
-
-      - name: Enforce backend coverage
-        run: npm run test:coverage
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Enforce client coverage
-        run: npm run test:client-coverage
-
-      - name: Apply migrations to ephemeral Postgres
+      - name: Prove migrations and backend integration on PostgreSQL 17
         run: |
           npm run db:test:provision
           npm run db:migrate
+          npm run test:backend-integration
 
-      - name: Run backend integration tests
-        run: npm run test:backend-integration
-
-      - name: Run UI tests
-        run: npm run test:ui
-
-      - name: Test Portfolio edge
+      - name: Run UI and temporary edge-parity tests
         run: |
+          npm run test:ui
           npm --prefix infra/cloudflare/portfolio-edge run test:coverage
           npm --prefix infra/cloudflare/portfolio-edge run check
+          npm run build
 
-      - name: Build application
-        run: npm run build
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Build production image
-        run: docker build --pull --tag portfolio-ci:${{ github.sha }} .
+      - name: Build exact production image once
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          load: true
+          pull: true
+          tags: ${{ env.LOCAL_IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=portfolio
+          cache-to: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'type=gha,mode=max,scope=portfolio' || '' }}
 
-      - name: Scan production image
+      - name: Report high image vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: portfolio-ci:${{ github.sha }}
-          scanners: vuln,secret
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln
           severity: HIGH,CRITICAL
           format: table
+          exit-code: "0"
+
+      - name: Block critical image vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: vuln
+          severity: CRITICAL
+          format: table
           exit-code: "1"
+
+      - name: Block secrets in the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          scanners: secret
+          format: table
+          exit-code: "1"
+
+      - name: Save the verified image
+        if: github.event_name == 'push'
+        run: docker save --output "${RUNNER_TEMP}/portfolio-image.tar" "${LOCAL_IMAGE}"
+
+      - name: Hand the verified image to the trusted job
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: portfolio-image-${{ env.COMMIT_SHA }}
+          path: ${{ runner.temp }}/portfolio-image.tar
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+
+  stage:
+    name: Deploy staging and run live browser E2E
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out source for live E2E
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download verified image
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: portfolio-image-${{ env.COMMIT_SHA }}
+          path: ${{ runner.temp }}
+
+      - name: Load verified image
+        run: docker load --input "${RUNNER_TEMP}/portfolio-image.tar"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Publish the verified SHA image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry="${GCP_REGION}-docker.pkg.dev"
+          image_uri="${registry}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
+          remote_image="${image_uri}:${COMMIT_SHA}"
+          gcloud auth configure-docker "${registry}" --quiet
+          docker tag "${LOCAL_IMAGE}" "${remote_image}"
+          docker push "${remote_image}"
+          digest="$(gcloud artifacts docker images describe "${remote_image}" \
+            --project "${GCP_PROJECT_ID}" \
+            --format='value(image_summary.digest)')"
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest_uri=${image_uri}@${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run staging migration
+        run: |
+          gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${{ steps.image.outputs.digest_uri }}" \
+            --quiet
+          gcloud run jobs execute "${STAGING_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --wait
+
+      - name: Deploy exact digest to staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="sha-${COMMIT_SHA:0:7}-${GITHUB_RUN_ATTEMPT}"
+          gcloud run deploy "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${{ steps.image.outputs.digest_uri }}" \
+            --revision-suffix "${suffix}" \
+            --quiet
+          gcloud run services update-traffic "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --to-latest \
+            --quiet
+
+      - name: Set up browser E2E dependencies
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Cache Playwright browser
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Run live staging endpoint and browser E2E gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          service_url="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(status.url)')"
+          curl --fail --silent --show-error --retry 10 --retry-all-errors \
+            --retry-delay 3 "${service_url}/healthz" >/dev/null
+          login_status="$(curl --silent --show-error \
+            --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
+            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/login")"
+          [[ "${login_status}" == "302" ]]
+          auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
+            head -1 | cut -d' ' -f2- | tr -d '\r')"
+          AUTH_LOCATION="${auth_location}" EXPECTED_CALLBACK="${STAGING_E2E_BASE_URL}/auth/callback" python3 - <<'PY'
+          import os
+          from urllib.parse import parse_qs, urlparse
+          location = urlparse(os.environ["AUTH_LOCATION"])
+          assert f"{location.scheme}://{location.netloc}{location.path}" == "https://auth.2jog.dev/authorize"
+          query = parse_qs(location.query)
+          assert query.get("response_type") == ["code"]
+          assert query.get("redirect_uri") == [os.environ["EXPECTED_CALLBACK"]]
+          assert query.get("code_challenge_method") == ["S256"]
+          for required in ("state", "nonce", "code_challenge"):
+              assert query.get(required) and query[required][0]
+          PY
+          me_status="$(curl --silent --show-error \
+            --dump-header "${RUNNER_TEMP}/auth-me-headers" --output "${RUNNER_TEMP}/auth-me-body" \
+            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/api/auth/me")"
+          [[ "${me_status}" == "401" ]]
+          grep --ignore-case --quiet '^content-type: application/json' "${RUNNER_TEMP}/auth-me-headers"
+          jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
+          logout_status="$(curl --silent --show-error --request POST \
+            --header 'Origin: https://cross-origin.invalid' --output /dev/null \
+            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/logout")"
+          [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          npm ci
+          npx playwright install --with-deps chromium
+          PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:ui

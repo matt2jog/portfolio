@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
+import {
+  portfolioDatabaseBoundary,
+  type PortfolioDatabaseBoundary,
+} from "../shared/database-boundary";
 import { productionSupabaseConnectionConfig } from "../shared/postgres-tls";
 
 const RUNTIME_KEYS = [
@@ -57,11 +61,17 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
     throw new Error("Portfolio runtime bundle EDGE_ORIGIN_PREVIOUS_TOKEN must be a non-empty string when provided");
   }
 
-  const githubToken = bundle.GITHUB_TOKEN;
-  if (githubToken === undefined) {
-    delete target.GITHUB_TOKEN;
-  } else if (typeof githubToken === "string" && githubToken.length > 0) {
-    target.GITHUB_TOKEN = githubToken;
+  const individualGithubToken = target.GITHUB_TOKEN;
+  const bundledGithubToken = bundle.GITHUB_TOKEN;
+  if (bundledGithubToken === undefined) {
+    if (individualGithubToken !== undefined && individualGithubToken.length === 0) {
+      throw new Error("Individually delivered GITHUB_TOKEN must be a non-empty string when provided");
+    }
+  } else if (typeof bundledGithubToken === "string" && bundledGithubToken.length > 0) {
+    if (individualGithubToken !== undefined && individualGithubToken !== bundledGithubToken) {
+      throw new Error("Bundled and individually delivered GITHUB_TOKEN values must match during cutover");
+    }
+    target.GITHUB_TOKEN = bundledGithubToken;
   } else {
     throw new Error("Portfolio runtime bundle GITHUB_TOKEN must be a non-empty string when provided");
   }
@@ -87,24 +97,33 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
   if (target.ADMIN_IDENTITY_JWKS_URL !== ADMIN_JWKS_URL) {
     throw new Error(`Portfolio runtime bundle ADMIN_IDENTITY_JWKS_URL must match the shared JWKS endpoint`);
   }
+  validateDatabaseBoundary(target, portfolioDatabaseBoundary(target));
+  if (!/^[A-Za-z0-9-]{1,39}$/.test(target.GITHUB_USERNAME ?? "")) {
+    throw new Error("GITHUB_USERNAME must be provided as an ordinary runtime environment variable");
+  }
+}
+
+function validateDatabaseBoundary(
+  target: NodeJS.ProcessEnv,
+  boundary: PortfolioDatabaseBoundary,
+): void {
   try {
     productionSupabaseConnectionConfig({
       databaseUrl: target.DATABASE_URL ?? "",
       projectRef: target.SUPABASE_PROJECT_REF ?? "",
       supabaseCaCert: target.SUPABASE_CA_CERT,
       expectedCaSha256: target.SUPABASE_CA_SHA256,
-      expectedRole: "portfolio_runtime_login",
-      capabilityRole: "portfolio_runtime",
-      searchPath: "portfolio, extensions",
+      expectedRole: boundary.runtimeLogin,
+      capabilityRole: boundary.runtimeRole,
+      searchPath: boundary.searchPath,
     });
   } catch (error) {
     throw new Error(
-      "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
+      "Portfolio runtime DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, "
+      + "and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role "
+      + "with CA-backed verify-full TLS",
       { cause: error },
     );
-  }
-  if (!/^[A-Za-z0-9-]{1,39}$/.test(target.GITHUB_USERNAME ?? "")) {
-    throw new Error("GITHUB_USERNAME must be provided as an ordinary runtime environment variable");
   }
 }
 
@@ -113,6 +132,12 @@ export function loadRuntimeEnvironment(target: NodeJS.ProcessEnv = process.env):
   if (runtimeBundle) {
     delete target.PORTFOLIO_RUNTIME_BUNDLE;
     applyRuntimeBundle(runtimeBundle, target);
+    return;
+  }
+
+  const boundary = portfolioDatabaseBoundary(target);
+  if (boundary.stage === "staging") {
+    validateDatabaseBoundary(target, boundary);
     return;
   }
 

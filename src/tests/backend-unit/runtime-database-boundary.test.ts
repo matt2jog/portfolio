@@ -116,3 +116,52 @@ test("unsupported capability names are rejected before SQL interpolation", async
     /role is invalid/i,
   );
 });
+
+test("staging accepts only its staging login, capability, and schema", async () => {
+  const statements: string[] = [];
+  await assertUnprivilegedDatabaseSession(
+    {
+      async query(text: string, values?: unknown[]) {
+        statements.push(text);
+        if (text === "RESET ROLE" || text.startsWith("SET ROLE")) return { rows: [] };
+        if (text.includes('"loginCanLogin"')) {
+          assert.deepEqual(values, [
+            "portfolio_staging_runtime_login",
+            "portfolio_staging_runtime",
+          ]);
+          return {
+            rows: [{
+              sessionUser: "portfolio_staging_runtime_login",
+              currentUser: "portfolio_staging_runtime_login",
+              loginCanLogin: true,
+              loginIsPrivileged: false,
+              capabilityCanLogin: false,
+              capabilityIsPrivileged: false,
+              canSetCapability: true,
+              timezone: "UTC",
+            }],
+          };
+        }
+        return {
+          rows: [{
+            currentUser: "portfolio_staging_runtime",
+            hasSchemaUsage: true,
+            canCreateDatabaseObjects: false,
+            canCreatePublicObjects: false,
+          }],
+        };
+      },
+    },
+    "portfolio_staging_runtime",
+    "Portfolio staging runtime",
+  );
+
+  assert.equal(
+    statements.some((statement) => statement.includes("'portfolio_staging'")),
+    true,
+  );
+  assert.equal(
+    statements.some((statement) => statement.includes("'portfolio'")),
+    false,
+  );
+});

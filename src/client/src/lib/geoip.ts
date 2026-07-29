@@ -3,7 +3,6 @@
  */
 
 export interface GeoIPResponse {
-  ip: string;
   country_code?: string;
   country?: string;
 }
@@ -22,9 +21,9 @@ export async function fetchGeoIP(): Promise<GeoIPResponse | null> {
     const data = (await res.json()) as GeoIPResponse;
     cachedGeoIP = data;
     return data;
-  } catch (err) {
+  } catch {
     if (import.meta.env?.DEV) {
-      console.warn("Failed to fetch GeoIP:", err);
+      console.warn("GeoIP lookup unavailable");
     }
     return null;
   }

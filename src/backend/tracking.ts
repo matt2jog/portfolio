@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
 import { db } from "./data/db";
 import { browserTracking } from "@shared/schema";
 import {
@@ -12,23 +12,23 @@ export { TRACKER_COOKIE_NAME, generateHashedUuid, getRequestTrackerUuid } from "
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const isProd = process.env.NODE_ENV === "production";
 
-export function uuidCookieMiddleware(req: Request, res: Response, next: NextFunction) {
+export function issueTrackingCookie(req: Request, res: Response): string {
   const cookies = parseCookies(req.headers.cookie);
-  let uuid = cookies[TRACKER_COOKIE_NAME];
+  const existing = cookies[TRACKER_COOKIE_NAME];
+  const uuid = /^[0-9a-f]{64}$/.test(existing ?? "")
+    ? existing
+    : generateHashedUuid();
 
-  if (!uuid) {
-    uuid = generateHashedUuid();
-    res.cookie(TRACKER_COOKIE_NAME, uuid, {
-      maxAge: COOKIE_MAX_AGE_MS,
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProd,
-      path: "/",
-    });
-  }
+  res.cookie(TRACKER_COOKIE_NAME, uuid, {
+    maxAge: COOKIE_MAX_AGE_MS,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProd,
+    path: "/",
+  });
 
   (req as Request & { trackerUuid?: string }).trackerUuid = uuid;
-  next();
+  return uuid;
 }
 
 export async function registerTrackedUuid(uuid: string): Promise<void> {

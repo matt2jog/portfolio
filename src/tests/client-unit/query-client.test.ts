@@ -19,6 +19,7 @@ beforeEach(() => {
     configurable: true,
     value: {
       location: {
+        origin: "https://2jog.dev",
         assign: (url: string) => assignedUrls.push(url),
       },
     },
@@ -77,7 +78,7 @@ test("getQueryFn returns JSON and permits an explicit null for an unauthenticate
 });
 
 test("401 handling redirects only to the constrained sign-in route", async () => {
-  const validUrl = "https://admin.2jog.dev/auth/google?returnTo=%2Fadmin";
+  const validUrl = "https://2jog.dev/auth/login?returnTo=%2Fadmin";
   responses.push(
     new Response(JSON.stringify({ login_url: validUrl }), { status: 401 }),
   );
@@ -91,7 +92,11 @@ test("401 handling redirects only to the constrained sign-in route", async () =>
 });
 
 test("401 handling permits the constrained localhost sign-in route for local development", async () => {
-  const localUrl = "http://localhost/auth/google?returnTo=%2Fadmin";
+  const localUrl = "http://localhost/auth/login?returnTo=%2Fadmin";
+  Object.defineProperty(window.location, "origin", {
+    configurable: true,
+    value: "http://localhost",
+  });
   responses.push(
     new Response(JSON.stringify({ login_url: localUrl }), { status: 401 }),
   );
@@ -107,8 +112,9 @@ test("401 handling permits the constrained localhost sign-in route for local dev
 test("401 handling rejects unsafe, malformed, and incomplete login URLs", async () => {
   const payloads = [
     JSON.stringify({ login_url: "javascript:alert(1)" }),
-    JSON.stringify({ login_url: "https://admin.2jog.dev/not-auth?returnTo=%2Fadmin" }),
-    JSON.stringify({ login_url: "https://admin.2jog.dev/auth/google" }),
+    JSON.stringify({ login_url: "https://evil.example/auth/login?returnTo=%2Fadmin" }),
+    JSON.stringify({ login_url: "https://2jog.dev/not-auth?returnTo=%2Fadmin" }),
+    JSON.stringify({ login_url: "https://2jog.dev/auth/login" }),
     JSON.stringify({ login_url: 123 }),
     "not-json",
   ];

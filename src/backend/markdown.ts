@@ -80,8 +80,11 @@ export function loadLegalDoc(filename: string): LegalDoc | null {
       lastUpdated,
       effectiveDate,
     };
-  } catch (err) {
-    console.error(`Failed to load ${filename}:`, err);
+  } catch {
+    console.error(JSON.stringify({
+      event: "portfolio.legal_document_load_failed",
+      failure_code: "legal_document_unavailable",
+    }));
     return null;
   }
 }

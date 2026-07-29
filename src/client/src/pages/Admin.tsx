@@ -44,9 +44,9 @@ export default function Admin() {
               setShowAcceptanceModal(true);
             }
           }
-        } catch (err) {
+        } catch {
           if (import.meta.env.DEV) {
-            console.error("Failed to check acceptance:", err);
+            console.error("Policy acceptance check failed");
           }
           setShowAcceptanceModal(true);
         }
@@ -62,9 +62,9 @@ export default function Admin() {
       await res.json();
       setPolicyAccepted(true);
       setShowAcceptanceModal(false);
-    } catch (err) {
+    } catch {
       if (import.meta.env.DEV) {
-        console.error("Failed to accept policies:", err);
+        console.error("Policy acceptance update failed");
       }
     } finally {
       setIsAccepting(false);
@@ -83,10 +83,10 @@ export default function Admin() {
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold">Admin Access</h1>
           <a
-            href="/auth/google"
+            href="/auth/login"
             className="inline-flex items-center px-4 py-2 border border-white/20 text-white hover:border-white/60"
           >
-            Sign in with Google
+            Sign in
           </a>
         </div>
       </div>

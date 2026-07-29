@@ -6,7 +6,10 @@ export const PORTFOLIO_SUPABASE_PROJECT_REF = "qvbpgvazqfyhwjsfulsb";
 const SUPABASE_POOLER_HOST = /^[a-z0-9-]+\.pooler\.supabase\.com$/;
 const PRODUCTION_POSTGRES_PORT = "5432";
 
-export type PortfolioSearchPath = "portfolio, extensions" | "public";
+export type PortfolioSearchPath =
+  | "portfolio, extensions"
+  | "portfolio_staging, extensions"
+  | "public";
 
 export interface PostgresConnectionConfig {
   connectionString: string;

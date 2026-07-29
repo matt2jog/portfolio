@@ -33,8 +33,14 @@ export function extractClientIp(req: Request): string {
 export function extractClientCountry(req: Request): string | undefined {
   if (!req.edgeOriginAuthenticated) return undefined;
 
-  const edgeHeader = req.headers["x-2jog-client-country"];
-  const edgeCountry = typeof edgeHeader === "string" ? edgeHeader.trim().toUpperCase() : "";
+  const legacyEdgeHeader = req.headers["x-2jog-client-country"];
+  const cloudflareHeader = req.headers["cf-ipcountry"];
+  const edgeHeader = typeof cloudflareHeader === "string"
+    ? cloudflareHeader
+    : legacyEdgeHeader;
+  const edgeCountry = typeof edgeHeader === "string"
+    ? edgeHeader.trim().toUpperCase()
+    : "";
   return /^[A-Z]{2}$/.test(edgeCountry) ? edgeCountry : undefined;
 }
 

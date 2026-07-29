@@ -50,18 +50,27 @@ test("canonical career mutation rejection points callers to Admin without touchi
   });
 });
 
-test("canonical career editors and mutation routes are absent from Portfolio", () => {
+test("Portfolio edits only presentation plus the shared skill library", () => {
   const routes = readFileSync(path.join(process.cwd(), "src", "backend", "routes.ts"), "utf8");
   const adminPage = readFileSync(path.join(process.cwd(), "src", "client", "src", "pages", "Admin.tsx"), "utf8");
+  const skillsPanel = readFileSync(
+    path.join(
+      process.cwd(),
+      "src",
+      "client",
+      "src",
+      "components",
+      "admin",
+      "AdminSkillsPanel.tsx",
+    ),
+    "utf8",
+  );
 
   for (const route of [
     'app.post("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
     'app.put("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/experiences/reorder", requireAdmin, canonicalCareerMutationRejected)',
@@ -71,6 +80,10 @@ test("canonical career editors and mutation routes are absent from Portfolio", (
 
   assert.match(routes, /app\.post\("\/api\/admin\/skills-groups", requireAdmin, async/);
   assert.match(routes, /app\.post\("\/api\/admin\/skills-groups\/reorder", requireAdmin, async/);
+  assert.match(routes, /app\.post\("\/api\/admin\/all-skills", requireAdmin, async/);
+  assert.match(routes, /app\.put\("\/api\/admin\/all-skills\/:id", requireAdmin, async/);
+  assert.match(routes, /app\.delete\("\/api\/admin\/all-skills\/:id", requireAdmin, async/);
+  assert.match(skillsPanel, /AdminCanonicalSkillLibrary/);
   assert.doesNotMatch(adminPage, /AdminBioPanel|AdminProjectsPanel/);
   assert.doesNotMatch(adminPage, /admin-tab-(?:bio|projects|skills)/);
   assert.match(adminPage, /AdminProjectPresentationPanel/);
