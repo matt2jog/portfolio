@@ -17,11 +17,12 @@ after(async () => {
 });
 
 test("all migrations are checksummed and idempotent", async () => {
-  assert.ok(plan.length >= 3);
+  assert.ok(plan.length >= 5);
   assert.equal(plan[0]?.version, "001_initial");
   assert.ok(plan.some((migration) => migration.version === "002_portfolio_skill_groups"));
   assert.ok(plan.some((migration) => migration.version === "003_canonical_skill_presentation"));
   assert.ok(plan.some((migration) => migration.version === "004_remove_raw_request_tracking"));
+  assert.ok(plan.some((migration) => migration.version === "005_portfolio_experience_bullets"));
 
   const ledger = await pool.query<{ version: string; checksum: string }>(
     "SELECT version, checksum FROM portfolio.schema_migrations ORDER BY version",
@@ -57,6 +58,7 @@ test("the baseline contains only current tables, views, and ordinary RLS", async
     "bio_paragraphs",
     "browser_tracking",
     "education",
+    "experience_bullets",
     "experiences",
     "github_timeline_events",
     "legal_document_versions",
