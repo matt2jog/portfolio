@@ -2,7 +2,121 @@ import { db } from "./data/db";
 import { githubTimelineEvents } from "../shared/schema";
 import { desc } from "drizzle-orm";
 
-export async function fetchGithubActivity(username: string, token: string) {
+const GITHUB_API = "https://api.github.com";
+
+function githubHeaders(token?: string): HeadersInit {
+  return {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "2jog-portfolio",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function fetchGithubJson<T>(path: string, token?: string): Promise<T> {
+  const response = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders(token) });
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+type RestGithubUser = {
+  login: string;
+  name: string | null;
+  avatar_url: string;
+  html_url: string;
+  bio: string | null;
+  followers: number;
+  public_repos: number;
+};
+
+type RestGithubRepo = {
+  name: string;
+  full_name: string;
+  description: string | null;
+  stargazers_count: number;
+  language: string | null;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  pushed_at: string | null;
+};
+
+type RestGithubEvent = {
+  id: string;
+  type: string;
+  created_at: string;
+  repo: { name: string };
+  payload?: {
+    action?: string;
+    size?: number;
+    pull_request?: {
+      title?: string;
+      state?: string;
+      html_url?: string;
+      created_at?: string;
+      merged_at?: string | null;
+      closed_at?: string | null;
+    };
+  };
+};
+
+export async function fetchGithubActivity(username: string, token?: string) {
+  if (!token) {
+    const encodedUsername = encodeURIComponent(username);
+    const [user, repositories, events] = await Promise.all([
+      fetchGithubJson<RestGithubUser>(`/users/${encodedUsername}`),
+      fetchGithubJson<RestGithubRepo[]>(
+        `/users/${encodedUsername}/repos?sort=pushed&direction=desc&per_page=10&type=owner`,
+      ),
+      fetchGithubJson<RestGithubEvent[]>(`/users/${encodedUsername}/events/public?per_page=30`),
+    ]);
+
+    const pullRequests = events
+      .filter((event) => event.type === "PullRequestEvent" && event.payload?.pull_request)
+      .slice(0, 10)
+      .map((event) => {
+        const pullRequest = event.payload!.pull_request!;
+        return {
+          title: pullRequest.title ?? "Pull request",
+          state: pullRequest.state?.toUpperCase() ?? "OPEN",
+          url: pullRequest.html_url ?? null,
+          createdAt: pullRequest.created_at ?? event.created_at,
+          mergedAt: pullRequest.merged_at ?? null,
+          closedAt: pullRequest.closed_at ?? null,
+          repository: { nameWithOwner: event.repo.name },
+        };
+      });
+
+    return {
+      login: user.login,
+      name: user.name,
+      avatarUrl: user.avatar_url,
+      url: user.html_url,
+      bio: user.bio,
+      followers: { totalCount: user.followers },
+      repositories: {
+        totalCount: user.public_repos,
+        nodes: repositories.map((repository) => ({
+          name: repository.name,
+          description: repository.description,
+          stargazerCount: repository.stargazers_count,
+          primaryLanguage: repository.language
+            ? { name: repository.language, color: null }
+            : null,
+          url: repository.html_url,
+          createdAt: repository.created_at,
+          updatedAt: repository.updated_at,
+          pushedAt: repository.pushed_at,
+        })),
+      },
+      pullRequests: { totalCount: pullRequests.length, nodes: pullRequests },
+      contributionsCollection: {
+        contributionCalendar: { totalContributions: 0, weeks: [] },
+      },
+    };
+  }
+
   const query = `
     query($login: String!) {
       user(login: $login) {
@@ -59,7 +173,7 @@ export async function fetchGithubActivity(username: string, token: string) {
     }
   `;
 
-  const response = await fetch('https://api.github.com/graphql', {
+  const response = await fetch(`${GITHUB_API}/graphql`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -94,7 +208,7 @@ export async function getGithubActivity() {
   const username = process.env.GITHUB_USERNAME;
   const token = process.env.GITHUB_TOKEN;
 
-  if (!username || !token) {
+  if (!username) {
     return {
       login: null,
       name: null,
@@ -105,7 +219,7 @@ export async function getGithubActivity() {
       repositories: { totalCount: 0, nodes: [] },
       pullRequests: { totalCount: 0, nodes: [] },
       contributionsCollection: { contributionCalendar: { totalContributions: 0, weeks: [] } },
-      _error: "GITHUB_USERNAME or GITHUB_TOKEN not configured"
+      _error: "GITHUB_USERNAME not configured"
     };
   }
 
@@ -141,7 +255,12 @@ export async function syncGithubTimeline() {
   const username = process.env.GITHUB_USERNAME;
   const token = process.env.GITHUB_TOKEN;
 
-  if (!username || !token) return;
+  if (!username) return;
+
+  if (!token) {
+    await syncGithubTimelineFromRest(username);
+    return;
+  }
 
   try {
     const query = `
@@ -270,15 +389,82 @@ export async function syncGithubTimeline() {
   }
 }
 
+async function syncGithubTimelineFromRest(username: string): Promise<void> {
+  try {
+    const encodedUsername = encodeURIComponent(username);
+    const [repositories, events] = await Promise.all([
+      fetchGithubJson<RestGithubRepo[]>(
+        `/users/${encodedUsername}/repos?sort=created&direction=desc&per_page=30&type=owner`,
+      ),
+      fetchGithubJson<RestGithubEvent[]>(`/users/${encodedUsername}/events/public?per_page=100`),
+    ]);
+
+    const eventsToInsert: typeof githubTimelineEvents.$inferInsert[] = repositories.map((repo) => ({
+      extId: `repo-${repo.created_at}-${repo.full_name}`,
+      type: "repo",
+      title: repo.name,
+      description: repo.description,
+      url: repo.html_url,
+      repo: repo.full_name,
+      timestamp: new Date(repo.created_at),
+      meta: { ref_type: "repository" },
+    }));
+
+    for (const event of events) {
+      if (event.type === "PullRequestEvent" && event.payload?.pull_request) {
+        const pullRequest = event.payload.pull_request;
+        eventsToInsert.push({
+          extId: event.id,
+          type: "pr",
+          title: pullRequest.title ?? "Pull request",
+          description: null,
+          url: pullRequest.html_url ?? null,
+          repo: event.repo.name,
+          timestamp: new Date(event.created_at),
+          meta: {
+            action: event.payload.action ?? "updated",
+            state: pullRequest.state ?? null,
+            merged: Boolean(pullRequest.merged_at),
+          },
+        });
+      } else if (event.type === "PushEvent") {
+        const count = Math.max(1, event.payload?.size ?? 1);
+        eventsToInsert.push({
+          extId: event.id,
+          type: "commit",
+          title: `Pushed ${count} commit${count === 1 ? "" : "s"}`,
+          description: null,
+          url: `https://github.com/${event.repo.name}`,
+          repo: event.repo.name,
+          timestamp: new Date(event.created_at),
+          meta: { commitCount: count, author: username },
+        });
+      }
+    }
+
+    if (eventsToInsert.length > 0) {
+      await db
+        .insert(githubTimelineEvents)
+        .values(eventsToInsert)
+        .onConflictDoNothing({ target: githubTimelineEvents.extId });
+    }
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "portfolio.github.timeline_sync_failed",
+      mode: "public_rest",
+      error: error instanceof Error ? error.message : "unknown",
+    }));
+  }
+}
+
 let syncPromise: Promise<void> | null = null;
 let lastSyncTime = 0;
 const SYNC_COOLDOWN = 1000 * 60 * 5; // 5 minutes
 
 export async function getGithubTimeline(page: number = 1, limit: number = 30): Promise<{ events: TimelineEvent[]; hasMore: boolean }> {
   const username = process.env.GITHUB_USERNAME;
-  const token = process.env.GITHUB_TOKEN;
 
-  if (!username || !token) {
+  if (!username) {
     return { events: [], hasMore: false };
   }
 

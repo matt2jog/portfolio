@@ -312,7 +312,7 @@ function GithubDashboard({ data, isLoading, error }: any) {
       <IntegrationErrorCard
         icon={<ActivityIcon className="w-12 h-12 text-destructive/80 mx-auto mb-4" />}
         title="GitHub Integration Pending"
-        message={data?._error || "Missing GITHUB_TOKEN or GITHUB_USERNAME in environment variables."}
+        message={data?._error || "GitHub activity is temporarily unavailable."}
       />
     );
   }

@@ -57,6 +57,15 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
     throw new Error("Portfolio runtime bundle EDGE_ORIGIN_PREVIOUS_TOKEN must be a non-empty string when provided");
   }
 
+  const githubToken = bundle.GITHUB_TOKEN;
+  if (githubToken === undefined) {
+    delete target.GITHUB_TOKEN;
+  } else if (typeof githubToken === "string" && githubToken.length > 0) {
+    target.GITHUB_TOKEN = githubToken;
+  } else {
+    throw new Error("Portfolio runtime bundle GITHUB_TOKEN must be a non-empty string when provided");
+  }
+
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(target.EDGE_ORIGIN_TOKEN ?? "")) {
     throw new Error("Portfolio runtime bundle EDGE_ORIGIN_TOKEN must be a 32-256 character URL-safe token");
   }
@@ -93,6 +102,9 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
       "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
       { cause: error },
     );
+  }
+  if (!/^[A-Za-z0-9-]{1,39}$/.test(target.GITHUB_USERNAME ?? "")) {
+    throw new Error("GITHUB_USERNAME must be provided as an ordinary runtime environment variable");
   }
 }
 

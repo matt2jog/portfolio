@@ -7,6 +7,7 @@ import {
 } from "../shared/postgres-tls";
 import { applyPortfolioMigrations, loadMigrationPlan } from "./migration-ledger";
 import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-session";
+import { loadMigrationEnvironment } from "../backend/migration-config";
 
 function migrationsFolder(): string {
   if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
@@ -16,6 +17,7 @@ function migrationsFolder(): string {
 }
 
 async function main(): Promise<void> {
+  loadMigrationEnvironment();
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
   if (

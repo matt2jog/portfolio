@@ -29,20 +29,25 @@ function validRuntimeBundle() {
 }
 
 test("runtime bundle installs only the fields the application uses", () => {
-  const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value" };
+  const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value", GITHUB_USERNAME: "matt2jog" };
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
 
   assert.equal(target.DATABASE_URL, testSupabaseDatabaseUrl("portfolio_runtime_login"));
   assert.equal(target.ADMIN_IDENTITY_AUDIENCE, "2jog-services");
   assert.equal(target.EDGE_ORIGIN_TOKEN, EDGE_TOKEN);
   assert.equal(target.EDGE_ORIGIN_PREVIOUS_TOKEN, PREVIOUS_EDGE_TOKEN);
+  assert.equal(target.GITHUB_USERNAME, "matt2jog");
+  assert.equal(target.GITHUB_TOKEN, undefined);
   assert.equal(target.PORT, undefined);
 });
 
 test("runtime bundle clears a stale previous edge credential when rotation is complete", () => {
   const bundle = validRuntimeBundle();
   delete (bundle as Partial<typeof bundle>).EDGE_ORIGIN_PREVIOUS_TOKEN;
-  const target: NodeJS.ProcessEnv = { EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN };
+  const target: NodeJS.ProcessEnv = {
+    EDGE_ORIGIN_PREVIOUS_TOKEN: PREVIOUS_EDGE_TOKEN,
+    GITHUB_USERNAME: "matt2jog",
+  };
 
   applyRuntimeBundle(JSON.stringify(bundle), target);
 
@@ -54,12 +59,29 @@ test("runtime bundle rejects missing fields and ignores unrelated fields", () =>
   delete (missing as Partial<typeof missing>).DATABASE_URL;
   assert.throws(() => applyRuntimeBundle(JSON.stringify(missing), {}), /DATABASE_URL/);
 
-  const target: NodeJS.ProcessEnv = {};
+  const target: NodeJS.ProcessEnv = { GITHUB_USERNAME: "matt2jog" };
   applyRuntimeBundle(
     JSON.stringify({ ...validRuntimeBundle(), UNUSED_TRANSITION_FIELD: "ignored" }),
     target,
   );
   assert.equal(target.UNUSED_TRANSITION_FIELD, undefined);
+});
+
+test("runtime bundle accepts an optional GitHub token and clears stale tokens when absent", () => {
+  const withToken = { ...validRuntimeBundle(), GITHUB_TOKEN: "read-only-fixture" };
+  const target: NodeJS.ProcessEnv = { GITHUB_USERNAME: "matt2jog" };
+  applyRuntimeBundle(JSON.stringify(withToken), target);
+  assert.equal(target.GITHUB_TOKEN, "read-only-fixture");
+
+  applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
+  assert.equal(target.GITHUB_TOKEN, undefined);
+});
+
+test("runtime requires the non-secret GitHub username outside the secret bundle", () => {
+  assert.throws(
+    () => applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), {}),
+    /GITHUB_USERNAME/,
+  );
 });
 test("runtime bundle parse errors never include secret values", () => {
   const sensitiveMarker = ["do", "not", "echo", "runtime", "fixture", "123456789"].join("-");

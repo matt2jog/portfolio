@@ -119,8 +119,8 @@ test("project and skill tabs expose presentation controls without canonical edit
   await expect(page.getByText("Create and edit canonical projects in Admin Dashboard.")).toBeVisible();
 
   await page.getByTestId("admin-tab-skill-presentation").click();
-  await expect(page.getByRole("heading", { name: "Skill presentation" })).toBeVisible();
-  await expect(page.getByText("Create and rename canonical skills in Admin Dashboard.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toBeVisible();
+  await expect(page.getByText("Canonical skill names stay managed in Admin Dashboard")).toBeVisible();
   await expect(page.getByRole("button", { name: /add all_skill/i })).toHaveCount(0);
 });
 

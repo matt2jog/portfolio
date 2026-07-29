@@ -3,10 +3,11 @@ import { Tool, type ToolDefinition } from "../tool";
 const GITHUB_API = "https://api.github.com";
 
 function githubHeaders(): HeadersInit {
+  const token = process.env.GITHUB_TOKEN;
   return {
-    Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
     Accept: "application/vnd.github+json",
     "User-Agent": "Portfolio-Agent",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
 

@@ -16,22 +16,24 @@ after(async () => {
   await pool.end();
 });
 
-test("the single migration is checksummed and idempotent", async () => {
-  assert.equal(plan.length, 1);
+test("all migrations are checksummed and idempotent", async () => {
+  assert.ok(plan.length >= 3);
   assert.equal(plan[0]?.version, "001_initial");
+  assert.ok(plan.some((migration) => migration.version === "002_portfolio_skill_groups"));
+  assert.ok(plan.some((migration) => migration.version === "004_remove_raw_request_tracking"));
 
   const ledger = await pool.query<{ version: string; checksum: string }>(
-    "SELECT version, checksum FROM portfolio.schema_migrations",
+    "SELECT version, checksum FROM portfolio.schema_migrations ORDER BY version",
   );
-  assert.deepEqual(ledger.rows, [{
-    version: plan[0]!.version,
-    checksum: plan[0]!.checksum,
-  }]);
+  assert.deepEqual(
+    ledger.rows,
+    plan.map(({ version, checksum }) => ({ version, checksum })),
+  );
 
   const client = await pool.connect();
   try {
     const result = await applyPortfolioMigrations(client, plan);
-    assert.deepEqual(result, { applied: 0, total: 1 });
+    assert.deepEqual(result, { applied: 0, total: plan.length });
   } finally {
     client.release();
   }
@@ -52,13 +54,10 @@ test("the baseline contains only current tables, views, and ordinary RLS", async
     "audit_logs",
     "bio",
     "bio_paragraphs",
-    "browser_request_logs",
     "browser_tracking",
-    "browser_tracking_ips",
     "education",
     "experiences",
     "github_timeline_events",
-    "ip_rate_logs",
     "legal_document_versions",
     "linkedin_timeline_events",
     "personal_information",

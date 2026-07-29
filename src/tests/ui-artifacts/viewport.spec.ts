@@ -173,7 +173,7 @@ test("hero with skills constellation", async ({ page }, testInfo) => {
   await expect(page.getByTestId("hero")).toBeVisible();
   const constellation = page.getByTestId("skills-constellation").filter({ visible: true });
   await expect(constellation).toHaveCount(1, { timeout: 15_000 });
-  await page.locator("canvas").filter({ visible: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+  await expect(constellation.getByText("Skill map", { exact: true })).toBeVisible();
   await settle(page, 2_000);
   await saveViewportScreenshot(page, testInfo, "hero");
 });
@@ -294,7 +294,7 @@ test("admin dashboard tabs", async ({ page }, testInfo) => {
   });
 
   await page.getByTestId("admin-tab-skill-presentation").click();
-  await expect(page.getByRole("heading", { name: "Skill presentation" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toBeVisible();
   await settle(page, 700);
   await savePaginatedScreenshots(page, testInfo, "admin-dashboard/skill-presentation", {
     maxPages: 4,

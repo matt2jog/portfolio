@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
-  allSkillPresentationUpdateSchema,
   canonicalCareerMutationRejected,
   isForeignKeyViolation,
   projectPresentationUpdateSchema,
@@ -15,15 +14,6 @@ test("project presentation updates accept only Portfolio-owned fields", () => {
   assert.equal(projectPresentationUpdateSchema.safeParse({ title: "Canonical title" }).success, false);
   assert.equal(projectPresentationUpdateSchema.safeParse({ xyzBullets: ["Canonical bullet"] }).success, false);
   assert.equal(projectPresentationUpdateSchema.safeParse({}).success, false);
-});
-
-test("skill presentation updates accept grouping but reject canonical skill fields", () => {
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({ groupingId: "group-1" }).success, true);
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({ groupingId: null }).success, true);
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({ groupingId: "" }).success, false);
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({ groupingId: "   " }).success, false);
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({ name: "Canonical skill" }).success, false);
-  assert.equal(allSkillPresentationUpdateSchema.safeParse({}).success, false);
 });
 
 test("foreign-key violation matching handles direct and wrapped database errors", () => {
@@ -70,6 +60,7 @@ test("canonical career editors and mutation routes are absent from Portfolio", (
     'app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
@@ -79,7 +70,7 @@ test("canonical career editors and mutation routes are absent from Portfolio", (
   }
 
   assert.match(routes, /app\.post\("\/api\/admin\/skills-groups", requireAdmin, async/);
-  assert.match(routes, /app\.put\("\/api\/admin\/all-skills\/:id", requireAdmin, async/);
+  assert.match(routes, /app\.post\("\/api\/admin\/skills-groups\/reorder", requireAdmin, async/);
   assert.doesNotMatch(adminPage, /AdminBioPanel|AdminProjectsPanel/);
   assert.doesNotMatch(adminPage, /admin-tab-(?:bio|projects|skills)/);
   assert.match(adminPage, /AdminProjectPresentationPanel/);

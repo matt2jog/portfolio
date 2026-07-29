@@ -1,6 +1,6 @@
 import LogRocket from "logrocket";
 import { isTrackingAllowed } from "./consent";
-import { getTrackerUuid, getClientIp } from "./tracking";
+import { getTrackerUuid } from "./tracking";
 
 type MaybeUser = {
   id?: string;
@@ -12,8 +12,6 @@ type MaybeUser = {
 let initialized = false;
 let lastRoute = "";
 let lastIdentity = "";
-let currentLogRocketUserId = "";
-let ipAttached = false;
 let uuidEmitted = false;
 
 const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/google/callback"];
@@ -74,7 +72,6 @@ export function identifyLogRocketUser(user: MaybeUser) {
 
     LogRocket.identify(user.id, traits);
     lastIdentity = identity;
-    currentLogRocketUserId = user.id;
     emitLogRocketUuidEvent();
     return;
   }
@@ -86,10 +83,8 @@ export function identifyLogRocketUser(user: MaybeUser) {
 
   LogRocket.identify(identity, { role: "guest" });
   lastIdentity = identity;
-  currentLogRocketUserId = identity;
   emitLogRocketUuidEvent();
 }
-
 export function emitLogRocketUuidEvent() {
   if (typeof window === "undefined") return;
   if (!isTrackingAllowed()) return;
@@ -131,31 +126,4 @@ export function trackLogRocketRoute(path: string) {
     path,
     at: new Date().toISOString(),
   });
-}
-
-export async function attachLogRocketIp() {
-  if (typeof window === "undefined" || ipAttached) return;
-  if (!isTrackingAllowed()) return;
-
-  initLogRocket();
-
-  try {
-    const ip = await getClientIp();
-    if (!ip) return;
-
-    ipAttached = true;
-    (window as any).__logrocketClientIp = ip;
-
-    if (window.__LOGROCKET_TEST_MODE) {
-      recordLogRocketTestEvent("client_ip", { ip });
-      return;
-    }
-
-    if (currentLogRocketUserId) {
-      LogRocket.identify(currentLogRocketUserId, { ip_address: ip });
-    }
-    LogRocket.track("client_ip", { ip, at: new Date().toISOString() });
-  } catch {
-    // telemetry is non-critical
-  }
 }

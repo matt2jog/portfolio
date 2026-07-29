@@ -34,7 +34,7 @@ test("drizzle can read the users table (count >= 0)", async () => {
   assert.ok(row.count >= 0);
 });
 
-test("skill presentation updates reject missing skills and dangling groups", async () => {
+test("Portfolio skill membership accepts valid groups and rejects dangling references", async () => {
   const adminId = `integration-admin-${randomUUID()}`;
   const skillId = randomUUID();
   const groupId = randomUUID();
@@ -62,36 +62,48 @@ test("skill presentation updates reject missing skills and dangling groups", asy
     server.listen(0, "127.0.0.1", resolve);
   });
   const { port } = server.address() as AddressInfo;
-  const update = (id: string, groupingId: string | null) => fetch(
-    `http://127.0.0.1:${port}/api/admin/all-skills/${id}`,
+  const createMembership = (allSkillId: string, groupId: string | null) => fetch(
+    `http://127.0.0.1:${port}/api/admin/skills`,
     {
-      method: "PUT",
+      method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ groupingId }),
+      body: JSON.stringify({ allSkillId, groupId }),
     },
   );
 
   try {
-    const valid = await update(skillId, groupId);
+    const valid = await createMembership(skillId, groupId);
     assert.equal(valid.status, 200);
-    assert.equal((await valid.json()).groupingId, groupId);
+    const created = await valid.json() as { id: string; groupId: string };
+    assert.equal(created.groupId, groupId);
 
-    const dangling = await update(skillId, missingGroupId);
+    const dangling = await createMembership(randomUUID(), missingGroupId);
     assert.equal(dangling.status, 400);
-    assert.deepEqual(await dangling.json(), { message: "Invalid skills_group reference" });
+    assert.deepEqual(await dangling.json(), { message: "Invalid all_skill reference" });
+
+    const duplicate = await createMembership(skillId, groupId);
+    assert.equal(duplicate.status, 409);
+
+    const invalidMove = await fetch(
+      `http://127.0.0.1:${port}/api/admin/skills/${created.id}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ groupId: missingGroupId }),
+      },
+    );
+    assert.equal(invalidMove.status, 400);
+    assert.deepEqual(await invalidMove.json(), { message: "Invalid skills_group reference" });
 
     const [preserved] = await db
-      .select({ groupingId: allSkills.groupingId })
-      .from(allSkills)
-      .where(eq(allSkills.id, skillId));
-    assert.equal(preserved.groupingId, groupId);
-
-    const missing = await update(randomUUID(), null);
-    assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { message: "Skill not found" });
+      .select({ groupId: portfolioSkills.groupId })
+      .from(portfolioSkills)
+      .where(eq(portfolioSkills.id, created.id));
+    assert.equal(preserved.groupId, groupId);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await db.delete(auditLogs).where(eq(auditLogs.userId, adminId));
+    await db.delete(portfolioSkills).where(eq(portfolioSkills.allSkillId, skillId));
     await db.delete(allSkills).where(eq(allSkills.id, skillId));
     await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
   }
@@ -102,14 +114,14 @@ test("skill relationships are enforced by the database and remain safe across de
     SELECT conname
     FROM pg_constraint
     WHERE conname IN (
-      'all_skills_grouping_id_skills_group_id_fk',
+      'portfolio_skills_group_id_skills_group_id_fk',
       'portfolio_skills_all_skill_id_all_skills_id_fk'
     )
     ORDER BY conname
   `);
   assert.deepEqual(constraints.rows.map((row) => row.conname), [
-      "all_skills_grouping_id_skills_group_id_fk",
       "portfolio_skills_all_skill_id_all_skills_id_fk",
+      "portfolio_skills_group_id_skills_group_id_fk",
     ]);
 
   const groupId = randomUUID();
@@ -118,27 +130,31 @@ test("skill relationships are enforced by the database and remain safe across de
   const missingGroupId = randomUUID();
 
   await db.insert(skillsGroup).values({ id: groupId, name: "Integrity group" });
-  await db.insert(allSkills).values({ id: skillId, name: "Integrity skill", groupingId: groupId });
-  await db.insert(portfolioSkills).values({ id: portfolioSkillId, allSkillId: skillId });
+  await db.insert(allSkills).values({ id: skillId, name: "Integrity skill" });
+  await db.insert(portfolioSkills).values({ id: portfolioSkillId, allSkillId: skillId, groupId });
 
   try {
     await assert.rejects(
-      db.insert(allSkills).values({ id: randomUUID(), name: "Dangling skill", groupingId: missingGroupId }),
+      db.insert(portfolioSkills).values({
+        id: randomUUID(),
+        allSkillId: skillId,
+        groupId: missingGroupId,
+      }),
       (error: unknown) => {
         const cause = error instanceof Error && error.cause && typeof error.cause === "object"
           ? error.cause as { code?: unknown; constraint?: unknown }
           : undefined;
         return cause?.code === "23503"
-          && cause.constraint === "all_skills_grouping_id_skills_group_id_fk";
+          && cause.constraint === "portfolio_skills_group_id_skills_group_id_fk";
       },
     );
 
       await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
       const [unlinked] = await db
-      .select({ groupingId: allSkills.groupingId })
-      .from(allSkills)
-      .where(eq(allSkills.id, skillId));
-      assert.equal(unlinked.groupingId, null);
+      .select({ groupId: portfolioSkills.groupId })
+      .from(portfolioSkills)
+      .where(eq(portfolioSkills.id, portfolioSkillId));
+      assert.equal(unlinked.groupId, null);
 
       await db.delete(allSkills).where(eq(allSkills.id, skillId));
       const [orphanedPortfolioSkill] = await db

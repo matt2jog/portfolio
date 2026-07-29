@@ -135,7 +135,7 @@ export default function Admin() {
         Canonical career content is managed in Admin Dashboard. This page owns only Portfolio presentation.
       </p>
 
-      <nav data-testid="admin-tabs" aria-label="Portfolio administration" className="border border-white/10 p-2 bg-black/40 sticky top-2 z-10">
+      <nav data-testid="admin-tabs" aria-label="Portfolio administration" className="border border-white/10 bg-black/40 p-2 md:sticky md:top-2 md:z-10">
         <div className="grid gap-2 sm:grid-cols-3">
           {tabs.map((tab) => (
             <button

@@ -5,8 +5,13 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
-import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
+import { uuidCookieMiddleware } from "./tracking";
 import { createOriginAccessMiddleware } from "./origin-access";
+import {
+  createApiRateLimitMiddleware,
+  requestContextMiddleware,
+  structuredRequestLogMiddleware,
+} from "./request-observability";
 
 const app = express();
 const httpServer = createServer(app);
@@ -36,9 +41,10 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
+app.use(requestContextMiddleware);
 app.use(uuidCookieMiddleware);
-app.use(requestLogMiddleware);
-app.use(ipRateLogMiddleware);
+app.use(createApiRateLimitMiddleware());
+app.use(structuredRequestLogMiddleware);
 
 const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
 
@@ -80,36 +86,10 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (!isProd && capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
-
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const isServerError = status >= 500;
     const code = typeof err === "object" && err !== null && "code" in err
@@ -117,6 +97,7 @@ app.use((req, res, next) => {
       : null;
     console.error(JSON.stringify({
       event: "portfolio.request.error",
+      request_id: req.requestId,
       status,
       code,
     }));

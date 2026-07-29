@@ -27,7 +27,7 @@ import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import Tracking from "@/pages/Tracking";
-import { attachLogRocketIp, identifyLogRocketUser, trackLogRocketRoute, emitLogRocketUuidEvent } from "@/lib/logrocket";
+import { identifyLogRocketUser, trackLogRocketRoute, emitLogRocketUuidEvent } from "@/lib/logrocket";
 import { initBrowserTracking, storeTrEn } from "@/lib/tracking";
 
 function LogRocketBridge() {
@@ -63,10 +63,6 @@ function LogRocketBridge() {
   useEffect(() => {
     identifyLogRocketUser((me as any) ?? null);
   }, [me, consentGranted]);
-
-  useEffect(() => {
-    attachLogRocketIp();
-  }, [consentGranted]);
 
   return null;
 }

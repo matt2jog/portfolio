@@ -92,6 +92,7 @@ export const allSkills = portfolioSchema.table("all_skills", {
 export const portfolioSkills = portfolioSchema.table("portfolio_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "cascade" }),
+  groupId: varchar("group_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   position: integer("position").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
@@ -140,19 +141,15 @@ export const insertBioParagraphSchema = createInsertSchema(bioParagraphs).pick({
 
 export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
   name: true,
+}).extend({
+  name: z.string().trim().min(1).max(80),
 });
 
 export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
 
-export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
-  name: true,
-  groupingId: true,
-});
-
-export const updateAllSkillSchema = insertAllSkillSchema.partial();
-
 export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pick({
   allSkillId: true,
+  groupId: true,
 });
 
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
@@ -325,45 +322,7 @@ export const browserTracking = portfolioSchema.table("browser_tracking", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const browserTrackingIps = portfolioSchema.table(
-  "browser_tracking_ips",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    hashedUuid: text("hashed_uuid").notNull(),
-    ip: text("ip").notNull(),
-    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
-    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
-  },
-  (t) => [uniqueIndex("browser_tracking_ips_uuid_ip_idx").on(t.hashedUuid, t.ip)],
-);
-
-export const browserRequestLogs = portfolioSchema.table("browser_request_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  hashedUuid: text("hashed_uuid").notNull(),
-  ip: text("ip"),
-  method: text("method").notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code"),
-  durationMs: integer("duration_ms"),
-  meta: jsonb("meta").default({}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const ipRateLogs = portfolioSchema.table("ip_rate_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  ip: text("ip").notNull(),
-  method: text("method").notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code"),
-  // NULL for opted-out users; set to browser_tracking_ips.id for consented users
-  trackingIpId: varchar("tracking_ip_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 export type BrowserTracking = typeof browserTracking.$inferSelect;
-export type BrowserTrackingIp = typeof browserTrackingIps.$inferSelect;
-export type BrowserRequestLog = typeof browserRequestLogs.$inferSelect;
-export type IpRateLog = typeof ipRateLogs.$inferSelect;
 
 // ─── Welcome Messages (Personalization) ──────────────────────────────────────
 

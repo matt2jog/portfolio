@@ -296,21 +296,19 @@ test("admin presentation dialogs expose editable Portfolio-owned fields", async 
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   await page.getByTestId("admin-tab-skill-presentation").click();
-  await page.getByPlaceholder("Group name").fill("Platform");
+  await page.getByLabel("New group name").fill("Platform");
   await page.getByRole("button", { name: "Add group" }).click();
 
-  await page.getByText("Frontend", { exact: true }).first().click();
-  await page.getByPlaceholder("Edit group name").fill("Frontend Systems");
+  await page.getByRole("button", { name: "Rename Frameworks & Libraries" }).click();
+  await page.getByRole("dialog").getByLabel("Group name").fill("Frontend Systems");
   await page.getByRole("button", { name: "Save name" }).click();
-  await page.getByRole("button", { name: "Close" }).click();
-
-  await page.getByText("PostgreSQL", { exact: true }).first().click();
-  await page.getByPlaceholder("Display group name").fill("Infrastructure");
-  await page.getByRole("button", { name: "Save group" }).click();
-  await page.getByRole("button", { name: "Close" }).click();
-
-  await page.getByText("PostgreSQL", { exact: true }).last().click();
-  await page.getByRole("button", { name: "Move Up" }).click();
+  await page.getByLabel("Skill").selectOption("all-skill-3");
+  await page.getByLabel("Display group", { exact: true }).selectOption("group-2");
+  await page.getByRole("button", { name: "Add to map" }).click();
+  await page.getByLabel("Display group for PostgreSQL").selectOption("group-1");
+  await page.getByRole("button", { name: "Remove PostgreSQL from Portfolio" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("The canonical skill remains available");
+  await page.getByRole("button", { name: "Cancel" }).click();
 });
 
 test("admin personalization covers create, edit, archive, restore, and delete operations", async ({ page }) => {
