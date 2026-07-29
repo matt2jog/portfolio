@@ -302,7 +302,7 @@ test("admin presentation dialogs expose editable Portfolio-owned fields", async 
   await page.getByRole("button", { name: "Rename Frameworks & Libraries" }).click();
   await page.getByRole("dialog").getByLabel("Group name").fill("Frontend Systems");
   await page.getByRole("button", { name: "Save name" }).click();
-  await page.getByLabel("Skill").selectOption("all-skill-3");
+  await page.getByLabel("Skill", { exact: true }).selectOption("all-skill-3");
   await page.getByLabel("Display group", { exact: true }).selectOption("group-2");
   await page.getByRole("button", { name: "Add to map" }).click();
   await page.getByLabel("Display group for PostgreSQL").selectOption("group-1");
