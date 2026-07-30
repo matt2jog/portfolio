@@ -75,7 +75,7 @@ jobs:
           [[ "${digest_uri}" == "${IMAGE_URI}@sha256:"* ]]
           staging_url="$(jq -er '.status.url' <<<"${service_json}")"
           curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            --retry-delay 2 "${staging_url}/healthz" >/dev/null
+            --retry-delay 2 "${staging_url}/health" >/dev/null
           digest="${digest_uri##*@}"
           tagged_digest="$(gcloud artifacts docker images describe "${IMAGE_URI}:${commit_sha}" \
             --project "${GCP_PROJECT_ID}" \
@@ -175,7 +175,7 @@ jobs:
             --format='value(spec.containers[0].image)')"
           [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
           curl --fail --silent --show-error --retry 8 --retry-all-errors \
-            --retry-delay 3 "${candidate_url}/healthz" >/dev/null
+            --retry-delay 3 "${candidate_url}/health" >/dev/null
 
           shifted=1
           gcloud run services update-traffic "${PROD_SERVICE}" \
@@ -188,7 +188,7 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(status.url)')"
           curl --fail --silent --show-error --retry 8 --retry-all-errors \
-            --retry-delay 3 "${service_url}/healthz" >/dev/null
+            --retry-delay 3 "${service_url}/health" >/dev/null
           login_status="$(curl --silent --show-error \
             --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/login")"

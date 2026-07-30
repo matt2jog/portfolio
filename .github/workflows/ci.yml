@@ -329,7 +329,7 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(status.url)')"
           curl --fail --silent --show-error --retry 10 --retry-all-errors \
-            --retry-delay 3 "${service_url}/healthz" >/dev/null
+            --retry-delay 3 "${service_url}/health" >/dev/null
           login_status="$(curl --silent --show-error \
             --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
             --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/login")"
