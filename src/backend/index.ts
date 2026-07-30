@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { isSameOriginMutation } from "./auth0Web";
+import { dynamicResponseCachePolicy } from "./cache-policy";
 import { createOriginAccessMiddleware } from "./origin-access";
 import {
   createChatRateLimitMiddleware,
@@ -39,6 +40,8 @@ app.use((_req, res, next) => {
   });
   next();
 });
+
+app.use(dynamicResponseCachePolicy);
 
 app.get("/healthz", (_req, res) => {
   res.set("Cache-Control", "no-store");
