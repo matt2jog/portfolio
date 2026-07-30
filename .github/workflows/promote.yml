@@ -81,8 +81,7 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --format='value(image_summary.digest)')"
           [[ "${tagged_digest}" == "${digest}" ]]
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "${commit_sha}" origin/main
+          git merge-base --is-ancestor "${commit_sha}" HEAD
           echo "digest_uri=${digest_uri}" >> "${GITHUB_OUTPUT}"
           echo "commit_sha=${commit_sha}" >> "${GITHUB_OUTPUT}"
 
@@ -142,6 +141,9 @@ jobs:
             --region "${GCP_REGION}" \
             --image "${DIGEST_URI}" \
             --quiet
+          [[ "$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)')" == "${DIGEST_URI}" ]]
           gcloud run jobs execute "${PROD_MIGRATION_JOB}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -189,6 +191,15 @@ jobs:
             --format='value(status.url)')"
           curl --fail --silent --show-error --retry 8 --retry-all-errors \
             --retry-delay 3 "${service_url}/health" >/dev/null
+          active_json="$(gcloud run services describe "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${active_json}")" == "1" ]]
+          [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${active_json}")" == "${candidate_revision}" ]]
+          [[ "$(gcloud run revisions describe "${candidate_revision}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
           login_status="$(curl --silent --show-error \
             --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/login")"
