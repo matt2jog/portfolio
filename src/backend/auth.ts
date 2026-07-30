@@ -129,27 +129,53 @@ async function localLegacyAdmin(claims: AdminClaims): Promise<Express.User> {
 
 async function localAuth0Admin(identity: Auth0BrowserIdentity): Promise<Express.User> {
   const email = identity.email?.trim().toLowerCase();
-  if (!email) throw new Error("auth0_email_required");
   const existing = selectSingleAdminIdentityMatch(
     await db.select().from(users).where(
-      or(eq(users.auth0Sub, identity.subject), eq(users.email, email)),
+      email
+        ? or(eq(users.auth0Sub, identity.subject), eq(users.email, email))
+        : eq(users.auth0Sub, identity.subject),
     ),
   );
-  if (!existing) throw new Error("auth0_admin_not_preapproved");
-  if (existing.auth0Sub && existing.auth0Sub !== identity.subject) {
-    throw new Error("auth0_admin_subject_mismatch");
-  }
+  const update = auth0AdminIdentityUpdate(existing, identity);
+  if (!update) return existing!;
   const [updated] = await db.update(users)
-    .set({
-      auth0Sub: identity.subject,
-      email,
-      name: identity.name ?? existing.name,
-      role: "admin",
-    })
-    .where(eq(users.id, existing.id))
+    .set(update)
+    .where(eq(users.id, existing!.id))
     .returning();
   if (!updated) throw new Error("auth0_admin_bind_failed");
   return updated;
+}
+
+export function auth0AdminIdentityUpdate(
+  existing: Express.User | undefined,
+  identity: Auth0BrowserIdentity,
+): {
+  auth0Sub: string;
+  email: string;
+  name: string | null;
+  role: "admin";
+} | undefined {
+  if (!existing || existing.role !== "admin") {
+    throw new Error("auth0_admin_not_preapproved");
+  }
+  if (existing.auth0Sub && existing.auth0Sub !== identity.subject) {
+    throw new Error("auth0_admin_subject_mismatch");
+  }
+
+  const email = identity.email?.trim().toLowerCase();
+  if (!email) {
+    if (existing.auth0Sub !== identity.subject) {
+      throw new Error("auth0_admin_subject_not_bound");
+    }
+    return undefined;
+  }
+
+  return {
+    auth0Sub: identity.subject,
+    email,
+    name: identity.name ?? existing.name,
+    role: "admin",
+  };
 }
 
 export function setupAuth(app: Express): void {

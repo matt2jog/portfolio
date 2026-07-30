@@ -14,6 +14,7 @@ testDatabaseUrl.password = "test";
 process.env.DATABASE_URL ||= testDatabaseUrl.toString();
 
 const {
+  auth0AdminIdentityUpdate,
   buildAdminLoginUrl,
   normalizePortfolioReturn,
   selectSingleAdminIdentityMatch,
@@ -27,6 +28,39 @@ test("local Admin identity reconciliation rejects duplicate subject/email rows",
   );
   assert.equal(selectSingleAdminIdentityMatch([{ id: "single-row" }])?.id, "single-row");
   assert.equal(selectSingleAdminIdentityMatch([]), undefined);
+});
+
+test("Auth0 sessions reuse only an already-bound administrator subject", () => {
+  const admin = {
+    id: "admin-id",
+    email: "admin@example.test",
+    googleSub: "google-sub",
+    auth0Sub: "auth0|admin",
+    name: "Admin",
+    role: "admin" as const,
+  };
+  const subjectOnlySession = {
+    subject: "auth0|admin",
+    scopes: ["platform:admin"],
+    expiresAt: Math.floor(Date.now() / 1000) + 900,
+    authMethod: "auth0" as const,
+  };
+
+  assert.equal(auth0AdminIdentityUpdate(admin, subjectOnlySession), undefined);
+  assert.throws(
+    () => auth0AdminIdentityUpdate(
+      { ...admin, auth0Sub: null },
+      subjectOnlySession,
+    ),
+    /subject_not_bound/,
+  );
+  assert.throws(
+    () => auth0AdminIdentityUpdate(
+      { ...admin, role: "user" },
+      { ...subjectOnlySession, email: "admin@example.test" },
+    ),
+    /not_preapproved/,
+  );
 });
 
 test("legacy Admin return targets preserve an exact local path and query", () => {

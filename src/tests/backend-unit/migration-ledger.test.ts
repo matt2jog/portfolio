@@ -72,4 +72,6 @@ test("the full staging plan renders separately while retaining source checksums"
     rendered,
     /\bSET LOCAL search_path TO portfolio, pg_catalog\b/,
   );
+  assert.match(rendered, /INSERT INTO users/);
+  assert.match(rendered, /matching_administrators <> 1/);
 });
