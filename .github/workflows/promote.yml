@@ -226,6 +226,21 @@ jobs:
             --header 'Origin: https://cross-origin.invalid' --output /dev/null \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/logout")"
           [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          github_activity="$(curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            "${PROD_E2E_BASE_URL}/api/public/github/activity?release=${COMMIT_SHA}")"
+          jq -e '
+            (.login | type == "string" and length > 0)
+            and (.contributionsCollection.contributionCalendar.weeks
+              | type == "array"
+                and length > 0
+                and all(
+                  .[];
+                  (.contributionDays | type == "array" and length > 0)
+                )
+            )
+          ' <<<"${github_activity}" >/dev/null
+          github_activity=
 
           gcloud run services update-traffic "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \

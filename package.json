@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "check": "tsc",
     "test:ui": "playwright test --config src/tests/ui-test/playwright.config.ts",
+    "test:live-smoke": "tsx src/tests/live-smoke.ts",
     "test:client-unit": "tsx --test src/tests/client-unit/*.test.ts",
     "test:client-unit-coverage": "c8 --include='src/client/src/**/*.{ts,tsx}' --exclude='src/tests/**' --reporter=json --reports-dir=coverage/client/unit npm run test:client-unit",
     "build:client-coverage": "cross-env VITE_COVERAGE=1 vite build",

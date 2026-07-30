@@ -397,7 +397,7 @@ jobs:
           [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
           npm ci
           npx playwright install --with-deps chromium
-          PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:ui
+          PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:live-smoke
 
       - name: Mark the tested staging release eligible
         shell: bash
