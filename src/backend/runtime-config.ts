@@ -20,6 +20,13 @@ const RUNTIME_KEYS = [
   "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
+const RUNTIME_INDIVIDUAL_BINDING_KEYS = [
+  "DATABASE_URL",
+  "FIREWORKS_AI_TOKEN",
+  "GRADIENT_AI_TOKEN",
+  "SUPABASE_CA_CERT",
+  "SUPABASE_CA_SHA256",
+] as const satisfies readonly (typeof RUNTIME_KEYS)[number][];
 const ADMIN_AUTHORITY = "https://admin.2jog.dev";
 const ADMIN_AUDIENCE = "2jog-services";
 const ADMIN_JWKS_URL = `${ADMIN_AUTHORITY}/.well-known/jwks.json`;
@@ -43,14 +50,25 @@ function parseBundle(raw: string): Record<string, unknown> {
 
 export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = process.env): void {
   const bundle = parseBundle(raw);
+  const installed: Record<(typeof RUNTIME_KEYS)[number], string> = {} as Record<
+    (typeof RUNTIME_KEYS)[number],
+    string
+  >;
 
   for (const key of RUNTIME_KEYS) {
     const value = bundle[key];
     if (typeof value !== "string" || value.length === 0) {
       throw new Error(`Portfolio runtime bundle is missing required key: ${key}`);
     }
-    target[key] = value;
+    installed[key] = value;
   }
+  assertMatchingIndividualBindings(
+    target,
+    installed,
+    RUNTIME_INDIVIDUAL_BINDING_KEYS,
+    "runtime",
+  );
+  Object.assign(target, installed);
 
   const previousEdgeToken = bundle.EDGE_ORIGIN_PREVIOUS_TOKEN;
   if (previousEdgeToken === undefined) {
@@ -100,6 +118,25 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
   validateDatabaseBoundary(target, portfolioDatabaseBoundary(target));
   if (!/^[A-Za-z0-9-]{1,39}$/.test(target.GITHUB_USERNAME ?? "")) {
     throw new Error("GITHUB_USERNAME must be provided as an ordinary runtime environment variable");
+  }
+}
+
+function assertMatchingIndividualBindings<
+  T extends Record<string, string>,
+  K extends readonly (keyof T & string)[],
+>(
+  target: NodeJS.ProcessEnv,
+  bundle: T,
+  keys: K,
+  boundary: "runtime" | "migration",
+): void {
+  for (const key of keys) {
+    const direct = target[key];
+    if (direct !== undefined && direct !== bundle[key]) {
+      throw new Error(
+        `Portfolio ${boundary} individual binding ${key} does not match its bundle during cutover`,
+      );
+    }
   }
 }
 

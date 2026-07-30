@@ -29,7 +29,7 @@ function validRuntimeBundle() {
 }
 
 test("runtime bundle installs only the fields the application uses", () => {
-  const target: NodeJS.ProcessEnv = { DATABASE_URL: "stale-value", GITHUB_USERNAME: "matt2jog" };
+  const target: NodeJS.ProcessEnv = { GITHUB_USERNAME: "matt2jog" };
   applyRuntimeBundle(JSON.stringify(validRuntimeBundle()), target);
 
   assert.equal(target.DATABASE_URL, testSupabaseDatabaseUrl("portfolio_runtime_login"));
@@ -39,6 +39,29 @@ test("runtime bundle installs only the fields the application uses", () => {
   assert.equal(target.GITHUB_USERNAME, "matt2jog");
   assert.equal(target.GITHUB_TOKEN, undefined);
   assert.equal(target.PORT, undefined);
+});
+
+test("runtime bundle accepts matching individual delivery and rejects mismatches without echoing values", () => {
+  const bundle = validRuntimeBundle();
+  const matching: NodeJS.ProcessEnv = {
+    GITHUB_USERNAME: "matt2jog",
+    DATABASE_URL: bundle.DATABASE_URL,
+    FIREWORKS_AI_TOKEN: bundle.FIREWORKS_AI_TOKEN,
+    SUPABASE_CA_CERT: bundle.SUPABASE_CA_CERT,
+  };
+  assert.doesNotThrow(() => applyRuntimeBundle(JSON.stringify(bundle), matching));
+
+  const sensitiveMarker = "different-individual-gradient-value";
+  const mismatched: NodeJS.ProcessEnv = {
+    GITHUB_USERNAME: "matt2jog",
+    GRADIENT_AI_TOKEN: sensitiveMarker,
+  };
+  assert.throws(
+    () => applyRuntimeBundle(JSON.stringify(bundle), mismatched),
+    (error: unknown) => error instanceof Error
+      && /individual binding GRADIENT_AI_TOKEN does not match/.test(error.message)
+      && !error.message.includes(sensitiveMarker),
+  );
 });
 
 test("staging accepts a complete individual database boundary without a legacy bundle", () => {

@@ -23,6 +23,23 @@ test("database bootstrap bundle installs only migration runtime fields", () => {
   assert.equal(target.SUPABASE_PROJECT_REF, "qvbpgvazqfyhwjsfulsb");
 });
 
+test("database bootstrap bundle proves matching individual delivery before installation", () => {
+  const matching: NodeJS.ProcessEnv = {
+    DATABASE_URL: bundle().MIGRATION_DATABASE_URL,
+    SUPABASE_CA_CERT: bundle().SUPABASE_CA_CERT,
+  };
+  assert.doesNotThrow(() => applyMigrationBundle(JSON.stringify(bundle()), matching));
+
+  const sensitive = "different-individual-database-value";
+  const mismatched: NodeJS.ProcessEnv = { DATABASE_URL: sensitive };
+  assert.throws(
+    () => applyMigrationBundle(JSON.stringify(bundle()), mismatched),
+    (error: unknown) => error instanceof Error
+      && /individual binding DATABASE_URL does not match/.test(error.message)
+      && !error.message.includes(sensitive),
+  );
+});
+
 test("migration bundle is removed before parsing and errors do not echo values", () => {
   const target: NodeJS.ProcessEnv = { PORTFOLIO_DATABASE_BOOTSTRAP_BUNDLE: "{" };
   assert.throws(() => loadMigrationEnvironment(target), /not valid JSON/);

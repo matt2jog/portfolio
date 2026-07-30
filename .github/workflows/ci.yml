@@ -314,13 +314,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          previous_revision="$(jq -er \
+            '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")"
           release_key="${COMMIT_SHA:0:7}-${GITHUB_RUN_ID: -6}-${GITHUB_RUN_ATTEMPT}"
           suffix="s-${release_key}"
+          candidate_tag="stg-cand"
           staging_revision="$(gcloud run deploy "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${{ needs.publish.outputs.digest_uri }}" \
             --revision-suffix "${suffix}" \
+            --no-traffic \
+            --tag "${candidate_tag}" \
             --format='value(status.latestCreatedRevisionName)' \
             --quiet)"
           [[ -n "${staging_revision}" ]]
@@ -329,11 +341,6 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')"
           [[ "${deployed_digest_uri}" == "${{ needs.publish.outputs.digest_uri }}" ]]
-          gcloud run services update-traffic "${STAGING_SERVICE}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --to-revisions "${staging_revision}=100" \
-            --quiet
           service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -341,9 +348,17 @@ jobs:
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
             <<<"${service_json}")" == "1" ]]
           [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
-            <<<"${service_json}")" == "${staging_revision}" ]]
-          echo "revision=${staging_revision}" >> "${GITHUB_OUTPUT}"
-          echo "digest_uri=${deployed_digest_uri}" >> "${GITHUB_OUTPUT}"
+            <<<"${service_json}")" == "${previous_revision}" ]]
+          candidate_url="$(jq -er --arg tag "${candidate_tag}" --arg revision "${staging_revision}" \
+            '.status.traffic[]
+             | select(.tag == $tag and .revisionName == $revision)
+             | .url' <<<"${service_json}")"
+          {
+            echo "revision=${staging_revision}"
+            echo "digest_uri=${deployed_digest_uri}"
+            echo "candidate_url=${candidate_url}"
+            echo "previous_revision=${previous_revision}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Set up browser E2E dependencies
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -357,14 +372,73 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Run live staging endpoint and browser E2E gates
+      - name: Run tagged candidate endpoint gate
         shell: bash
+        env:
+          CANDIDATE_URL: ${{ steps.staging.outputs.candidate_url }}
         run: |
           set -euo pipefail
-          service_url="$(gcloud run services describe "${STAGING_SERVICE}" \
+          curl --fail --silent --show-error --retry 10 --retry-all-errors \
+            --retry-delay 3 "${CANDIDATE_URL}/health" >/dev/null
+
+      - name: Shift staging traffic and run endpoint/browser E2E with verified rollback
+        shell: bash
+        env:
+          STAGING_REVISION: ${{ steps.staging.outputs.revision }}
+          PREVIOUS_REVISION: ${{ steps.staging.outputs.previous_revision }}
+        run: |
+          set -euo pipefail
+          traffic_touched=0
+          rollback() {
+            status=$?
+            if [[ ${status} -ne 0 && ${traffic_touched} -eq 1 ]]; then
+              set +e
+              rollback_failed=0
+              if ! gcloud run services update-traffic "${STAGING_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --to-revisions "${PREVIOUS_REVISION}=100" \
+                --quiet; then
+                rollback_failed=1
+              fi
+              if [[ ${rollback_failed} -eq 0 ]]; then
+                restored_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --format=json)"
+                restored_count="$(jq \
+                  '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+                  <<<"${restored_json}")"
+                restored_revision="$(jq -r \
+                  '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+                  <<<"${restored_json}")"
+                if [[ "${restored_count}" != "1" || "${restored_revision}" != "${PREVIOUS_REVISION}" ]]; then
+                  rollback_failed=1
+                fi
+              fi
+              if [[ ${rollback_failed} -ne 0 ]]; then
+                echo "::error::Automatic staging rollback failed to restore ${PREVIOUS_REVISION}."
+              fi
+            fi
+            exit "${status}"
+          }
+          trap rollback EXIT
+
+          traffic_touched=1
+          gcloud run services update-traffic "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --format='value(status.url)')"
+            --to-revisions "${STAGING_REVISION}=100" \
+            --quiet
+          service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")" == "${STAGING_REVISION}" ]]
+          service_url="$(jq -er '.status.url' <<<"${service_json}")"
           curl --fail --silent --show-error --retry 10 --retry-all-errors \
             --retry-delay 3 "${service_url}/health" >/dev/null
           login_status="$(curl --silent --show-error \
@@ -398,6 +472,13 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:live-smoke
+          gcloud run services update-traffic "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --clear-tags \
+            --quiet
+          traffic_touched=0
+          trap - EXIT
 
       - name: Mark the tested staging release eligible
         shell: bash

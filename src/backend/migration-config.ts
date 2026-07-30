@@ -28,14 +28,24 @@ export function applyMigrationBundle(
   target: NodeJS.ProcessEnv = process.env,
 ): void {
   const bundle = parseBundle(raw);
+  const installed: NodeJS.ProcessEnv = {};
   for (const field of MIGRATION_FIELDS) {
     const value = bundle[field];
     if (typeof value !== "string" || value.length === 0) {
       throw new Error(`Portfolio database bootstrap bundle is missing required key: ${field}`);
     }
     const targetField = field === "MIGRATION_DATABASE_URL" ? "DATABASE_URL" : field;
-    target[targetField] = value;
+    installed[targetField] = value;
   }
+  for (const [name, bundledValue] of Object.entries(installed)) {
+    const directValue = target[name];
+    if (directValue !== undefined && directValue !== bundledValue) {
+      throw new Error(
+        `Portfolio migration individual binding ${name} does not match its bundle during cutover`,
+      );
+    }
+  }
+  Object.assign(target, installed);
 }
 
 export function loadMigrationEnvironment(target: NodeJS.ProcessEnv = process.env): void {
