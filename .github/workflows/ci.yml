@@ -286,14 +286,6 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
-      - name: Clear prior staging eligibility
-        run: >-
-          gcloud run services update "${STAGING_SERVICE}"
-          --project "${GCP_PROJECT_ID}"
-          --region "${GCP_REGION}"
-          --remove-labels commit-sha
-          --quiet
-
       - name: Run staging migration
         run: |
           gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
@@ -489,16 +481,57 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.template.spec.template.spec.containers[0].image)')"
           [[ "${migration_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
-          gcloud run services update "${STAGING_SERVICE}" \
+
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          access_token="$(gcloud auth print-access-token)"
+          before_v2="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${access_token}" \
+            "${service_endpoint}")"
+          before_v1="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --update-labels "commit-sha=${COMMIT_SHA}" \
-            --quiet
+            --format=json)"
+          before_latest_created="$(jq -er '.latestCreatedRevision' <<<"${before_v2}")"
+          before_traffic="$(jq -cS '.status.traffic' <<<"${before_v1}")"
+          expected_labels="$(jq -ce --arg sha "${COMMIT_SHA}" \
+            '(.labels // {}) + {"commit-sha": $sha}' <<<"${before_v2}")"
+          request_body="$(jq -cn \
+            --arg name "${service_name}" \
+            --arg etag "$(jq -er '.etag' <<<"${before_v2}")" \
+            --argjson labels "${expected_labels}" \
+            '{name: $name, etag: $etag, labels: $labels}')"
+          patch_response="$(curl --fail --silent --show-error \
+            --request PATCH \
+            --header "Authorization: Bearer ${access_token}" \
+            --header "Content-Type: application/json" \
+            --data-binary "${request_body}" \
+            "${service_endpoint}?updateMask=labels&forceNewRevision=false")"
+          jq -e '.name | type == "string" and length > 0' <<<"${patch_response}" >/dev/null
+
+          for attempt in {1..60}; do
+            after_v2="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${access_token}" \
+              "${service_endpoint}")"
+            if [[ "$(jq -cS '.labels // {}' <<<"${after_v2}")" == \
+              "$(jq -cS . <<<"${expected_labels}")" ]]; then
+              break
+            fi
+            if [[ ${attempt} -eq 60 ]]; then
+              echo "::error::Staging release labels did not converge after metadata PATCH."
+              exit 1
+            fi
+            sleep 1
+          done
+          access_token=
+
           service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --format=json)"
           [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.latestCreatedRevision' <<<"${after_v2}")" == "${before_latest_created}" ]]
+          [[ "$(jq -cS '.status.traffic' <<<"${service_json}")" == "${before_traffic}" ]]
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
             <<<"${service_json}")" == "1" ]]
           [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
