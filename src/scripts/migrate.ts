@@ -6,31 +6,26 @@ import {
   productionSupabaseConnectionConfig,
 } from "../shared/postgres-tls";
 import { applyPortfolioMigrations, loadMigrationPlan } from "./migration-ledger";
-import { withMigrationTransitionPolicy } from "./migration-transition-policy";
-import {
-  assertProductionMutationAllowed,
-  DATABASE_BOOTSTRAP_WORKFLOW_REF,
-  DEPLOY_WORKFLOW_REF,
-} from "./production-execution-guard";
 import { assertPortfolioMigratorBootstrapSession } from "../shared/postgres-session";
+import { loadMigrationEnvironment } from "../backend/migration-config";
+import { portfolioDatabaseBoundary } from "../shared/database-boundary";
 
 function migrationsFolder(): string {
   if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
   const containerFolder = path.resolve(process.cwd(), "migrations");
-  if (existsSync(path.join(containerFolder, "meta", "_journal.json"))) return containerFolder;
+  if (existsSync(containerFolder)) return containerFolder;
   return path.resolve(process.cwd(), "src", "migrations");
 }
 
 async function main(): Promise<void> {
+  loadMigrationEnvironment();
+  const databaseBoundary = portfolioDatabaseBoundary(process.env);
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for migrations");
-  if (process.env.NODE_ENV === "production") {
-    assertProductionMutationAllowed(
-      process.env,
-      "Portfolio database migration",
-      [DEPLOY_WORKFLOW_REF, DATABASE_BOOTSTRAP_WORKFLOW_REF],
-    );
-  } else if (!process.env.TEST_DATABASE_URL || databaseUrl !== process.env.TEST_DATABASE_URL) {
+  if (
+    process.env.NODE_ENV !== "production"
+    && (!process.env.TEST_DATABASE_URL || databaseUrl !== process.env.TEST_DATABASE_URL)
+  ) {
     throw new Error("Non-production migration is allowed only against the exact TEST_DATABASE_URL");
   }
 
@@ -41,36 +36,29 @@ async function main(): Promise<void> {
         projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
         supabaseCaCert: process.env.SUPABASE_CA_CERT,
         expectedCaSha256: process.env.SUPABASE_CA_SHA256,
-        expectedRole: "portfolio_migrator_login",
-        capabilityRole: "portfolio_migrator",
-        searchPath: "portfolio, extensions",
+        expectedRole: databaseBoundary.migratorLogin,
+        capabilityRole: databaseBoundary.migratorRole,
+        searchPath: databaseBoundary.searchPath,
       })
       : postgresConnectionConfig(
         databaseUrl,
         process.env.SUPABASE_CA_CERT,
-        "portfolio, extensions",
+        databaseBoundary.searchPath,
       )),
     max: 1,
   });
 
   const client = await pool.connect();
   try {
-    if (process.env.NODE_ENV !== "production") {
-      await client.query("SET portfolio.test_admin_migration = 'on'");
-    }
     if (process.env.NODE_ENV === "production") {
-      await assertPortfolioMigratorBootstrapSession(client);
+      await assertPortfolioMigratorBootstrapSession(client, databaseBoundary);
+    } else {
+      await client.query(`SET ROLE ${databaseBoundary.migratorRole}`);
     }
     const plan = loadMigrationPlan(migrationsFolder());
-    const result = await withMigrationTransitionPolicy(
-      client,
-      plan,
-      () => applyPortfolioMigrations(client, plan, {
-        allowSchemaBootstrap: process.env.NODE_ENV !== "production",
-      }),
-    );
+    const result = await applyPortfolioMigrations(client, plan, databaseBoundary);
     console.log(
-      `Portfolio migrations complete: adopted=${result.adopted} applied=${result.applied} total=${result.total}.`,
+      `Portfolio migrations complete: applied=${result.applied} total=${result.total}.`,
     );
   } finally {
     client.release();

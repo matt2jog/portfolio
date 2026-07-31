@@ -1,7 +1,7 @@
 # Tracking Notice & Consent Policy
 
-**Last Updated:** May 19, 2026  
-**Effective Date:** May 20, 2026
+**Last Updated:** July 28, 2026
+**Effective Date:** July 28, 2026
 
 ## 1. What We Track
 
@@ -32,13 +32,13 @@ We have configured LogRocket to **not** record:
 
 We use browser storage technologies to track your activity:
 
-- **Persistent Identifier Cookie (`tr_uuid`):** A randomly generated, anonymized identifier cookie is set on every visit. It never expires and is used to associate your sessions across visits. This cookie is set regardless of consent; however, it is only used for analytics or linked to your activity in our systems when you have granted consent. Without consent it serves only as a structural anchor for security logging (see Section 1.4).
+- **Consent Identifier Cookie (`tr_uuid`):** A randomly generated identifier cookie is set with a 30-day lifetime. It is `HttpOnly`, so site JavaScript cannot read it. The identifier is recorded by our application only after analytics consent is granted.
 - **Cookies:** We store a `sidebar_state` cookie to remember your UI preferences (sidebar open/closed).
 - **Session Cookies:** For authenticated admin users, we store session cookies for authentication.
 
 ### 1.4 Security & Rate-Limit Logging
 
-Regardless of your consent choice, we log your IP address and the time of each request to the Site's API for security and rate-limiting purposes. This log is minimal (IP, request path, timestamp) and is not used for behavioral analytics. When you have granted analytics consent, these log entries are linked to your persistent identifier (`tr_uuid`); otherwise they are stored anonymously.
+The edge and application process an IP address transiently to enforce geographic access controls and an in-memory API rate limit. The application does not store raw IP request logs or link IP addresses to the consent identifier. Operational request logs contain a generated request ID, method, path, status, and duration, but no raw IP address.
 
 ### 1.5 Campaign Source Tracking
 
@@ -104,7 +104,7 @@ You can manage browser cookies and storage through your browser settings:
 - **Safari:** Preferences → Privacy → Manage Website Data.
 - **Microsoft Edge:** Settings → Privacy, search, and services → Clear browsing data.
 
-**Clearing localStorage:** Use browser developer tools (F12) → Application → Local Storage → Delete `__lr_anon_id`.
+**Clearing site storage:** Use browser developer tools (F12) → Application to clear this site's cookies, local storage, and session storage.
 
 ### 4.3 Browser-Level Controls
 

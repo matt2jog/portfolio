@@ -391,7 +391,6 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
 
   const sendMessage = useCallback(async (contentOverride?: string) => {
     const trimmed = (contentOverride ?? input).trim();
-    console.log("SEND_MESSAGE CAUGHT", { trimmed, selectedModelId, isStreaming });
     if (!trimmed || !selectedModelId || isStreaming) return;
 
     setError(null);

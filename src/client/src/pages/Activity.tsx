@@ -312,7 +312,7 @@ function GithubDashboard({ data, isLoading, error }: any) {
       <IntegrationErrorCard
         icon={<ActivityIcon className="w-12 h-12 text-destructive/80 mx-auto mb-4" />}
         title="GitHub Integration Pending"
-        message={data?._error || "Missing GITHUB_TOKEN or GITHUB_USERNAME in environment variables."}
+        message={data?._error || "GitHub activity is temporarily unavailable."}
       />
     );
   }
@@ -542,8 +542,7 @@ function GithubTimeline() {
       });
       setHasMore(data.hasMore);
       setInitialLoaded(true);
-    } catch (err) {
-      console.error("Timeline fetch error:", err);
+    } catch {
       setInitialLoaded(true);
     } finally {
       setIsLoading(false);
@@ -747,8 +746,7 @@ function LinkedinTimeline({ isMobile }: { isMobile: boolean }) {
       });
       setHasMore(data.hasMore);
       setInitialLoaded(true);
-    } catch (err) {
-      console.error("LinkedIn timeline fetch error:", err);
+    } catch {
       setInitialLoaded(true);
     } finally {
       setIsLoading(false);

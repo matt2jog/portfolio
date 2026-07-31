@@ -110,7 +110,7 @@ test("admin exposes only Portfolio-owned presentation surfaces", async ({ page }
   await expect(page.getByTestId("admin-personalization-panel")).toBeVisible();
 });
 
-test("project and skill tabs expose presentation controls without canonical editors", async ({ page }) => {
+test("project and skill tabs expose presentation controls and shared-skill CRUD", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
 
@@ -119,9 +119,9 @@ test("project and skill tabs expose presentation controls without canonical edit
   await expect(page.getByText("Create and edit canonical projects in Admin Dashboard.")).toBeVisible();
 
   await page.getByTestId("admin-tab-skill-presentation").click();
-  await expect(page.getByRole("heading", { name: "Skill presentation" })).toBeVisible();
-  await expect(page.getByText("Create and rename canonical skills in Admin Dashboard.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /add all_skill/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shared skill library" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add skill" })).toBeVisible();
 });
 
 test("admin personalization panel renders message cards from mock data", async ({ page }) => {

@@ -3,8 +3,6 @@ import type { ChatMessage } from "./agent";
 import type { LLMProvider } from "./providers/base";
 import { PORTFOLIO_CHAT_RULES } from "./rules";
 
-import type { RunTree } from "langsmith/run_trees";
-
 export interface EvaluationViolation {
   ruleId: string;
   severity: string;
@@ -90,7 +88,6 @@ export async function evaluateResponse(options: {
   userMessages: ChatMessage[];
   modelId: string;
   provider: LLMProvider;
-  parentRun?: RunTree;
 }): Promise<EvaluationResult> {
   const evaluatorAgent = new Agent({
     name: "response-evaluator",
@@ -99,8 +96,6 @@ export async function evaluateResponse(options: {
     systemPrompt: EVALUATOR_SYSTEM_PROMPT,
     maxTokens: 1024,
     temperature: 0.1,
-    tracingTags: ["project-chat", "evaluator", options.modelId, options.provider.constructor.name],
-    tracingMeta: { type: "response-evaluation", provider: options.provider.constructor.name },
   });
 
   try {
@@ -111,7 +106,7 @@ export async function evaluateResponse(options: {
         response: options.response,
         conversationContext: options.userMessages.slice(-4),
       }),
-    }], options.parentRun);
+    }]);
 
     return parseEvaluationResult(raw);
   } catch {

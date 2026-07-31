@@ -2,13 +2,15 @@ import { sql } from "drizzle-orm";
 import { integer, jsonb, pgSchema, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { portfolioDatabaseBoundary } from "./database-boundary";
 
-const portfolioSchema = pgSchema("portfolio");
+const portfolioSchema = pgSchema(portfolioDatabaseBoundary().schema);
 
 export const users = portfolioSchema.table("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
-  googleSub: text("google_sub").notNull().unique(),
+  googleSub: text("google_sub").unique(),
+  auth0Sub: text("auth0_sub").unique(),
   name: text("name"),
   role: text("role").notNull().default("user"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -17,6 +19,7 @@ export const users = portfolioSchema.table("users", {
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
   googleSub: true,
+  auth0Sub: true,
   name: true,
   role: true,
 });
@@ -91,7 +94,8 @@ export const allSkills = portfolioSchema.table("all_skills", {
 });
 export const portfolioSkills = portfolioSchema.table("portfolio_skills", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "cascade" }),
+  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "restrict" }),
+  groupId: varchar("group_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   position: integer("position").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
   archivedBy: varchar("archived_by"),
@@ -103,12 +107,6 @@ export const auditLogs = portfolioSchema.table("audit_logs", {
   action: text("action").notNull(),
   payload: jsonb("payload"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const session = portfolioSchema.table("session", {
-  sid: varchar("sid").primaryKey(),
-  sess: jsonb("sess").notNull(),
-  expire: timestamp("expire").notNull(),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).pick({
@@ -146,6 +144,8 @@ export const insertBioParagraphSchema = createInsertSchema(bioParagraphs).pick({
 
 export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
   name: true,
+}).extend({
+  name: z.string().trim().min(1).max(80),
 });
 
 export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
@@ -153,12 +153,19 @@ export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
 export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
   name: true,
   groupingId: true,
+}).extend({
+  name: z.string().trim().min(1).max(120),
+  groupingId: z.string().min(1).nullable().optional(),
 });
 
 export const updateAllSkillSchema = insertAllSkillSchema.partial();
 
 export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pick({
   allSkillId: true,
+  groupId: true,
+}).extend({
+  allSkillId: z.string().min(1),
+  groupId: z.string().min(1),
 });
 
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
@@ -257,9 +264,8 @@ export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 export type AiModel = typeof aiModels.$inferSelect;
 
-// Portfolio-local read-model table for Admin-owned public career data. Declaring it here
-// does not transfer canonical ownership to Portfolio; only the disabled compatibility
-// projector may update canonical fields, while Portfolio keeps local display order.
+// Resume reads this career presentation data through the private views in the
+// Portfolio schema.
 export const education = portfolioSchema.table("education", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   school: text("school").notNull(),
@@ -332,45 +338,7 @@ export const browserTracking = portfolioSchema.table("browser_tracking", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const browserTrackingIps = portfolioSchema.table(
-  "browser_tracking_ips",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    hashedUuid: text("hashed_uuid").notNull(),
-    ip: text("ip").notNull(),
-    firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
-    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
-  },
-  (t) => [uniqueIndex("browser_tracking_ips_uuid_ip_idx").on(t.hashedUuid, t.ip)],
-);
-
-export const browserRequestLogs = portfolioSchema.table("browser_request_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  hashedUuid: text("hashed_uuid").notNull(),
-  ip: text("ip"),
-  method: text("method").notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code"),
-  durationMs: integer("duration_ms"),
-  meta: jsonb("meta").default({}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const ipRateLogs = portfolioSchema.table("ip_rate_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  ip: text("ip").notNull(),
-  method: text("method").notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code"),
-  // NULL for opted-out users; set to browser_tracking_ips.id for consented users
-  trackingIpId: varchar("tracking_ip_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 export type BrowserTracking = typeof browserTracking.$inferSelect;
-export type BrowserTrackingIp = typeof browserTrackingIps.$inferSelect;
-export type BrowserRequestLog = typeof browserRequestLogs.$inferSelect;
-export type IpRateLog = typeof ipRateLogs.$inferSelect;
 
 // ─── Welcome Messages (Personalization) ──────────────────────────────────────
 

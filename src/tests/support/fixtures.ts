@@ -57,7 +57,7 @@ export const projectsFixture = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 export const skillsConstellationFixture = [
-  ["Infrastructure", "PostgreSQL", "Kafka", "Docker", "Kubernetes", "Terraform", "Redis"],
+  ["Infrastructure", "PostgreSQL", "Docker", "Kubernetes", "Terraform", "Redis"],
   ["Frontend", "React", "TypeScript", "Tailwind", "Three.js", "Framer Motion"],
   ["AI Systems", "Agents", "RAG", "Prompt Eval", "Vector Search", "Tool Calling"],
   ["Backend", "Node.js", "Express", "Python", "FastAPI", "Drizzle"],
@@ -68,6 +68,8 @@ export const skillsConstellationFixture = [
     skill_name: skill,
     group_id: `group-${groupIndex}`,
     group_name: groupName,
+    group_position: groupIndex,
+    skill_position: skillIndex,
   })),
 );
 
@@ -234,15 +236,16 @@ export const adminFixtures = {
     createdAt: "2026-05-12T12:00:00.000Z",
   },
   skillGroups: [
-    { id: "group-1", name: "Frontend" },
-    { id: "group-2", name: "Infrastructure" },
+    { id: "group-1", name: "Frameworks & Libraries", position: 0 },
+    { id: "group-2", name: "Cloud & Infrastructure", position: 1 },
   ],
   allSkills: [
-    { id: "all-skill-1", name: "React", groupingId: "group-1", groupingName: "Frontend" },
-    { id: "all-skill-2", name: "PostgreSQL", groupingId: "group-2", groupingName: "Infrastructure" },
+    { id: "all-skill-1", name: "React" },
+    { id: "all-skill-2", name: "PostgreSQL" },
+    { id: "all-skill-3", name: "Terraform" },
   ],
   portfolioSkills: [
-    { id: "portfolio-skill-1", label: "React", groupingName: "Frontend" },
-    { id: "portfolio-skill-2", label: "PostgreSQL", groupingName: "Infrastructure" },
+    { id: "portfolio-skill-1", allSkillId: "all-skill-1", groupId: "group-1", label: "React", groupingName: "Frameworks & Libraries", position: 0 },
+    { id: "portfolio-skill-2", allSkillId: "all-skill-2", groupId: "group-2", label: "PostgreSQL", groupingName: "Cloud & Infrastructure", position: 0 },
   ],
 };

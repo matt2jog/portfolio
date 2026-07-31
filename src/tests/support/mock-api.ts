@@ -69,7 +69,7 @@ async function mockDbRoute(page: Page, url: string, body: JsonValue) {
 export async function installMockApi(page: Page) {
   await page.route("**/api/admin/**", (route) => fulfillJson(route, { ok: true }));
   await page.route("**/api/public/geoip", (route) =>
-    fulfillJson(route, { ip: "127.0.0.1", country_code: "US" }),
+    fulfillJson(route, { country_code: null, status: "unknown" }),
   );
   await page.route("**/api/public/ip", (route) =>
     fulfillJson(route, { ip: "127.0.0.1" }),
@@ -162,26 +162,22 @@ export async function installMockApi(page: Page) {
   );
 }
 
-export const TEST_TRACKER_UUID = "aabbccdd1122334455667788aabbccdd1122334455667788aabbccdd11223344";
-
 export async function seedBrowserState(
   page: Page,
   options: {
     introSeen?: boolean;
     consent?: "accept_all" | "reject_all" | "none";
     logRocketTestMode?: boolean;
-    trackerUuid?: string | false;
   } = {},
 ) {
   const {
     introSeen = true,
     consent = "reject_all",
     logRocketTestMode = true,
-    trackerUuid = TEST_TRACKER_UUID,
   } = options;
 
   await page.addInitScript(
-    ({ introSeen: shouldSeedIntro, consentChoice, testMode, uuid }) => {
+    ({ introSeen: shouldSeedIntro, consentChoice, testMode }) => {
       Math.random = () => 0.42;
 
       if (testMode) {
@@ -193,10 +189,6 @@ export async function seedBrowserState(
         window.localStorage.setItem("__root_intro_seen_until", String(Date.now() + 3 * 24 * 60 * 60 * 1000));
       } else {
         window.localStorage.removeItem("__root_intro_seen_until");
-      }
-
-      if (uuid) {
-        document.cookie = `tr_uuid=${uuid}; path=/; max-age=315360000`;
       }
 
       if (consentChoice === "none") {
@@ -221,7 +213,6 @@ export async function seedBrowserState(
       introSeen,
       consentChoice: consent,
       testMode: logRocketTestMode,
-      uuid: trackerUuid || "",
     },
   );
 }

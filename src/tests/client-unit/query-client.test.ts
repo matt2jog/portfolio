@@ -19,6 +19,7 @@ beforeEach(() => {
     configurable: true,
     value: {
       location: {
+        origin: "https://2jog.dev",
         assign: (url: string) => assignedUrls.push(url),
       },
     },
@@ -43,9 +44,8 @@ afterEach(() => {
   }
 });
 
-test("apiRequest sends JSON with the cached client IP and supports bodyless requests", async () => {
+test("apiRequest sends JSON without collecting or forwarding a client IP", async () => {
   responses.push(
-    Response.json({ ip: "203.0.113.8" }),
     Response.json({ saved: true }),
     new Response(null, { status: 204 }),
   );
@@ -53,14 +53,13 @@ test("apiRequest sends JSON with the cached client IP and supports bodyless requ
   await apiRequest("POST", "/api/admin/example", { enabled: true });
   await apiRequest("DELETE", "/api/admin/example");
 
-  assert.equal(fetchCalls[0]?.input, "/api/public/ip");
-  assert.deepEqual(fetchCalls[1]?.init?.headers, {
+  assert.equal(fetchCalls[0]?.input, "/api/admin/example");
+  assert.deepEqual(fetchCalls[0]?.init?.headers, {
     "Content-Type": "application/json",
-    "X-Client-IP": "203.0.113.8",
   });
-  assert.equal(fetchCalls[1]?.init?.body, JSON.stringify({ enabled: true }));
-  assert.deepEqual(fetchCalls[2]?.init?.headers, { "X-Client-IP": "203.0.113.8" });
-  assert.equal(fetchCalls[2]?.init?.body, undefined);
+  assert.equal(fetchCalls[0]?.init?.body, JSON.stringify({ enabled: true }));
+  assert.deepEqual(fetchCalls[1]?.init?.headers, {});
+  assert.equal(fetchCalls[1]?.init?.body, undefined);
 });
 
 test("getQueryFn returns JSON and permits an explicit null for an unauthenticated optional query", async () => {
@@ -79,7 +78,7 @@ test("getQueryFn returns JSON and permits an explicit null for an unauthenticate
 });
 
 test("401 handling redirects only to the constrained sign-in route", async () => {
-  const validUrl = "https://admin.2jog.dev/auth/google?returnTo=%2Fadmin";
+  const validUrl = "https://2jog.dev/auth/login?returnTo=%2Fadmin";
   responses.push(
     new Response(JSON.stringify({ login_url: validUrl }), { status: 401 }),
   );
@@ -93,7 +92,11 @@ test("401 handling redirects only to the constrained sign-in route", async () =>
 });
 
 test("401 handling permits the constrained localhost sign-in route for local development", async () => {
-  const localUrl = "http://localhost/auth/google?returnTo=%2Fadmin";
+  const localUrl = "http://localhost/auth/login?returnTo=%2Fadmin";
+  Object.defineProperty(window.location, "origin", {
+    configurable: true,
+    value: "http://localhost",
+  });
   responses.push(
     new Response(JSON.stringify({ login_url: localUrl }), { status: 401 }),
   );
@@ -109,8 +112,9 @@ test("401 handling permits the constrained localhost sign-in route for local dev
 test("401 handling rejects unsafe, malformed, and incomplete login URLs", async () => {
   const payloads = [
     JSON.stringify({ login_url: "javascript:alert(1)" }),
-    JSON.stringify({ login_url: "https://admin.2jog.dev/not-auth?returnTo=%2Fadmin" }),
-    JSON.stringify({ login_url: "https://admin.2jog.dev/auth/google" }),
+    JSON.stringify({ login_url: "https://evil.example/auth/login?returnTo=%2Fadmin" }),
+    JSON.stringify({ login_url: "https://2jog.dev/not-auth?returnTo=%2Fadmin" }),
+    JSON.stringify({ login_url: "https://2jog.dev/auth/login" }),
     JSON.stringify({ login_url: 123 }),
     "not-json",
   ];

@@ -2,6 +2,7 @@
 **/node_modules/
 **/.wrangler/
 **/.dev.vars*
+/supabase/.temp/
 /gcp_settings/
 /dist/
 .env

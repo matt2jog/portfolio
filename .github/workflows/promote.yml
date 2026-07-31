@@ -1,0 +1,270 @@
+name: Promote staged image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: portfolio-production
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: personal-brand-501801
+  GCP_REGION: us-east4
+  IMAGE_URI: us-east4-docker.pkg.dev/personal-brand-501801/portfolio/portfolio
+  STAGING_SERVICE: portfolio--staging
+  PROD_SERVICE: portfolio--prod
+  PROD_MIGRATION_JOB: portfolio-migrate--prod
+  PROD_E2E_BASE_URL: https://2jog.dev
+  WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
+  DEPLOY_SERVICE_ACCOUNT: portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com
+
+jobs:
+  promote:
+    name: Promote healthy staging digest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require main dispatch
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Production promotion must be dispatched from main."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Discover and verify healthy staging release
+        id: staged
+        shell: bash
+        run: |
+          set -euo pipefail
+          service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          [[ "$(jq -r '.status.conditions[] | select(.type == "Ready") | .status' <<<"${service_json}")" == "True" ]]
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          staging_revision="$(jq -er '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")"
+          commit_sha="$(jq -er '.metadata.labels["commit-sha"]' <<<"${service_json}")"
+          [[ "${commit_sha}" =~ ^[0-9a-f]{40}$ ]]
+          digest_uri="$(gcloud run revisions describe "${staging_revision}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.containers[0].image)')"
+          [[ "${digest_uri}" == "${IMAGE_URI}@sha256:"* ]]
+          staging_url="$(jq -er '.status.url' <<<"${service_json}")"
+          curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            --retry-delay 2 "${staging_url}/health" >/dev/null
+          digest="${digest_uri##*@}"
+          tagged_digest="$(gcloud artifacts docker images describe "${IMAGE_URI}:${commit_sha}" \
+            --project "${GCP_PROJECT_ID}" \
+            --format='value(image_summary.digest)')"
+          [[ "${tagged_digest}" == "${digest}" ]]
+          git merge-base --is-ancestor "${commit_sha}" HEAD
+          echo "digest_uri=${digest_uri}" >> "${GITHUB_OUTPUT}"
+          echo "commit_sha=${commit_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Migrate, smoke, shift traffic, and retain rollback
+        shell: bash
+        env:
+          DIGEST_URI: ${{ steps.staged.outputs.digest_uri }}
+          COMMIT_SHA: ${{ steps.staged.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          prod_json="$(gcloud run services describe "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${prod_json}")" == "1" ]]
+          previous_revision="$(jq -er '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${prod_json}")"
+          shifted=0
+          rollback() {
+            status=$?
+            if [[ ${status} -ne 0 && ${shifted} -eq 1 ]]; then
+              set +e
+              echo "::warning::Post-shift verification failed; restoring ${previous_revision}."
+              rollback_failed=0
+              if ! gcloud run services update-traffic "${PROD_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --to-revisions "${previous_revision}=100" \
+                --quiet; then
+                rollback_failed=1
+              fi
+              if restored_json="$(gcloud run services describe "${PROD_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --format=json)"; then
+                restored_count="$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+                  <<<"${restored_json}")"
+                restored_revision="$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+                  <<<"${restored_json}")"
+                if [[ "${restored_count}" != "1" || "${restored_revision}" != "${previous_revision}" ]]; then
+                  rollback_failed=1
+                fi
+              else
+                rollback_failed=1
+              fi
+              if [[ ${rollback_failed} -ne 0 ]]; then
+                echo "::error::Automatic rollback failed to restore ${previous_revision} at 100% traffic."
+              fi
+            fi
+            exit "${status}"
+          }
+          trap rollback EXIT
+
+          gcloud run jobs update "${PROD_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${DIGEST_URI}" \
+            --quiet
+          [[ "$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)')" == "${DIGEST_URI}" ]]
+          gcloud run jobs execute "${PROD_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --wait
+
+          candidate_tag="cand"
+          gcloud run deploy "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${DIGEST_URI}" \
+            --no-traffic \
+            --tag "${candidate_tag}" \
+            --revision-suffix="" \
+            --quiet
+          service_json="$(gcloud run services describe "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          candidate_count="$(jq -r --arg tag "${candidate_tag}" \
+            '[.status.traffic[] | select(.tag == $tag)] | length' <<<"${service_json}")"
+          [[ "${candidate_count}" == "1" ]]
+          candidate_entry="$(jq -cer --arg tag "${candidate_tag}" \
+            '.status.traffic[] | select(.tag == $tag) | {revisionName, url}' <<<"${service_json}")"
+          candidate_revision="$(jq -er '.revisionName' <<<"${candidate_entry}")"
+          candidate_url="$(jq -er '.url' <<<"${candidate_entry}")"
+          candidate_digest_uri="$(gcloud run revisions describe "${candidate_revision}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.containers[0].image)')"
+          [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
+          curl --fail --silent --show-error --retry 8 --retry-all-errors \
+            --retry-delay 3 "${candidate_url}/health" >/dev/null
+
+          shifted=1
+          gcloud run services update-traffic "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --to-revisions "${candidate_revision}=100" \
+            --quiet
+          service_url="$(gcloud run services describe "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(status.url)')"
+          curl --fail --silent --show-error --retry 8 --retry-all-errors \
+            --retry-delay 3 "${service_url}/health" >/dev/null
+          active_json="$(gcloud run services describe "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${active_json}")" == "1" ]]
+          [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${active_json}")" == "${candidate_revision}" ]]
+          [[ "$(gcloud run revisions describe "${candidate_revision}" \
+            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
+            --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
+          login_status="$(curl --silent --show-error \
+            --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
+            --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/login")"
+          [[ "${login_status}" == "302" ]]
+          auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
+            head -1 | cut -d' ' -f2- | tr -d '\r')"
+          AUTH_LOCATION="${auth_location}" EXPECTED_CALLBACK="${PROD_E2E_BASE_URL}/auth/callback" python3 - <<'PY'
+          import os
+          from urllib.parse import parse_qs, urlparse
+          location = urlparse(os.environ["AUTH_LOCATION"])
+          assert f"{location.scheme}://{location.netloc}{location.path}" == "https://auth.2jog.dev/authorize"
+          query = parse_qs(location.query)
+          assert query.get("response_type") == ["code"]
+          assert query.get("redirect_uri") == [os.environ["EXPECTED_CALLBACK"]]
+          assert query.get("code_challenge_method") == ["S256"]
+          for required in ("state", "nonce", "code_challenge"):
+              assert query.get(required) and query[required][0]
+          PY
+          me_status="$(curl --silent --show-error --output "${RUNNER_TEMP}/auth-me-body" \
+            --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/api/auth/me")"
+          [[ "${me_status}" == "401" ]]
+          jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
+          logout_status="$(curl --silent --show-error --request POST \
+            --header 'Origin: https://cross-origin.invalid' --output /dev/null \
+            --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/logout")"
+          [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          github_activity="$(curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            "${PROD_E2E_BASE_URL}/api/public/github/activity?release=${COMMIT_SHA}")"
+          jq -e '
+            (.login | type == "string" and length > 0)
+            and (.contributionsCollection.contributionCalendar.weeks
+              | type == "array"
+                and length > 0
+                and all(
+                  .[];
+                  (.contributionDays | type == "array" and length > 0)
+                )
+            )
+          ' <<<"${github_activity}" >/dev/null
+          github_activity=
+
+          gcloud run services update-traffic "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --clear-tags \
+            --quiet
+          mapfile -t revisions < <(gcloud run revisions list \
+            --service "${PROD_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --sort-by='~metadata.creationTimestamp' \
+            --format='value(metadata.name)')
+          for revision in "${revisions[@]}"; do
+            [[ "${revision}" == "${candidate_revision}" || "${revision}" == "${previous_revision}" ]] && continue
+            gcloud run revisions delete "${revision}" \
+              --project "${GCP_PROJECT_ID}" \
+              --region "${GCP_REGION}" \
+              --quiet
+          done
+          trap - EXIT
+
+          {
+            echo "### Production promotion"
+            echo
+            echo "- Commit: \`${COMMIT_SHA}\`"
+            echo "- Digest: \`${DIGEST_URI##*@}\`"
+            echo "- Active revision: \`${candidate_revision}\`"
+            echo "- Rollback revision retained: \`${previous_revision}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

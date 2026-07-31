@@ -30,7 +30,8 @@ export class MemStorage implements IStorage {
     const user: User = {
       id,
       email: insertUser.email,
-      googleSub: insertUser.googleSub,
+      googleSub: insertUser.googleSub ?? null,
+      auth0Sub: insertUser.auth0Sub ?? null,
       name: insertUser.name ?? null,
       role: insertUser.role ?? "user",
       createdAt: new Date(),

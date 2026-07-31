@@ -4,74 +4,62 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
-import { db } from "./data/db";
-import { extractClientCountry, extractClientIp, isLocalIp, markEdgeOriginAuthenticated } from "./geoip";
-import { uuidCookieMiddleware, requestLogMiddleware, ipRateLogMiddleware } from "./tracking";
-import {
-  CAREER_PUBSUB_PATH,
-  createCareerPubSubHandler,
-  createPostgresCareerEventStore,
-} from "./consumers/career-pubsub";
-import {
-  createCareerPushIdentityMiddleware,
-  validateCareerPushIdentityConfig,
-} from "./consumers/career-pubsub-auth";
+import { isSameOriginMutation } from "./auth0Web";
+import { dynamicResponseCachePolicy } from "./cache-policy";
 import { createOriginAccessMiddleware } from "./origin-access";
 import {
-  createDatabaseAuditContextMiddleware,
-  createServiceDatabaseAuditContextMiddleware,
-} from "./data/database-audit";
+  createChatRateLimitMiddleware,
+  requestContextMiddleware,
+  structuredRequestLogMiddleware,
+} from "./request-observability";
 
 const app = express();
 const httpServer = createServer(app);
 const isProd = process.env.NODE_ENV === "production";
 
-const careerPushAudience = process.env.CAREER_PUBSUB_PUSH_AUDIENCE;
-const careerPushServiceAccount = process.env.CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT;
-const careerPushSubscription = process.env.CAREER_PUBSUB_SUBSCRIPTION;
-const careerPushSettingCount = [
-  careerPushAudience,
-  careerPushServiceAccount,
-  careerPushSubscription,
-].filter(Boolean).length;
+app.use(requestContextMiddleware);
+app.use(structuredRequestLogMiddleware);
 
-if (careerPushSettingCount > 0 && careerPushSettingCount < 3) {
-  throw new Error("Career Pub/Sub runtime settings must be configured together");
-}
+app.use((req, res, next) => {
+  const host = (req.headers.host ?? "").toLowerCase();
+  if (host !== "www.2jog.dev" && host !== "www.2jog.dev:443") return next();
+  const incoming = new URL(
+    `https://request.invalid${req.originalUrl.startsWith("/") ? req.originalUrl : "/"}`,
+  );
+  const target = new URL("https://2jog.dev");
+  target.pathname = incoming.pathname;
+  target.search = incoming.search;
+  return res.redirect(308, target.toString());
+});
 
-if (careerPushAudience && careerPushServiceAccount && careerPushSubscription) {
-  const identityConfig = validateCareerPushIdentityConfig({
-    audience: careerPushAudience,
-    serviceAccountEmail: careerPushServiceAccount,
+app.use((_req, res, next) => {
+  res.set({
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
   });
-  app.post(
-    CAREER_PUBSUB_PATH,
-    createCareerPushIdentityMiddleware(identityConfig),
-    express.json({ limit: "2mb", strict: true }),
-    createServiceDatabaseAuditContextMiddleware(),
-    createCareerPubSubHandler(
-      createPostgresCareerEventStore(db),
-      careerPushSubscription,
-    ),
-  );
-} else if (isProd || Boolean(process.env.K_SERVICE)) {
-  throw new Error(
-    "CAREER_PUBSUB_PUSH_AUDIENCE, CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT, and "
-      + "CAREER_PUBSUB_SUBSCRIPTION are required in Cloud Run",
-  );
-} else {
-  app.post(CAREER_PUBSUB_PATH, (_request, response) => {
-    response.status(503).json({ error: "career_pubsub_not_configured" });
-  });
-}
+  next();
+});
+
+app.use(dynamicResponseCachePolicy);
+
+app.get("/healthz", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, service: "portfolio" });
+});
+app.get("/health", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ ok: true, service: "portfolio" });
+});
 
 if (isProd || Boolean(process.env.K_SERVICE)) {
   app.use(createOriginAccessMiddleware(
     process.env.EDGE_ORIGIN_TOKEN,
     process.env.EDGE_ORIGIN_PREVIOUS_TOKEN,
+    process.env.PUBLIC_BASE_URL,
   ));
-  app.use(markEdgeOriginAuthenticated);
 }
+app.use(createChatRateLimitMiddleware());
 
 declare module "http" {
   interface IncomingMessage {
@@ -89,91 +77,49 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 setupAuth(app);
-app.use(uuidCookieMiddleware);
-app.use(createDatabaseAuditContextMiddleware());
-app.use(requestLogMiddleware);
-app.use(ipRateLogMiddleware);
-
-const enforceUsOnly = process.env.ENFORCE_US_ONLY !== "false";
-
-if (enforceUsOnly) {
-  app.use((req, res, next) => {
-    // Exempt static files from geoblocking so asset bots (like LogRocket) can fetch styles
-    if (
-      req.path.startsWith("/assets/") || 
-      req.path.match(/\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)
-    ) {
-      return next();
-    }
-
-    const ip = extractClientIp(req);
-    if (isLocalIp(ip)) {
-      return next();
-    }
-
-    const countryCode = extractClientCountry(req);
-    if (countryCode === "US") {
-      return next();
-    }
-
-    return res.status(451).json({
-      message: "This service is currently available only to users in the United States.",
-      country_code: countryCode || null,
-    });
-  });
-}
-
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
-
 app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (!isProd && capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
+  if (
+    req.user
+    && !isSameOriginMutation(
+      req,
+      process.env.PUBLIC_BASE_URL || (isProd ? "https://2jog.dev" : "http://localhost:3000"),
+    )
+  ) {
+    return res.status(403).json({ error: "cross_site_request_rejected" });
+  }
+  return next();
 });
+export function log(event: string, fields: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({ event, ...fields }));
+}
 
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Internal Server Error:", err);
+    const isServerError = status >= 500;
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? boundedFailureCode(err.code)
+      : "request_failed";
+    res.locals.failureCode = code;
+    console.error(JSON.stringify({
+      event: "portfolio.request.error",
+      request_id: req.requestId,
+      correlation_id: req.correlationId,
+      status,
+      code,
+    }));
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    return res.status(status).json({
+      message: isServerError
+        ? "Internal Server Error"
+        : (typeof err?.message === "string" ? err.message : "Request failed"),
+    });
   });
 
   // importantly only setup vite in development and after
@@ -195,8 +141,7 @@ app.use((req, res, next) => {
   // reusePort is not supported on Windows, so use simple listen for development
   if (process.platform === "win32") {
     httpServer.listen(port, () => {
-      log(`serving on port ${port}`);
-      log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+      log("portfolio.service_started", { port });
     });
   } else {
     httpServer.listen(
@@ -206,9 +151,13 @@ app.use((req, res, next) => {
         reusePort: true,
       },
       () => {
-        log(`serving on port ${port}`);
-        log(`US-only mode: ${enforceUsOnly ? "ON" : "OFF"}`);
+        log("portfolio.service_started", { port });
       },
     );
   }
 })();
+
+function boundedFailureCode(value: unknown): string {
+  const candidate = String(value ?? "");
+  return /^[A-Za-z0-9._:-]{1,80}$/.test(candidate) ? candidate : "request_failed";
+}

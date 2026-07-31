@@ -75,9 +75,9 @@ export default function LegalDocLayout({ fetchPath, title }: LegalDocLayoutProps
         setHtml(withHeadingIds(data.html));
         setLastUpdated(data.lastUpdated);
         setEffectiveDate(data.effectiveDate);
-      } catch (error) {
+      } catch {
         if (import.meta.env.DEV) {
-          console.error(`[LegalDocLayout] Failed to load ${title}:`, error);
+          console.error("Legal document load failed");
         }
         setHtml(`<p>Failed to load ${title}</p>`);
       } finally {

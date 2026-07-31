@@ -2,7 +2,6 @@ import type { RequestHandler } from "express";
 import { z } from "zod";
 
 const optionalNullableText = z.string().nullable().optional();
-const optionalNullableNonEmptyText = z.string().trim().min(1).nullable().optional();
 
 export const projectPresentationUpdateSchema = z
   .object({
@@ -10,13 +9,6 @@ export const projectPresentationUpdateSchema = z
     image: optionalNullableText,
     hoverImage: optionalNullableText,
     aiSystemPrompt: optionalNullableText,
-  })
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, "At least one Portfolio presentation field is required");
-
-export const allSkillPresentationUpdateSchema = z
-  .object({
-    groupingId: optionalNullableNonEmptyText,
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one Portfolio presentation field is required");

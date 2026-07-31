@@ -1,5 +1,0 @@
-# Portfolio edge
-
-`C:\Users\matth\OneDrive\Desktop\programs\personal_brand\services\portfolio\infra\cloudflare\portfolio-edge` owns the public `2jog.dev` and `www.2jog.dev` front door. It streams requests to Cloud Run `portfolio--prod`, overwrites `x-2jog-origin-token` with required secret `ORIGIN_ACCESS_TOKEN`, exposes `/__edge/health` for release verification, and adds `x-2jog-edge: portfolio-edge` to responses. Direct Cloud Run requests without that credential return HTTP 401.
-
-Run `npm ci`, `npm test`, and `npm run check` in this directory. Tests execute in the Cloudflare Workers Vitest runtime. The Worker validates Admin Dashboard's RS256 cookie before forwarding protected Portfolio paths; the origin validates it again. GitHub deployment uses the typed deployment bundle, snapshots exact route owners, verifies both custom domains, and records non-secret rollback state for three days. During rollback the prior Worker or route owner is restored first while the candidate still accepts the previous edge credential, then Cloud Run traffic returns to the prior revision.

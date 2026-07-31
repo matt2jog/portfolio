@@ -46,7 +46,6 @@ async function buildAll() {
     entryPoints: {
       index: "src/backend/bootstrap.ts",
       migrate: "src/scripts/migrate.ts",
-      migrateLegacyData: "src/scripts/bootstrap-legacy-data.ts",
     },
     platform: "node",
     bundle: true,

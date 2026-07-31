@@ -3,12 +3,6 @@ import type { Request } from "express";
 
 export const TRACKER_COOKIE_NAME = "tr_uuid";
 
-export type TrackingIpCache = Map<string, string>;
-
-export function makeTrackingIpCacheKey(uuid: string, ip: string): string {
-  return `${uuid}::${ip}`;
-}
-
 export function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -25,5 +19,6 @@ export function generateHashedUuid(): string {
 }
 
 export function getRequestTrackerUuid(req: Request): string | undefined {
-  return parseCookies(req.headers.cookie)[TRACKER_COOKIE_NAME];
+  const value = parseCookies(req.headers.cookie)[TRACKER_COOKIE_NAME];
+  return /^[0-9a-f]{64}$/.test(value ?? "") ? value : undefined;
 }

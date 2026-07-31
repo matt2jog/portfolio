@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "check": "tsc",
     "test:ui": "playwright test --config src/tests/ui-test/playwright.config.ts",
+    "test:live-smoke": "tsx src/tests/live-smoke.ts",
     "test:client-unit": "tsx --test src/tests/client-unit/*.test.ts",
     "test:client-unit-coverage": "c8 --include='src/client/src/**/*.{ts,tsx}' --exclude='src/tests/**' --reporter=json --reports-dir=coverage/client/unit npm run test:client-unit",
     "build:client-coverage": "cross-env VITE_COVERAGE=1 vite build",
@@ -22,10 +23,7 @@
     "test:backend-integration": "tsx --test --test-concurrency=1 src/tests/backend-integration/*.test.ts",
     "test:coverage": "c8 --check-coverage --lines 70 --branches 70 --functions 70 --statements 70 --reporter text --reporter json-summary npm run test:backend-unit",
     "db:migrate": "tsx src/scripts/migrate.ts",
-    "db:test:provision": "tsx src/scripts/provision-local-test-database.ts",
-    "db:migrate-legacy-data": "tsx src/scripts/bootstrap-legacy-data.ts",
-    "legal:record": "tsx --env-file=.env src/scripts/legal/record-versions.ts",
-    "legal:record:bundle": "tsx src/scripts/legal/record-versions-from-bundle.ts"
+    "db:test:provision": "tsx src/scripts/provision-local-test-database.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -75,7 +73,6 @@
     "jose": "^6.2.3",
     "jsdom": "^29.1.1",
     "katex": "^0.16.44",
-    "langsmith": "^0.6.0",
     "logrocket": "^12.0.0",
     "lucide-react": "^0.545.0",
     "memorystore": "^1.6.7",
@@ -105,9 +102,6 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.60.0",
-    "@replit/vite-plugin-cartographer": "^0.4.4",
-    "@replit/vite-plugin-dev-banner": "^0.1.1",
-    "@replit/vite-plugin-runtime-error-modal": "^0.0.4",
     "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^5.0.0",
     "@types/istanbul-lib-coverage": "2.0.6",

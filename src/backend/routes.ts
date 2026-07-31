@@ -3,15 +3,19 @@ import type { Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
-import { getRequestTrackerUuid, registerTrackedUuid, upsertTrEn } from "./tracking";
+import {
+  getRequestTrackerUuid,
+  issueTrackingCookie,
+  registerTrackedUuid,
+  upsertTrEn,
+} from "./tracking";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
 import {
-  allSkillPresentationUpdateSchema,
   canonicalCareerMutationRejected,
   isForeignKeyViolation,
   projectPresentationUpdateSchema,
 } from "./career-authority";
-import { extractClientCountry, extractClientIp, isLocalIp } from "./geoip";
+import { publicGeoIpHint } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
@@ -19,11 +23,13 @@ import {
   allSkills,
   bio,
   bioParagraphs,
+  insertAllSkillSchema,
   insertPortfolioSkillSchema,
   insertSkillsGroupSchema,
   portfolioSkills,
   projects,
   skillsGroup,
+  updateAllSkillSchema,
   updatePortfolioSkillSchema,
   updateSkillsGroupSchema,
   auditLogs,
@@ -41,7 +47,6 @@ import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./
 import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
 import { evaluateResponse, randomEvaluatorStatus, randomDiagramStatus } from "./agent/evaluator";
-import { pushPromptVersion, createRun } from "./agent/tracing";
 import {
   GitHubRepoTool,
   GitHubFileTreeTool,
@@ -60,15 +65,8 @@ const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
 const MAX_EVALUATION_REWRITE_ATTEMPTS = 2;
 const EMPTY_CHAT_RESPONSE_FALLBACK = "I hit an internal quality-check issue before finalizing a response. Please try that again.";
-const EVALUATION_TRACE_RESPONSE_LIMIT = 2000;
 let projectsCache: { data: any[]; timestamp: number } | null = null;
 type PromptSuggestion = { label: string; prompt: string };
-
-function toTraceResponsePreview(value: string): string {
-  if (value.length <= EVALUATION_TRACE_RESPONSE_LIMIT) return value;
-  const remaining = value.length - EVALUATION_TRACE_RESPONSE_LIMIT;
-  return `${value.slice(0, EVALUATION_TRACE_RESPONSE_LIMIT)}\n...[truncated ${remaining} chars]`;
-}
 
 /* ------------------------------------------------------------------ */
 /*  AI provider singleton                                               */
@@ -150,39 +148,22 @@ async function finalizeAssistantResponseSafely(
   options: {
     modelId: string;
     provider: LLMProvider;
-    parentRun?: import("langsmith/run_trees").RunTree;
   },
 ) {
   const original = content.trim();
   if (!original) {
-    return {
-      content: "",
-      repaired: false,
-      downgraded: false,
-      mermaidRepairFailed: false,
-    };
+    return { content: "" };
   }
 
   try {
     const finalized = await ensureRenderableMermaid(original, {
       modelId: options.modelId,
       provider: options.provider,
-      parentRun: options.parentRun,
     });
 
-    return {
-      content: finalized.content.trim() || original,
-      repaired: finalized.repaired,
-      downgraded: finalized.downgraded,
-      mermaidRepairFailed: false,
-    };
+    return { content: finalized.content.trim() || original };
   } catch {
-    return {
-      content: original,
-      repaired: false,
-      downgraded: false,
-      mermaidRepairFailed: true,
-    };
+    return { content: original };
   }
 }
 
@@ -200,28 +181,31 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.get("/auth/google", authRoutes.start);
-  app.get("/auth/google/callback", authRoutes.callback);
+  app.get("/auth/login", authRoutes.start);
+  app.get("/auth/callback", authRoutes.callback);
+  app.get("/auth/google", authRoutes.legacyStart);
+  app.get("/auth/google/callback", authRoutes.legacyCallback);
 
   // ========== AUTH ==========
   app.get("/api/auth/me", requireAuth, (req, res) => {
     return res.json({
       id: req.user?.id,
-      email: req.user?.email,
+      subject: req.auth0Identity?.subject ?? req.user?.googleSub,
       name: req.user?.name,
       role: req.user?.role,
+      auth_method: req.auth0Identity ? "auth0" : "legacy-google",
     });
   });
 
   app.post("/api/auth/logout", (req, res) => {
     return authRoutes.logout(req, res);
   });
+  app.post("/auth/logout", (req, res) => {
+    return authRoutes.logout(req, res);
+  });
 
   // ========== LEGAL DOCUMENTS ==========
-  // Returns { html, lastUpdated, effectiveDate }. The two date fields are
-  // maintained by the legal-audit GitHub Actions workflow (sed on push to
-  // prod); the server just surfaces them. The SPA routes
-  // (/privacy, /terms, /tracking) are served by the client-side app.
+  // The API serves the checked-in legal text used by the matching SPA routes.
   const sendLegalDoc = (filename: string, notFoundMsg: string) => (_req: Request, res: Response) => {
     const doc = loadLegalDoc(filename);
     if (!doc) return res.status(404).json({ message: notFoundMsg });
@@ -233,10 +217,8 @@ export async function registerRoutes(
   app.get("/api/legal/tracking", sendLegalDoc("TRACKING_NOTICE_AND_CONSENT.md", "Tracking Notice not found"));
 
   // ========== GEOLOCATION ==========
-  app.get("/api/public/geoip", async (req, res) => {
-    const ip = extractClientIp(req);
-    const countryCode = isLocalIp(ip) ? "US" : extractClientCountry(req);
-    res.json({ ip, country_code: countryCode });
+  app.get("/api/public/geoip", (_req, res) => {
+    res.json(publicGeoIpHint());
   });
 
   // ========== POLICY ACCEPTANCE ==========
@@ -316,14 +298,21 @@ export async function registerRoutes(
           skill_name: allSkills.name,
           group_id: skillsGroup.id,
           group_name: skillsGroup.name,
+          group_position: skillsGroup.position,
+          skill_position: portfolioSkills.position,
         })
         .from(portfolioSkills)
         .innerJoin(allSkills, eq(portfolioSkills.allSkillId, allSkills.id))
-        .leftJoin(skillsGroup, eq(allSkills.groupingId, skillsGroup.id));
+        .leftJoin(skillsGroup, eq(portfolioSkills.groupId, skillsGroup.id))
+        .where(sql`${portfolioSkills.deletedAt} IS NULL`)
+        .orderBy(asc(skillsGroup.position), asc(portfolioSkills.position), asc(allSkills.name));
 
       res.json(skills);
-    } catch (error) {
-      console.error("Error fetching skills constellation:", error);
+    } catch {
+      console.error(JSON.stringify({
+        event: "portfolio.skills_constellation_failed",
+        failure_code: "skills_unavailable",
+      }));
       res.status(500).json({ error: "Failed to fetch skills constellation" });
     }
   });
@@ -332,8 +321,9 @@ export async function registerRoutes(
     try {
       const data = await getGithubActivity();
       res.json(data);
-    } catch (err: any) {
-      res.status(500).json({ error: "Failed to fetch GitHub activity", details: err.message });
+    } catch {
+      console.error(JSON.stringify({ event: "portfolio.github.activity_failed" }));
+      res.status(500).json({ error: "Failed to fetch GitHub activity" });
     }
   });
 
@@ -342,8 +332,9 @@ export async function registerRoutes(
       const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
       const data = await getGithubTimeline(page);
       res.json(data);
-    } catch (err: any) {
-      res.status(500).json({ error: "Failed to fetch GitHub timeline", details: err.message });
+    } catch {
+      console.error(JSON.stringify({ event: "portfolio.github.timeline_failed" }));
+      res.status(500).json({ error: "Failed to fetch GitHub timeline" });
     }
   });
 
@@ -351,11 +342,12 @@ export async function registerRoutes(
     try {
       const data = await getLinkedinActivity();
       res.json(data);
-    } catch (err: any) {
-      if (err.message && err.message.includes("403")) {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("403")) {
         return res.status(403).json({ error: "LinkedIn features in maintenence" });
       }
-      res.status(500).json({ error: "Failed to fetch LinkedIn activity", details: err.message });
+      console.error(JSON.stringify({ event: "portfolio.linkedin.activity_failed" }));
+      res.status(500).json({ error: "Failed to fetch LinkedIn activity" });
     }
   });
 
@@ -364,11 +356,12 @@ export async function registerRoutes(
       const page = Math.max(1, Math.min(10, parseInt(req.query.page as string) || 1));
       const data = await getLinkedinTimeline(page);
       res.json(data);
-    } catch (err: any) {
-      if (err.message && err.message.includes("403")) {
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("403")) {
         return res.status(403).json({ error: "LinkedIn features in maintenence" });
       }
-      res.status(500).json({ error: "Failed to fetch LinkedIn timeline", details: err.message });
+      console.error(JSON.stringify({ event: "portfolio.linkedin.timeline_failed" }));
+      res.status(500).json({ error: "Failed to fetch LinkedIn timeline" });
     }
   });
 
@@ -510,8 +503,6 @@ export async function registerRoutes(
       ].join("\n"),
       maxTokens: 400,
       temperature: 0.7,
-      tracingTags: ["project-chat", "prompt-suggestions", modelId],
-      tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
     // Register the promise before awaiting so concurrent requests share it
@@ -540,9 +531,9 @@ export async function registerRoutes(
       const suggestions = await computePromise;
       promptSuggestionsCache.set(cacheKey, suggestions);
       res.json({ hash: promptInputsHash, suggestions });
-    } catch (err: any) {
+    } catch (error) {
       const fallback = fallbackPromptSuggestions(project.title);
-      const rateLimited = suggestionsAgent.isRateLimitError(err);
+      const rateLimited = suggestionsAgent.isRateLimitError(error);
       if (!rateLimited) {
         promptSuggestionsCache.set(cacheKey, fallback);
       }
@@ -550,7 +541,7 @@ export async function registerRoutes(
         hash: promptInputsHash,
         suggestions: fallback,
         fallback: true,
-        error: rateLimited ? suggestionsAgent.rateLimitMessage : err.message,
+        error: rateLimited ? suggestionsAgent.rateLimitMessage : "Suggestions unavailable",
       });
     } finally {
       promptSuggestionsInflight.delete(cacheKey);
@@ -600,13 +591,6 @@ export async function registerRoutes(
 
     const systemPrompt = basePrompt + generalInformation + rules;
 
-    // Push system prompt as a versioned entry in LangSmith Hub (fire-and-forget)
-    const promptIdentifier = `project-${project.id}-system`;
-    pushPromptVersion(promptIdentifier, systemPrompt, {
-      description: `System prompt for project: ${project.title}`,
-      tags: ["project-chat", project.title],
-    });
-
     const tools = [
       new ProjectContextTool(),
       ...(project.githubUrl ? [
@@ -626,8 +610,6 @@ export async function registerRoutes(
       tools,
       maxTokens: 4096,
       maxToolRounds: 12,
-      tracingTags: ["project-chat", modelId, provider.constructor.name, project.title],
-      tracingMeta: { projectId: project.id, projectTitle: project.title, provider: provider.constructor.name },
     });
 
     const welcomeOwnerInstruction = owner
@@ -644,23 +626,6 @@ export async function registerRoutes(
         content: String(m.content).slice(0, 4000),
       }));
 
-    const trackerUuid = getRequestTrackerUuid(req);
-    const chatRun = createRun({
-      name: welcome ? "welcome-summary" : "project-chat",
-      runType: "chain",
-      inputs: { messages: userMessages },
-      tags: ["project-chat", modelId, provider.constructor.name, project.title],
-      metadata: {
-        projectId: project.id,
-        projectTitle: project.title,
-        provider: provider.constructor.name,
-        modelId,
-        ...(trackerUuid ? { trackerUuid } : {}),
-      },
-    });
-    if (chatRun) await chatRun.postRun().catch(() => {});
-
-    // Wrap primeContext in its own named trace span when not a welcome message
     let seed: any[] = [];
     if (!welcome) {
       const isFirstTurn = !userMessages.some((m) => m.role === "assistant");
@@ -673,20 +638,7 @@ export async function registerRoutes(
           primeCalls.push({ name: "github_repo_overview", args: { owner: ghMatch[1], repo: ghMatch[2] } });
         }
       }
-      const primeRun = createRun({
-        name: "prime-context",
-        runType: "chain",
-        inputs: { projectId: project.id, hasGithub: !!project.githubUrl, calls: primeCalls.map((c) => c.name) },
-        parent: chatRun ?? undefined,
-        tags: ["project-chat", "prime-context", modelId],
-        metadata: { projectId: project.id, modelId },
-      });
-      if (primeRun) await primeRun.postRun().catch(() => {});
-      seed = await agent.primeContext(primeCalls, primeRun ?? undefined) as any;
-      if (primeRun) {
-        await primeRun.end({ output: { seedMessages: seed.length } }).catch(() => {});
-        await primeRun.patchRun().catch(() => {});
-      }
+      seed = await agent.primeContext(primeCalls) as any;
     }
 
     try {
@@ -699,24 +651,17 @@ export async function registerRoutes(
           role: "user",
           content: `Project Details: ${JSON.stringify(project)}\n\n[WELCOME_SUMMARY] Write exactly one short paragraph with no lists or headers. Summarize this project for a non-technical hiring manager: what it does and why it matters.`,
         }];
-        const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any, chatRun ?? undefined)).trim() || project.description;
+        const aiSummary = (await agent.run([...seed, ...welcomeSummaryMessages] as any)).trim() || project.description;
         const welcomeMessages = buildWelcomeMessages({ aiSummary, owner });
         writeSseAssistantMessages(res, welcomeMessages);
-        
-        if (chatRun) {
-          try {
-            await chatRun.end({ output: welcomeMessages.join("\n\n") });
-            await chatRun.patchRun();
-          } catch { /* silent */ }
-        }
-        
+
         res.end();
         return;
       }
 
       let bufferedAssistantText = "";
       writeSseAgentPhase(res, "thinking");
-      for await (const event of agent.stream([...seed, ...userMessages] as any, chatRun ?? undefined)) {
+      for await (const event of agent.stream([...seed, ...userMessages] as any)) {
         if (event.type === "tool_call") {
           res.write(`event: tool_call\ndata: ${JSON.stringify({ name: event.name, args: event.args })}\n\n`);
         } else {
@@ -732,18 +677,14 @@ export async function registerRoutes(
       const finalizedAssistantText = await finalizeAssistantResponseSafely(bufferedAssistantText, {
         modelId,
         provider,
-        parentRun: chatRun ?? undefined,
       });
 
       let responseContent = finalizedAssistantText.content;
-      let mermaidRepaired = finalizedAssistantText.repaired;
-      let mermaidDowngraded = finalizedAssistantText.downgraded;
-      let mermaidRepairFailed = finalizedAssistantText.mermaidRepairFailed;
 
       // Safety net: if streaming produced no assistant text, force one non-streaming regeneration attempt.
       if (!responseContent) {
         try {
-          const regenerated = (await agent.run([...seed, ...userMessages] as any, chatRun ?? undefined)).trim();
+          const regenerated = (await agent.run([...seed, ...userMessages] as any)).trim();
           if (regenerated) {
             if (regenerated.includes("```mermaid")) {
               writeSseAgentPhase(res, "diagramming");
@@ -752,12 +693,8 @@ export async function registerRoutes(
             const regeneratedFinal = await finalizeAssistantResponseSafely(regenerated, {
               modelId,
               provider,
-              parentRun: chatRun ?? undefined,
             });
             responseContent = regeneratedFinal.content;
-            mermaidRepaired = mermaidRepaired || regeneratedFinal.repaired;
-            mermaidDowngraded = mermaidDowngraded || regeneratedFinal.downgraded;
-            mermaidRepairFailed = mermaidRepairFailed || regeneratedFinal.mermaidRepairFailed;
           }
         } catch {
           // Ignore regeneration failures and fall back to a static message below.
@@ -769,30 +706,13 @@ export async function registerRoutes(
       const evalStatus = randomEvaluatorStatus();
       writeSseEvaluatorStatus(res, evalStatus);
 
-      // Run evaluator and capture result for tracing - never let it break the response
+      // Quality evaluation must never prevent a usable response.
       let evalResult = await evaluateResponse({
         response: responseContent,
         userMessages,
         modelId,
         provider,
-        parentRun: chatRun ?? undefined,
       }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
-
-      const evaluationRounds: Array<{
-        round: number;
-        source: "initial" | "rewrite";
-        pass: boolean;
-        score: number;
-        violations: unknown[];
-        responsePreview: string;
-      }> = [{
-        round: 0,
-        source: "initial",
-        pass: evalResult.pass,
-        score: evalResult.score,
-        violations: evalResult.violations,
-        responsePreview: toTraceResponsePreview(responseContent),
-      }];
 
       let evaluationRewriteAttempts = 0;
       while (responseContent && !evalResult.pass && evaluationRewriteAttempts < MAX_EVALUATION_REWRITE_ATTEMPTS) {
@@ -813,7 +733,7 @@ export async function registerRoutes(
                 JSON.stringify(evalResult.violations),
               ].join("\n"),
             },
-          ] as any, chatRun ?? undefined)).trim();
+          ] as any)).trim();
         } catch {
           // Keep the last known-good response if rewrite generation fails.
           break;
@@ -829,15 +749,11 @@ export async function registerRoutes(
         const revisedFinal = await finalizeAssistantResponseSafely(revised, {
           modelId,
           provider,
-          parentRun: chatRun ?? undefined,
         });
         const revisedContent = revisedFinal.content;
         if (!revisedContent) break;
 
         responseContent = revisedContent;
-        mermaidRepaired = mermaidRepaired || revisedFinal.repaired;
-        mermaidDowngraded = mermaidDowngraded || revisedFinal.downgraded;
-        mermaidRepairFailed = mermaidRepairFailed || revisedFinal.mermaidRepairFailed;
         evaluationRewriteAttempts += 1;
 
         evalResult = await evaluateResponse({
@@ -845,17 +761,7 @@ export async function registerRoutes(
           userMessages,
           modelId,
           provider,
-          parentRun: chatRun ?? undefined,
         }).catch(() => ({ pass: true, score: 1.0, violations: [] as any[] }));
-
-        evaluationRounds.push({
-          round: evaluationRewriteAttempts,
-          source: "rewrite",
-          pass: evalResult.pass,
-          score: evalResult.score,
-          violations: evalResult.violations,
-          responsePreview: toTraceResponsePreview(responseContent),
-        });
       }
 
       if (!responseContent) {
@@ -864,60 +770,19 @@ export async function registerRoutes(
 
       writeSseAssistantMessage(res, responseContent);
       res.end();
-
-      // Patch the top-level chatRun with the final output + eval result
-      if (chatRun) {
-        let acceptedRound: {
-          round: number;
-          source: "initial" | "rewrite";
-          pass: boolean;
-          score: number;
-          violations: unknown[];
-          responsePreview: string;
-        } | null = null;
-        for (let i = evaluationRounds.length - 1; i >= 0; i -= 1) {
-          if (evaluationRounds[i].pass) {
-            acceptedRound = evaluationRounds[i];
-            break;
-          }
-        }
-
-        const chatOutput = {
-          output: responseContent,
-          evaluation: {
-            pass: evalResult.pass,
-            score: evalResult.score,
-            violations: evalResult.violations,
-            rewriteAttempts: evaluationRewriteAttempts,
-            rounds: evaluationRounds,
-            acceptedRound,
-            finalResponsePreview: toTraceResponsePreview(responseContent),
-            mermaidRepaired,
-            mermaidDowngraded,
-            mermaidRepairFailed,
-          },
-        };
-        await chatRun.end(chatOutput).catch(() => {});
-        await chatRun.patchRun().catch(() => {});
-      }
       return;
-    } catch (err: any) {
-      if (agent.isRateLimitError(err)) {
+    } catch (error) {
+      if (agent.isRateLimitError(error)) {
         writeSseAssistantMessage(res, agent.rateLimitMessage);
         res.end();
         return;
       }
 
       if (!res.headersSent) {
-        res.status(500).json({ error: "AI request failed", details: err.message });
+        console.error(JSON.stringify({ event: "portfolio.ai.request_failed" }));
+        res.status(500).json({ error: "AI request failed" });
       } else {
         res.end();
-      }
-    } finally {
-      // Only end chatRun here if not already patched in the success path above
-      if (chatRun && !res.writableEnded) {
-        await chatRun.end().catch(() => {});
-        await chatRun.patchRun().catch(() => {});
       }
     }
   });
@@ -954,18 +819,10 @@ export async function registerRoutes(
     res.json(buildPublicPersonalInformationResponse(row));
   });
 
-  app.get("/api/public/ip", (req, res) => {
-    res.json({ ip: extractClientIp(req) });
-  });
-
   // ========== BROWSER TRACKING ==========
   app.post("/api/public/tracking/init", async (req, res) => {
-    const uuid = getRequestTrackerUuid(req);
-    if (!uuid) return res.status(400).json({ error: "No tracking cookie present" });
-
-    const ip = extractClientIp(req) || undefined;
-
-    await registerTrackedUuid(uuid, ip);
+    const uuid = issueTrackingCookie(req, res);
+    await registerTrackedUuid(uuid);
     return res.json({ ok: true });
   });
 
@@ -1072,15 +929,26 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/skills-groups", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(skillsGroup).orderBy(asc(skillsGroup.name));
+    const rows = await db.select().from(skillsGroup)
+      .orderBy(asc(skillsGroup.position), asc(skillsGroup.name));
     res.json(rows);
   });
 
   app.post("/api/admin/skills-groups", requireAdmin, async (req, res) => {
     const parsed = insertSkillsGroupSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
+    const [duplicate] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
+      .where(sql`lower(trim(${skillsGroup.name})) = lower(trim(${parsed.data.name}))`)
+      .limit(1);
+    if (duplicate) return res.status(409).json({ message: "A display group with that name already exists" });
 
-    const [created] = await db.insert(skillsGroup).values(parsed.data).returning();
+    const [maxRow] = await db
+      .select({ max: sql<number>`max(${skillsGroup.position})` })
+      .from(skillsGroup);
+    const [created] = await db
+      .insert(skillsGroup)
+      .values({ ...parsed.data, position: (maxRow?.max ?? -1) + 1 })
+      .returning();
     await logAudit(req, "skillsGroup.create", created);
     res.json(created);
   });
@@ -1089,10 +957,19 @@ export async function registerRoutes(
     const groupId = routeId(req.params.id);
     const parsed = updateSkillsGroupSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
+    if (parsed.data.name) {
+      const [duplicate] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
+        .where(and(
+          sql`lower(trim(${skillsGroup.name})) = lower(trim(${parsed.data.name}))`,
+          sql`${skillsGroup.id} <> ${groupId}`,
+        ))
+        .limit(1);
+      if (duplicate) return res.status(409).json({ message: "A display group with that name already exists" });
+    }
 
     const [updated] = await db
       .update(skillsGroup)
-      .set(parsed.data)
+      .set({ ...parsed.data, updatedAt: new Date() })
       .where(eq(skillsGroup.id, groupId))
       .returning();
 
@@ -1102,69 +979,165 @@ export async function registerRoutes(
 
   app.delete("/api/admin/skills-groups/:id", requireAdmin, async (req, res) => {
     const groupId = routeId(req.params.id);
-    await db.transaction(async (tx) => {
-      await tx.update(allSkills).set({ groupingId: null }).where(eq(allSkills.groupingId, groupId));
-      await tx.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
-    });
+    const [membership] = await db.select({ id: portfolioSkills.id }).from(portfolioSkills)
+      .where(and(
+        eq(portfolioSkills.groupId, groupId),
+        sql`${portfolioSkills.deletedAt} IS NULL`,
+      ))
+      .limit(1);
+    if (membership) {
+      return res.status(409).json({ message: "Move or remove this group's visible skills before deleting it" });
+    }
+    const [deleted] = await db.delete(skillsGroup)
+      .where(eq(skillsGroup.id, groupId))
+      .returning({ id: skillsGroup.id });
+    if (!deleted) return res.status(404).json({ message: "Display group not found" });
     await logAudit(req, "skillsGroup.delete", { id: groupId });
     res.json({ ok: true });
   });
 
-  app.get("/api/admin/all-skills", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(allSkills).orderBy(asc(allSkills.name));
-    const groups = await db.select().from(skillsGroup);
-    const groupsById = new Map(groups.map((group) => [group.id, group]));
-    res.json(
-      rows.map((row) => ({
-        ...row,
-        groupingName: row.groupingId ? groupsById.get(row.groupingId)?.name ?? null : null,
-      })),
-    );
+  app.post("/api/admin/skills-groups/reorder", requireAdmin, async (req, res) => {
+    const order: string[] = Array.isArray(req.body?.order)
+      ? req.body.order.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    await db.transaction(async (tx) => {
+      await Promise.all(
+        order.map((id, index) =>
+          tx.update(skillsGroup).set({ position: index }).where(eq(skillsGroup.id, id))
+        ),
+      );
+    });
+    await logAudit(req, "skillsGroup.reorder", { order });
+    res.json({ ok: true });
   });
 
-  app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected);
-
-  app.put("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
-    const allSkillId = routeId(req.params.id);
-    const parsed = allSkillPresentationUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [existingSkill] = await db
-      .select({ id: allSkills.id })
+  app.get("/api/admin/all-skills", requireAdmin, async (_req, res) => {
+    const rows = await db.select({
+      id: allSkills.id,
+      name: allSkills.name,
+      groupingId: allSkills.groupingId,
+      groupingName: skillsGroup.name,
+    })
       .from(allSkills)
-      .where(eq(allSkills.id, allSkillId))
-      .limit(1);
-    if (!existingSkill) return res.status(404).json({ message: "Skill not found" });
+      .leftJoin(skillsGroup, eq(allSkills.groupingId, skillsGroup.id))
+      .orderBy(asc(allSkills.name));
+    const references = await db
+      .select({
+        allSkillId: portfolioSkills.allSkillId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(portfolioSkills)
+      .groupBy(portfolioSkills.allSkillId);
+    const referencesBySkill = new Map(
+      references.map((row) => [row.allSkillId, Number(row.count)]),
+    );
+    res.json(rows.map((row) => ({
+      ...row,
+      portfolioReferences: referencesBySkill.get(row.id) ?? 0,
+    })));
+  });
 
+  app.post("/api/admin/all-skills", requireAdmin, async (req, res) => {
+    const parsed = insertAllSkillSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
     if (parsed.data.groupingId) {
-      const [existingGroup] = await db
-        .select({ id: skillsGroup.id })
-        .from(skillsGroup)
+      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
         .where(eq(skillsGroup.id, parsed.data.groupingId))
         .limit(1);
-      if (!existingGroup) return res.status(400).json({ message: "Invalid skills_group reference" });
+      if (!group) return res.status(400).json({ message: "Choose an existing skill group" });
+    }
+    const [duplicate] = await db.select({ id: allSkills.id }).from(allSkills)
+      .where(sql`lower(trim(${allSkills.name})) = lower(trim(${parsed.data.name}))`)
+      .limit(1);
+    if (duplicate) return res.status(409).json({ message: "A skill with that name already exists" });
+
+    const [created] = await db.insert(allSkills).values(parsed.data).returning();
+    await logAudit(req, "allSkill.create", {
+      id: created.id,
+      name: created.name,
+      groupingId: created.groupingId,
+    });
+    const [hydrated] = await hydrateCanonicalSkills([created]);
+    res.status(201).json(hydrated);
+  });
+
+  app.put("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
+    const skillId = routeId(req.params.id);
+    const parsed = updateAllSkillSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(parsed.error);
+    if (parsed.data.groupingId) {
+      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
+        .where(eq(skillsGroup.id, parsed.data.groupingId))
+        .limit(1);
+      if (!group) return res.status(400).json({ message: "Choose an existing skill group" });
+    }
+    if (parsed.data.name) {
+      const [duplicate] = await db.select({ id: allSkills.id }).from(allSkills)
+        .where(and(
+          sql`lower(trim(${allSkills.name})) = lower(trim(${parsed.data.name}))`,
+          sql`${allSkills.id} <> ${skillId}`,
+        ))
+        .limit(1);
+      if (duplicate) return res.status(409).json({ message: "A skill with that name already exists" });
     }
 
-    let updated;
+    const [updated] = await db
+      .update(allSkills)
+      .set(parsed.data)
+      .where(eq(allSkills.id, skillId))
+      .returning();
+    if (!updated) return res.status(404).json({ message: "Skill not found" });
+    await logAudit(req, "allSkill.update", {
+      id: skillId,
+      name: updated.name,
+      groupingId: updated.groupingId,
+    });
+    const [hydrated] = await hydrateCanonicalSkills([updated]);
+    res.json(hydrated);
+  });
+
+  app.delete("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
+    const skillId = routeId(req.params.id);
+    const [portfolioReference] = await db
+      .select({ id: portfolioSkills.id })
+      .from(portfolioSkills)
+      .where(eq(portfolioSkills.allSkillId, skillId))
+      .limit(1);
+    if (portfolioReference) {
+      return res.status(409).json({
+        message: "Remove this skill from the Portfolio map before deleting it",
+      });
+    }
+
     try {
-      [updated] = await db
-        .update(allSkills)
-        .set(parsed.data)
-        .where(eq(allSkills.id, allSkillId))
-        .returning();
+      const [deleted] = await db
+        .delete(allSkills)
+        .where(eq(allSkills.id, skillId))
+        .returning({ id: allSkills.id });
+      if (!deleted) return res.status(404).json({ message: "Skill not found" });
     } catch (error) {
-      if (isForeignKeyViolation(error, "all_skills_grouping_id_skills_group_id_fk")) {
-        return res.status(400).json({ message: "Invalid skills_group reference" });
+      if (isForeignKeyViolation(
+        error,
+        "portfolio_skills_all_skill_id_all_skills_id_fk",
+      )) {
+        return res.status(409).json({
+          message: "Remove this skill from the Portfolio map before deleting it",
+        });
+      }
+      if (isForeignKeyViolation(
+        error,
+        "doc_skill_category_variants_variant_id_all_skills_id_fk",
+      )) {
+        return res.status(409).json({
+          message: "This skill is used by a Resume. Remove those Resume references first.",
+        });
       }
       throw error;
     }
-    if (!updated) return res.status(404).json({ message: "Skill not found" });
 
-    await logAudit(req, "allSkill.presentation.update", { id: allSkillId, ...parsed.data });
-    res.json(updated);
+    await logAudit(req, "allSkill.delete", { id: skillId });
+    res.json({ ok: true });
   });
-
-  app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
 
   app.post("/api/admin/skills", requireAdmin, async (req, res) => {
     const parsed = insertPortfolioSkillSchema.safeParse(req.body);
@@ -1175,10 +1148,30 @@ export async function registerRoutes(
       .limit(1);
     if (!allSkill) return res.status(400).json({ message: "Invalid all_skill reference" });
 
+    if (parsed.data.groupId) {
+      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
+        .where(eq(skillsGroup.id, parsed.data.groupId))
+        .limit(1);
+      if (!group) return res.status(400).json({ message: "Invalid skills_group reference" });
+    }
+
+    const [existingMembership] = await db.select({ id: portfolioSkills.id }).from(portfolioSkills)
+      .where(and(
+        eq(portfolioSkills.allSkillId, parsed.data.allSkillId),
+        sql`${portfolioSkills.deletedAt} IS NULL`,
+      ))
+      .limit(1);
+    if (existingMembership) {
+      return res.status(409).json({ message: "Skill is already visible in Portfolio" });
+    }
+
     const [maxRow] = await db
       .select({ max: sql<number>`max(${portfolioSkills.position})` })
-      .from(portfolioSkills);
-    const nextPos = (maxRow?.max ?? 0) + 1;
+      .from(portfolioSkills)
+      .where(parsed.data.groupId
+        ? eq(portfolioSkills.groupId, parsed.data.groupId)
+        : isNull(portfolioSkills.groupId));
+    const nextPos = (maxRow?.max ?? -1) + 1;
 
     let created;
     try {
@@ -1203,6 +1196,16 @@ export async function registerRoutes(
     const parsed = updatePortfolioSkillSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
 
+    const [existingMembership] = await db.select({
+      id: portfolioSkills.id,
+      groupId: portfolioSkills.groupId,
+    }).from(portfolioSkills)
+      .where(eq(portfolioSkills.id, skillId))
+      .limit(1);
+    if (!existingMembership) {
+      return res.status(404).json({ message: "Portfolio skill not found" });
+    }
+
     if (parsed.data.allSkillId) {
       const [allSkill] = await db.select().from(allSkills)
         .where(eq(allSkills.id, parsed.data.allSkillId))
@@ -1210,21 +1213,46 @@ export async function registerRoutes(
       if (!allSkill) return res.status(400).json({ message: "Invalid all_skill reference" });
     }
 
+    if (parsed.data.groupId) {
+      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
+        .where(eq(skillsGroup.id, parsed.data.groupId))
+        .limit(1);
+      if (!group) return res.status(400).json({ message: "Invalid skills_group reference" });
+    }
+
+    let updateValues: Partial<typeof portfolioSkills.$inferInsert> = parsed.data;
+    if (
+      parsed.data.groupId !== undefined
+      && parsed.data.groupId !== existingMembership.groupId
+    ) {
+      const [maxRow] = await db
+        .select({ max: sql<number>`max(${portfolioSkills.position})` })
+        .from(portfolioSkills)
+        .where(eq(portfolioSkills.groupId, parsed.data.groupId));
+      updateValues = {
+        ...parsed.data,
+        position: (maxRow?.max ?? -1) + 1,
+      };
+    }
+
     let updated;
     try {
       [updated] = await db
         .update(portfolioSkills)
-        .set(parsed.data)
+        .set(updateValues)
         .where(eq(portfolioSkills.id, skillId))
         .returning();
     } catch (error) {
       if (isForeignKeyViolation(error, "portfolio_skills_all_skill_id_all_skills_id_fk")) {
         return res.status(400).json({ message: "Invalid all_skill reference" });
       }
+      if (isForeignKeyViolation(error, "portfolio_skills_group_id_skills_group_id_fk")) {
+        return res.status(400).json({ message: "Invalid skills_group reference" });
+      }
       throw error;
     }
 
-    await logAudit(req, "portfolioSkill.update", { id: skillId, ...parsed.data });
+    await logAudit(req, "portfolioSkill.update", { id: skillId, ...updateValues });
     const [hydrated] = await hydratePortfolioSkills([updated]);
     res.json(hydrated);
   });
@@ -1524,9 +1552,11 @@ async function hydratePortfolioSkills(skillRows: any[]) {
     return skillRows.map((row) => ({ ...row, label: "" }));
   }
 
-  const allSkillRows = await db.select().from(allSkills).where(inArray(allSkills.id, allSkillIds));
-  const groupIds = allSkillRows
-    .map((row) => row.groupingId)
+  const allSkillRows = await db.select({ id: allSkills.id, name: allSkills.name })
+    .from(allSkills)
+    .where(inArray(allSkills.id, allSkillIds));
+  const groupIds = skillRows
+    .map((row) => row.groupId)
     .filter((value): value is string => typeof value === "string" && value.length > 0);
   const groupRows = groupIds.length
     ? await db.select().from(skillsGroup).where(inArray(skillsGroup.id, groupIds))
@@ -1537,15 +1567,34 @@ async function hydratePortfolioSkills(skillRows: any[]) {
 
   return skillRows.map((row) => {
     const allSkill = row.allSkillId ? allSkillById.get(row.allSkillId) : undefined;
-    const group = allSkill?.groupingId ? groupById.get(allSkill.groupingId) : undefined;
+    const group = row.groupId ? groupById.get(row.groupId) : undefined;
 
     return {
       ...row,
       label: allSkill?.name ?? "",
       allSkillName: allSkill?.name ?? null,
-      groupingId: allSkill?.groupingId ?? null,
       groupingName: group?.name ?? null,
     };
   });
+}
+
+async function hydrateCanonicalSkills(skillRows: any[]) {
+  if (!Array.isArray(skillRows) || skillRows.length === 0) return [];
+  const groupIds = skillRows
+    .map((row) => row.groupingId)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  const groups = groupIds.length
+    ? await db.select({ id: skillsGroup.id, name: skillsGroup.name })
+      .from(skillsGroup)
+      .where(inArray(skillsGroup.id, groupIds))
+    : [];
+  const groupById = new Map(groups.map((group) => [group.id, group.name]));
+  return skillRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    groupingId: row.groupingId ?? null,
+    groupingName: row.groupingId ? groupById.get(row.groupingId) ?? null : null,
+    portfolioReferences: 0,
+  }));
 }
 

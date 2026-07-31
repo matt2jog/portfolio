@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
+import {
+  portfolioDatabaseBoundary,
+  type PortfolioDatabaseBoundary,
+} from "../shared/database-boundary";
 import { productionSupabaseConnectionConfig } from "../shared/postgres-tls";
 
 const RUNTIME_KEYS = [
@@ -8,9 +12,6 @@ const RUNTIME_KEYS = [
   "ADMIN_IDENTITY_AUDIENCE",
   "ADMIN_IDENTITY_ISSUER",
   "ADMIN_IDENTITY_JWKS_URL",
-  "CAREER_PUBSUB_PUSH_AUDIENCE",
-  "CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT",
-  "CAREER_PUBSUB_SUBSCRIPTION",
   "DATABASE_URL",
   "EDGE_ORIGIN_TOKEN",
   "FIREWORKS_AI_TOKEN",
@@ -19,20 +20,16 @@ const RUNTIME_KEYS = [
   "SUPABASE_CA_SHA256",
   "SUPABASE_PROJECT_REF",
 ] as const;
-const OPTIONAL_RUNTIME_KEYS = ["EDGE_ORIGIN_PREVIOUS_TOKEN"] as const;
-const METADATA_KEYS = ["schema_version", "service", "environment", "boundary"] as const;
+const RUNTIME_INDIVIDUAL_BINDING_KEYS = [
+  "DATABASE_URL",
+  "FIREWORKS_AI_TOKEN",
+  "GRADIENT_AI_TOKEN",
+  "SUPABASE_CA_CERT",
+  "SUPABASE_CA_SHA256",
+] as const satisfies readonly (typeof RUNTIME_KEYS)[number][];
 const ADMIN_AUTHORITY = "https://admin.2jog.dev";
 const ADMIN_AUDIENCE = "2jog-services";
 const ADMIN_JWKS_URL = `${ADMIN_AUTHORITY}/.well-known/jwks.json`;
-const PUBSUB_SERVICE_ACCOUNT = /^[a-z0-9][a-z0-9-]{2,62}@[a-z0-9-]+\.iam\.gserviceaccount\.com$/;
-const PUBSUB_SUBSCRIPTION = /^projects\/[a-z][a-z0-9-]{4,28}[a-z0-9]\/subscriptions\/[A-Za-z][A-Za-z0-9._~+%-]{2,254}$/;
-
-interface RuntimeBundleMetadata {
-  schema_version: number;
-  service: string;
-  environment: string;
-  boundary: string;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -51,37 +48,27 @@ function parseBundle(raw: string): Record<string, unknown> {
   }
 }
 
-function validateMetadata(value: unknown): asserts value is RuntimeBundleMetadata {
-  if (
-    !isRecord(value) ||
-    Object.keys(value).length !== METADATA_KEYS.length ||
-    METADATA_KEYS.some((key) => !(key in value)) ||
-    value.schema_version !== 1 ||
-    value.service !== "portfolio" ||
-    value.environment !== "prod" ||
-    value.boundary !== "runtime"
-  ) {
-    throw new Error("Portfolio runtime bundle metadata is invalid");
-  }
-}
-
 export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = process.env): void {
   const bundle = parseBundle(raw);
-  validateMetadata(bundle._meta);
-
-  const allowed = new Set<string>(["_meta", ...RUNTIME_KEYS, ...OPTIONAL_RUNTIME_KEYS]);
-  const unexpected = Object.keys(bundle).filter((key) => !allowed.has(key));
-  if (unexpected.length > 0) {
-    throw new Error(`Portfolio runtime bundle contains unexpected key(s): ${unexpected.join(", ")}`);
-  }
+  const installed: Record<(typeof RUNTIME_KEYS)[number], string> = {} as Record<
+    (typeof RUNTIME_KEYS)[number],
+    string
+  >;
 
   for (const key of RUNTIME_KEYS) {
     const value = bundle[key];
     if (typeof value !== "string" || value.length === 0) {
       throw new Error(`Portfolio runtime bundle is missing required key: ${key}`);
     }
-    target[key] = value;
+    installed[key] = value;
   }
+  assertMatchingIndividualBindings(
+    target,
+    installed,
+    RUNTIME_INDIVIDUAL_BINDING_KEYS,
+    "runtime",
+  );
+  Object.assign(target, installed);
 
   const previousEdgeToken = bundle.EDGE_ORIGIN_PREVIOUS_TOKEN;
   if (previousEdgeToken === undefined) {
@@ -90,6 +77,21 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
     target.EDGE_ORIGIN_PREVIOUS_TOKEN = previousEdgeToken;
   } else {
     throw new Error("Portfolio runtime bundle EDGE_ORIGIN_PREVIOUS_TOKEN must be a non-empty string when provided");
+  }
+
+  const individualGithubToken = target.GITHUB_TOKEN;
+  const bundledGithubToken = bundle.GITHUB_TOKEN;
+  if (bundledGithubToken === undefined) {
+    if (individualGithubToken !== undefined && individualGithubToken.length === 0) {
+      throw new Error("Individually delivered GITHUB_TOKEN must be a non-empty string when provided");
+    }
+  } else if (typeof bundledGithubToken === "string" && bundledGithubToken.length > 0) {
+    if (individualGithubToken !== undefined && individualGithubToken !== bundledGithubToken) {
+      throw new Error("Bundled and individually delivered GITHUB_TOKEN values must match during cutover");
+    }
+    target.GITHUB_TOKEN = bundledGithubToken;
+  } else {
+    throw new Error("Portfolio runtime bundle GITHUB_TOKEN must be a non-empty string when provided");
   }
 
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(target.EDGE_ORIGIN_TOKEN ?? "")) {
@@ -113,41 +115,50 @@ export function applyRuntimeBundle(raw: string, target: NodeJS.ProcessEnv = proc
   if (target.ADMIN_IDENTITY_JWKS_URL !== ADMIN_JWKS_URL) {
     throw new Error(`Portfolio runtime bundle ADMIN_IDENTITY_JWKS_URL must match the shared JWKS endpoint`);
   }
-  let pushAudience: URL;
-  try {
-    pushAudience = new URL(target.CAREER_PUBSUB_PUSH_AUDIENCE ?? "");
-  } catch {
-    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_AUDIENCE must be an absolute HTTPS URL");
+  validateDatabaseBoundary(target, portfolioDatabaseBoundary(target));
+  if (!/^[A-Za-z0-9-]{1,39}$/.test(target.GITHUB_USERNAME ?? "")) {
+    throw new Error("GITHUB_USERNAME must be provided as an ordinary runtime environment variable");
   }
-  if (
-    pushAudience.protocol !== "https:"
-    || pushAudience.username
-    || pushAudience.password
-    || pushAudience.search
-    || pushAudience.hash
-    || pushAudience.pathname !== "/internal/pubsub/career"
-  ) {
-    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_AUDIENCE must be the exact HTTPS career push endpoint");
+}
+
+function assertMatchingIndividualBindings<
+  T extends Record<string, string>,
+  K extends readonly (keyof T & string)[],
+>(
+  target: NodeJS.ProcessEnv,
+  bundle: T,
+  keys: K,
+  boundary: "runtime" | "migration",
+): void {
+  for (const key of keys) {
+    const direct = target[key];
+    if (direct !== undefined && direct !== bundle[key]) {
+      throw new Error(
+        `Portfolio ${boundary} individual binding ${key} does not match its bundle during cutover`,
+      );
+    }
   }
-  if (!PUBSUB_SERVICE_ACCOUNT.test(target.CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT ?? "")) {
-    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_PUSH_SERVICE_ACCOUNT must be an exact Google service-account email");
-  }
-  if (!PUBSUB_SUBSCRIPTION.test(target.CAREER_PUBSUB_SUBSCRIPTION ?? "")) {
-    throw new Error("Portfolio runtime bundle CAREER_PUBSUB_SUBSCRIPTION must be an exact Pub/Sub subscription resource");
-  }
+}
+
+function validateDatabaseBoundary(
+  target: NodeJS.ProcessEnv,
+  boundary: PortfolioDatabaseBoundary,
+): void {
   try {
     productionSupabaseConnectionConfig({
       databaseUrl: target.DATABASE_URL ?? "",
       projectRef: target.SUPABASE_PROJECT_REF ?? "",
       supabaseCaCert: target.SUPABASE_CA_CERT,
       expectedCaSha256: target.SUPABASE_CA_SHA256,
-      expectedRole: "portfolio_runtime_login",
-      capabilityRole: "portfolio_runtime",
-      searchPath: "portfolio, extensions",
+      expectedRole: boundary.runtimeLogin,
+      capabilityRole: boundary.runtimeRole,
+      searchPath: boundary.searchPath,
     });
   } catch (error) {
     throw new Error(
-      "Portfolio runtime bundle DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role with CA-backed verify-full TLS",
+      "Portfolio runtime DATABASE_URL, SUPABASE_PROJECT_REF, SUPABASE_CA_CERT, "
+      + "and SUPABASE_CA_SHA256 must identify the scoped Supabase runtime role "
+      + "with CA-backed verify-full TLS",
       { cause: error },
     );
   }
@@ -158,6 +169,12 @@ export function loadRuntimeEnvironment(target: NodeJS.ProcessEnv = process.env):
   if (runtimeBundle) {
     delete target.PORTFOLIO_RUNTIME_BUNDLE;
     applyRuntimeBundle(runtimeBundle, target);
+    return;
+  }
+
+  const boundary = portfolioDatabaseBoundary(target);
+  if (boundary.stage === "staging") {
+    validateDatabaseBoundary(target, boundary);
     return;
   }
 

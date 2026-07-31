@@ -1,5 +1,4 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getClientIp } from "./tracking";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -10,7 +9,12 @@ async function throwIfResNotOk(res: Response) {
         if (typeof loginUrl === "string") {
           const parsed = new URL(loginUrl);
           const safeScheme = parsed.protocol === "https:" || (parsed.protocol === "http:" && parsed.hostname === "localhost");
-          if (safeScheme && parsed.pathname === "/auth/google" && parsed.searchParams.has("returnTo")) {
+          if (
+            safeScheme
+            && parsed.origin === window.location.origin
+            && parsed.pathname === "/auth/login"
+            && parsed.searchParams.has("returnTo")
+          ) {
             window.location.assign(parsed.toString());
             throw new Error("Redirecting to sign in");
           }
@@ -23,22 +27,15 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-async function buildHeaders(base: Record<string, string> = {}): Promise<Record<string, string>> {
-  const ip = await getClientIp();
-  return ip ? { ...base, "X-Client-IP": ip } : base;
-}
-
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
   const baseHeaders: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
-  const headers = await buildHeaders(baseHeaders);
-
   const res = await fetch(url, {
     method,
-    headers,
+    headers: baseHeaders,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });

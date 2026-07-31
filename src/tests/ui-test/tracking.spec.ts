@@ -1,19 +1,17 @@
 import { expect, test } from "@playwright/test";
-import { installMockApi, registerClientCoverage, seedBrowserState, TEST_TRACKER_UUID } from "../support/mock-api";
+import { installMockApi, registerClientCoverage, seedBrowserState } from "../support/mock-api";
 
 registerClientCoverage();
 
 async function setup(
   page: import("@playwright/test").Page,
   consent: "accept_all" | "reject_all" | "none" = "none",
-  opts: { trackerUuid?: string | false } = {},
 ) {
   await installMockApi(page);
   await seedBrowserState(page, {
     introSeen: true,
     consent,
     logRocketTestMode: true,
-    ...opts,
   });
 }
 
@@ -23,13 +21,15 @@ function logRocketEvents(page: import("@playwright/test").Page) {
 
 // ── UUID cookie ───────────────────────────────────────────────────────────────
 
-test("tr_uuid cookie is readable from JS after being set", async ({ page }) => {
+test("analytics uses a tab-scoped session id and no readable durable cookie", async ({ page }) => {
   await setup(page, "accept_all");
   await page.goto("/");
-  const uuid = await page.evaluate(() =>
-    document.cookie.split(";").find((c) => c.trim().startsWith("tr_uuid="))?.split("=")[1] ?? null,
-  );
-  expect(uuid).toBe(TEST_TRACKER_UUID);
+  const state = await page.evaluate(() => ({
+    cookie: document.cookie,
+    sessionId: window.sessionStorage.getItem("__portfolio_session_id"),
+  }));
+  expect(state.cookie).not.toContain("tr_uuid=");
+  expect(state.sessionId).toBeTruthy();
 });
 
 // ── Consent break condition ───────────────────────────────────────────────────
@@ -64,7 +64,7 @@ test("user_uuid LogRocket event IS emitted after Accept All", async ({ page }) =
 
   const events = await logRocketEvents(page);
   const uuidEvent = events.find((e) => e.event === "user_uuid");
-  expect(uuidEvent?.payload?.uuid).toBe(TEST_TRACKER_UUID);
+  expect(uuidEvent?.payload?.uuid).toEqual(expect.any(String));
 });
 
 test("user_uuid LogRocket event IS emitted when page loads with pre-existing consent", async ({ page }) => {

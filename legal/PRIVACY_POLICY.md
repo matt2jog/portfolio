@@ -1,7 +1,7 @@
 # Privacy Policy
 
-**Last Updated:** May 19, 2026  
-**Effective Date:** May 20, 2026
+**Last Updated:** July 28, 2026
+**Effective Date:** July 28, 2026
 
 ## 1. Introduction
 
@@ -23,15 +23,14 @@ The Site is operated primarily for users located in the United States and may re
 
 **For all visitors (regardless of consent):**
 
-- **Persistent Browser Identifier (`tr_uuid` cookie):** A randomly generated, anonymized identifier is set in a cookie on every visit. It never expires. Without consent, this identifier is not linked to any behavioral or analytics data.
-- **IP Address & Request Timestamps:** Your IP address and the time of each API request are logged for security and rate-limiting purposes. This log is minimal and is not used for behavioral analytics.
+- **Consent Identifier (`tr_uuid` cookie):** A randomly generated identifier is set in a 30-day `HttpOnly` cookie. The application records it only after analytics consent is granted.
+- **Transient Network Data:** Your IP address may be processed in memory for geographic access control and API rate limiting. The application does not retain raw IP request logs.
 
 **Additionally, when you have granted analytics consent**, we collect the following through LogRocket:
 
 - **Navigation Data:** Page paths and route names you visit (query parameters are not forwarded to LogRocket).
 - **Session Replay:** A replay of your interactions including clicks, scrolling, form inputs (with masking), page load times, and errors.
 - **Device & Browser Data:** Browser type, OS, device type, screen resolution, and user agent.
-- **IP Address:** Also forwarded to LogRocket for geolocation and session enrichment.
 
 ### 3.2 Data Collected from Authenticated Admin Users
 
@@ -53,7 +52,7 @@ When authenticated admin users create, edit, or delete portfolio content, we log
 
 We use the following cookie categories:
 
-- **Persistent Identifier Cookie (`tr_uuid`):** Set on every visit regardless of consent. Contains a randomly generated anonymous identifier. Duration: Does not expire (set with a long-lived max-age). This cookie is used for security logging for all visitors and, if you consent, for analytics session association.
+- **Consent Identifier Cookie (`tr_uuid`):** Set on every visit with a 30-day lifetime and protected from site JavaScript with `HttpOnly`. It is recorded by the application only after analytics consent.
 - **Essential/Strictly Necessary Cookies:** Session cookies for authentication and CSRF protection. Duration: Session or until logged out.
 - **Preference Cookies:** `sidebar_state` cookie to remember your UI preferences (sidebar open/closed). Duration: 7 days.
 - **Analytics Cookies:** Set by LogRocket for session replay tracking and analytics (consent required). Duration: Managed by LogRocket according to their default retention policies.
@@ -117,7 +116,7 @@ Depending on your jurisdiction, you may have the right to:
 
 ### Browser-Level Control
 
-- **Clear Cookies & Storage:** You can delete the `tr_uuid` and `sidebar_state` cookies using your browser's settings (Settings → Privacy → Cookies / Site Data). Note that deleting `tr_uuid` will cause a new identifier to be issued on your next visit.
+- **Clear Cookies & Storage:** You can delete the `tr_uuid` and `sidebar_state` cookies using your browser's settings (Settings → Privacy → Cookies / Site Data). Deleting `tr_uuid` causes a new identifier to be issued on your next visit.
 - **Disable JavaScript:** Disabling JavaScript will prevent LogRocket from loading and tracking.
 
 ### Session Replay Opt-In
