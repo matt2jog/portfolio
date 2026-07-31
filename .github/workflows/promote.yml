@@ -201,6 +201,7 @@ jobs:
           login_status=
           for attempt in {1..12}; do
             if ! login_status="$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 15 \
               --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
               --write-out '%{http_code}' \
               "${PROD_E2E_BASE_URL}/auth/login?release=${COMMIT_SHA}&attempt=${attempt}")"; then
