@@ -129,11 +129,7 @@ export default function Activity() {
 
       <main className="flex-1 container mx-auto px-4 py-24 sm:py-32">
         <div className="max-w-5xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-8"
-          >
+          <div className="text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
               ACTIVITY<br />
               <span className="text-gray-500">MONITOR</span>
@@ -141,7 +137,7 @@ export default function Activity() {
             <p className="text-muted-foreground font-mono text-sm max-w-2xl mx-auto">
               Real-time contributions, projects, and professional updates.
             </p>
-          </motion.div>
+          </div>
 
           <ProfileCard activeTab={activeTab} githubData={githubData} linkedinData={linkedinData} isMobile={isMobile} />
 

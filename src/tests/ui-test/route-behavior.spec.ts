@@ -101,6 +101,7 @@ test("portfolio cube renders real project data and responds to card and paging i
 
 test("activity renders GitHub metrics and switches to the LinkedIn timeline", async ({ page }) => {
   await page.goto("/activity");
+  await expect(page.getByRole("heading", { name: /ACTIVITY\s+MONITOR/i })).toBeVisible();
   await expect(page.getByText("Yearly Commits")).toBeVisible();
   await expect(page.getByText("Added viewport testing scaffolding")).toBeVisible();
 
