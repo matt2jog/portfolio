@@ -23,8 +23,13 @@ test("all migrations are checksummed and idempotent", async () => {
   assert.ok(plan.some((migration) => migration.version === "003_canonical_skill_presentation"));
   assert.ok(plan.some((migration) => migration.version === "004_remove_raw_request_tracking"));
   assert.ok(plan.some((migration) => migration.version === "005_portfolio_experience_bullets"));
+  assert.ok(plan.some((migration) => migration.version === "007_clean_obsolete_messaging_epilogues"));
   assert.ok(plan.some((migration) => migration.version === "007_remove_false_pubsub_skill"));
   assert.ok(plan.some((migration) => migration.version === "010_allow_canonical_skill_deletion"));
+  assert.ok(
+    plan.findIndex((migration) => migration.version === "007_clean_obsolete_messaging_epilogues")
+      < plan.findIndex((migration) => migration.version === "008_neutralize_obsolete_messaging_references"),
+  );
 
   const ledger = await pool.query<{ version: string; checksum: string }>(
     "SELECT version, checksum FROM portfolio.schema_migrations ORDER BY version",
