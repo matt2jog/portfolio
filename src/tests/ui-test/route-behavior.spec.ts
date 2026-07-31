@@ -311,6 +311,24 @@ test("admin presentation dialogs expose editable Portfolio-owned fields", async 
   await page.getByRole("button", { name: "Cancel" }).click();
 });
 
+test("canonical skill delete remains keyed after the dialog closes", async ({ page }) => {
+  await page.goto("/admin");
+  await page.getByTestId("admin-tab-skill-presentation").click();
+
+  await page.getByRole("button", { name: "Delete Terraform" }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Delete “Terraform”?");
+
+  const deleteRequestPromise = page.waitForRequest((request) =>
+    request.method() === "DELETE"
+      && new URL(request.url()).pathname === "/api/admin/all-skills/all-skill-3",
+  );
+  await page.getByRole("button", { name: "Delete unused skill" }).click();
+
+  const deleteRequest = await deleteRequestPromise;
+  expect(new URL(deleteRequest.url()).pathname).toBe("/api/admin/all-skills/all-skill-3");
+  await expect(page.getByText("Unused skill deleted", { exact: true })).toBeVisible();
+});
+
 test("admin personalization covers create, edit, archive, restore, and delete operations", async ({ page }) => {
   await page.unroute("**/api/admin/welcome-messages/archived");
   await page.route("**/api/admin/welcome-messages/archived", (route) =>

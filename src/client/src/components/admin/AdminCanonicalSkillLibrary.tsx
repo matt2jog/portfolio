@@ -101,7 +101,7 @@ export function AdminCanonicalSkillLibrary({
   });
 
   const deleteSkill = useMutation({
-    mutationFn: () => apiRequest("DELETE", `/api/admin/all-skills/${deleting!.id}`),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/all-skills/${id}`),
     onSuccess: async () => {
       setDeleting(null);
       await onChanged();
@@ -289,7 +289,7 @@ export function AdminCanonicalSkillLibrary({
             <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="min-h-11 bg-red-600 text-white"
-              onClick={() => deleting && deleteSkill.mutate()}
+              onClick={() => deleting && deleteSkill.mutate(deleting.id)}
             >
               Delete unused skill
             </AlertDialogAction>
