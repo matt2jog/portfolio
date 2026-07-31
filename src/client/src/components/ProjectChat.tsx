@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Send, Bot, ChevronDown, Square } from "lucide-react";
 import ChatMarkdown from "./ChatMarkdown";
-import { getTrackerUuid } from "@/lib/tracking";
 
 function TypingIndicator() {
   return (
@@ -411,7 +410,6 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     abortRef.current = controller;
 
     try {
-      const trackerUuid = getTrackerUuid();
       const res = await fetch("/api/public/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -419,7 +417,6 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
           projectId: project.id,
           modelId: selectedModelId,
           messages: nextMessages,
-          ...(trackerUuid ? { trackerUuid } : {}),
         }),
         signal: controller.signal,
       });
@@ -455,7 +452,6 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const trackerUuid = getTrackerUuid();
       const res = await fetch("/api/public/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -464,7 +460,6 @@ export default function ProjectChat({ project, onClose, standalone = false }: Pr
           modelId: selectedModelId,
           messages: [{ role: "user", content: "__welcome__" }],
           welcome: true,
-          ...(trackerUuid ? { trackerUuid } : {}),
         }),
         signal: controller.signal,
       });

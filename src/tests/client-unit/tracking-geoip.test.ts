@@ -70,8 +70,8 @@ test("GeoIP fails closed for non-success and network failures", async () => {
   assert.equal(await offline.fetchGeoIP(), null);
 });
 
-test("client analytics uses a consent-gated session identifier, not the durable cookie", async () => {
-  const tracking = await import("../../client/src/lib/tracking.ts?case=session-id");
+test("client analytics uses only a consent-gated tab session identifier", async () => {
+  const tracking = await import("../../client/src/lib/analytics-session.ts?case=session-id");
   installBrowser();
   assert.equal(tracking.getTrackerUuid(), null);
 
@@ -87,38 +87,4 @@ test("client analytics uses a consent-gated session identifier, not the durable 
   const second = tracking.getTrackerUuid();
   assert.ok(first);
   assert.equal(second, first);
-});
-
-test("tracking writes require consent and never request or transmit an IP address", async () => {
-  const calls: Array<{ url: string; init?: RequestInit }> = [];
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(input), init });
-    return new Response(null, { status: 204 });
-  }) as typeof fetch;
-
-  installBrowser();
-  const blocked = await import("../../client/src/lib/tracking.ts?case=blocked");
-  await blocked.initBrowserTracking();
-  await blocked.storeTrEn("ignored");
-  assert.equal(calls.length, 0);
-
-  installBrowser(acceptedConsent());
-  const enabled = await import("../../client/src/lib/tracking.ts?case=enabled");
-  await enabled.initBrowserTracking();
-  await enabled.storeTrEn("campaign-1");
-  assert.deepEqual(calls.map(({ url }) => url), [
-    "/api/public/tracking/init",
-    "/api/public/tracking/tr-en",
-  ]);
-  assert.equal(calls.some(({ url }) => url.includes("/api/public/ip")), false);
-  assert.deepEqual(calls[0]?.init?.headers, { "Content-Type": "application/json" });
-  assert.equal(calls[1]?.init?.body, JSON.stringify({ trEn: "campaign-1" }));
-});
-
-test("telemetry failures remain non-blocking", async () => {
-  globalThis.fetch = (async () => { throw new Error("telemetry unavailable"); }) as typeof fetch;
-  installBrowser(acceptedConsent());
-  const tracking = await import("../../client/src/lib/tracking.ts?case=offline");
-  await tracking.initBrowserTracking();
-  await tracking.storeTrEn("campaign-2");
 });

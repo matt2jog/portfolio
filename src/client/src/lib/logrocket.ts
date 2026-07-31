@@ -1,6 +1,6 @@
 import LogRocket from "logrocket";
 import { isTrackingAllowed } from "./consent";
-import { getTrackerUuid } from "./tracking";
+import { getTrackerUuid } from "./analytics-session";
 
 type MaybeUser = {
   id?: string;
@@ -14,7 +14,7 @@ let lastRoute = "";
 let lastIdentity = "";
 let uuidEmitted = false;
 
-const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/callback", "/auth/google/callback"];
+const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/callback"];
 
 declare global {
   interface Window {

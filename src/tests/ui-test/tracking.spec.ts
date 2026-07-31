@@ -31,7 +31,6 @@ test("analytics uses a tab-scoped session id and no readable durable cookie", as
   expect(state.cookie).not.toContain("tr_uuid=");
   expect(state.sessionId).toBeTruthy();
 });
-
 // ── Consent break condition ───────────────────────────────────────────────────
 
 test("getTrackerUuid returns null when localStorage has no consent record", async ({ page }) => {
@@ -120,7 +119,7 @@ test("tr_en param is stripped from URL after page load (no consent)", async ({ p
   expect(trackingRequests).toHaveLength(0);
 });
 
-test("tr_en param is stripped and backend is called when user has consented", async ({ page }) => {
+test("tr_en param is discarded without persistence when user has consented", async ({ page }) => {
   const trackingRequests: string[] = [];
   await installMockApi(page);
   await page.route("**/api/public/tracking/tr-en", async (route) => {
@@ -133,7 +132,7 @@ test("tr_en param is stripped and backend is called when user has consented", as
 
   await expect.poll(() => new URL(page.url()).searchParams.has("tr_en")).toBe(false);
   expect(page.url()).not.toContain("tr_en");
-  await expect.poll(() => trackingRequests).toEqual(["partner42"]);
+  expect(trackingRequests).toHaveLength(0);
 });
 
 test("tr_en strips other params while preserving them", async ({ page }) => {
@@ -145,34 +144,4 @@ test("tr_en strips other params while preserving them", async ({ page }) => {
   const url = new URL(page.url());
   expect(url.searchParams.has("tr_en")).toBe(false);
   expect(url.searchParams.get("keep")).toBe("yes");
-});
-
-// ── tracking/init called after consent ───────────────────────────────────────
-
-test("tracking init endpoint is called after Accept All", async ({ page }) => {
-  const initCalls: number[] = [];
-  await installMockApi(page);
-  await page.route("**/api/public/tracking/init", (route) => {
-    initCalls.push(1);
-    return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
-  });
-  await seedBrowserState(page, { introSeen: true, consent: "none", logRocketTestMode: true });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Accept All" }).click();
-
-  await expect.poll(() => initCalls.length).toBeGreaterThan(0);
-});
-
-test("tracking init endpoint is NOT called when consent is rejected", async ({ page }) => {
-  const initCalls: number[] = [];
-  await installMockApi(page);
-  await page.route("**/api/public/tracking/init", (route) => {
-    initCalls.push(1);
-    return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
-  });
-  await seedBrowserState(page, { introSeen: true, consent: "none", logRocketTestMode: true });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Reject All" }).click();
-  await page.waitForTimeout(500);
-  expect(initCalls).toHaveLength(0);
 });

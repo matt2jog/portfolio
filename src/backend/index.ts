@@ -6,7 +6,10 @@ import { createServer } from "http";
 import { setupAuth } from "./auth";
 import { isSameOriginMutation } from "./auth0Web";
 import { dynamicResponseCachePolicy } from "./cache-policy";
-import { createOriginAccessMiddleware } from "./origin-access";
+import {
+  createCanonicalHostMiddleware,
+  discardVisitorNetworkHeaders,
+} from "./ingress-policy";
 import {
   createChatRateLimitMiddleware,
   requestContextMiddleware,
@@ -19,18 +22,7 @@ const isProd = process.env.NODE_ENV === "production";
 
 app.use(requestContextMiddleware);
 app.use(structuredRequestLogMiddleware);
-
-app.use((req, res, next) => {
-  const host = (req.headers.host ?? "").toLowerCase();
-  if (host !== "www.2jog.dev" && host !== "www.2jog.dev:443") return next();
-  const incoming = new URL(
-    `https://request.invalid${req.originalUrl.startsWith("/") ? req.originalUrl : "/"}`,
-  );
-  const target = new URL("https://2jog.dev");
-  target.pathname = incoming.pathname;
-  target.search = incoming.search;
-  return res.redirect(308, target.toString());
-});
+app.use(discardVisitorNetworkHeaders);
 
 app.use((_req, res, next) => {
   res.set({
@@ -53,10 +45,8 @@ app.get("/health", (_req, res) => {
 });
 
 if (isProd || Boolean(process.env.K_SERVICE)) {
-  app.use(createOriginAccessMiddleware(
-    process.env.EDGE_ORIGIN_TOKEN,
-    process.env.EDGE_ORIGIN_PREVIOUS_TOKEN,
-    process.env.PUBLIC_BASE_URL,
+  app.use(createCanonicalHostMiddleware(
+    process.env.PUBLIC_BASE_URL || "https://2jog.dev",
   ));
 }
 app.use(createChatRateLimitMiddleware());
@@ -95,6 +85,11 @@ export function log(event: string, fields: Record<string, unknown> = {}) {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  app.use(["/api", "/auth"], (_req, res) => {
+    res.locals.failureCode = "route_not_found";
+    res.status(404).json({ error: "route_not_found" });
+  });
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

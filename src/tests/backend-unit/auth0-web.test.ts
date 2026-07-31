@@ -13,7 +13,6 @@ import {
 } from "jose";
 import {
   Auth0WebClient,
-  isLegacyAuthEnabled,
   isSameOriginMutation,
   loadAuth0WebConfig,
 } from "../../backend/auth0Web";
@@ -338,13 +337,6 @@ test("Auth0 callback and browser mutation guards fail closed", async () => {
     ),
     /auth0_transaction_missing/,
   );
-
-  assert.equal(isLegacyAuthEnabled({ LEGACY_AUTH_ENABLED: "false" }), false);
-  assert.equal(
-    isLegacyAuthEnabled({ LEGACY_AUTH_EXPIRES_AT: "2026-01-01T00:00:00Z" }, Date.UTC(2026, 0, 2)),
-    false,
-  );
-  assert.equal(isLegacyAuthEnabled({}, Date.now()), true);
 
   assert.equal(isSameOriginMutation(requestStub({ method: "GET" }), publicBaseUrl), true);
   assert.equal(

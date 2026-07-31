@@ -27,8 +27,7 @@ import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import Tracking from "@/pages/Tracking";
-import { identifyLogRocketUser, trackLogRocketRoute, emitLogRocketUuidEvent } from "@/lib/logrocket";
-import { initBrowserTracking, storeTrEn } from "@/lib/tracking";
+import { identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
 
 function LogRocketBridge() {
   const [location] = useLocation();
@@ -67,30 +66,8 @@ function LogRocketBridge() {
   return null;
 }
 
-// Initializes browser-side UUID tracking (DB + LogRocket) after consent is established.
-function TrackingBridge() {
-  const [consentGranted, setConsentGranted] = useState(() => {
-    const c = getStoredConsent();
-    return c !== null && c.user_action !== "reject_all";
-  });
-
-  useEffect(() => {
-    const handle = () => setConsentGranted(true);
-    window.addEventListener("consent-granted", handle);
-    return () => window.removeEventListener("consent-granted", handle);
-  }, []);
-
-  useEffect(() => {
-    if (!consentGranted) return;
-    initBrowserTracking();
-    emitLogRocketUuidEvent();
-  }, [consentGranted]);
-
-  return null;
-}
-
-// Detects tr_en= on any page, stores it when consented, then strips it without a reload.
-function TrEnProcessor() {
+// Discards the retired campaign parameter without retaining it or sending it elsewhere.
+function CampaignQueryCleaner() {
   const [location] = useLocation();
 
   useEffect(() => {
@@ -105,10 +82,7 @@ function TrEnProcessor() {
       (newSearch ? `?${newSearch}` : "") +
       window.location.hash;
 
-    // storeTrEn is a no-op if user hasn't consented
-    void storeTrEn(trEn).finally(() => {
-      window.history.replaceState(window.history.state, "", cleanUrl);
-    });
+    window.history.replaceState(window.history.state, "", cleanUrl);
   }, [location]);
 
   return null;
@@ -233,11 +207,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <TrEnProcessor />
+        <CampaignQueryCleaner />
         <WelcomeProcessor />
         <ConsentManager disabled={consentDisabled} />
         <LogRocketBridge />
-        <TrackingBridge />
         <Toaster />
         <Router />
         {showIntro && location === "/" && (
