@@ -198,9 +198,17 @@ jobs:
           [[ "$(gcloud run revisions describe "${candidate_revision}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
-          login_status="$(curl --silent --show-error \
-            --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
-            --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/login")"
+          login_status=
+          for attempt in {1..12}; do
+            if ! login_status="$(curl --silent --show-error \
+              --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
+              --write-out '%{http_code}' \
+              "${PROD_E2E_BASE_URL}/auth/login?release=${COMMIT_SHA}&attempt=${attempt}")"; then
+              login_status=000
+            fi
+            [[ "${login_status}" == "302" ]] && break
+            sleep 5
+          done
           [[ "${login_status}" == "302" ]]
           auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
             head -1 | cut -d' ' -f2- | tr -d '\r')"
