@@ -315,14 +315,12 @@ jobs:
           previous_revision="$(jq -er \
             '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
             <<<"${service_json}")"
-          release_key="${COMMIT_SHA:0:7}-${GITHUB_RUN_ID: -6}-${GITHUB_RUN_ATTEMPT}"
-          suffix="s-${release_key}"
           candidate_tag="stg-cand"
           staging_revision="$(gcloud run deploy "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${{ needs.publish.outputs.digest_uri }}" \
-            --revision-suffix "${suffix}" \
+            --revision-suffix="" \
             --no-traffic \
             --tag "${candidate_tag}" \
             --format='value(status.latestCreatedRevisionName)' \

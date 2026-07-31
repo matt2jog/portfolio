@@ -149,16 +149,14 @@ jobs:
             --region "${GCP_REGION}" \
             --wait
 
-          release_key="${COMMIT_SHA:0:12}-${GITHUB_RUN_ID: -6}-${GITHUB_RUN_ATTEMPT}"
           candidate_tag="cand"
-          suffix="c-${release_key}"
           gcloud run deploy "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${DIGEST_URI}" \
             --no-traffic \
             --tag "${candidate_tag}" \
-            --revision-suffix "${suffix}" \
+            --revision-suffix="" \
             --quiet
           service_json="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
