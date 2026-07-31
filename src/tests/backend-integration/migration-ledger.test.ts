@@ -24,6 +24,7 @@ test("all migrations are checksummed and idempotent", async () => {
   assert.ok(plan.some((migration) => migration.version === "004_remove_raw_request_tracking"));
   assert.ok(plan.some((migration) => migration.version === "005_portfolio_experience_bullets"));
   assert.ok(plan.some((migration) => migration.version === "007_remove_false_pubsub_skill"));
+  assert.ok(plan.some((migration) => migration.version === "010_allow_canonical_skill_deletion"));
 
   const ledger = await pool.query<{ version: string; checksum: string }>(
     "SELECT version, checksum FROM portfolio.schema_migrations ORDER BY version",
@@ -132,4 +133,13 @@ test("the baseline contains only current tables, views, and ordinary RLS", async
     WHERE lower(btrim(name)) = 'gcp pubsub'
   `);
   assert.equal(falsePubsub.rows[0]?.count, "0");
+
+  const canonicalSkillDelete = await pool.query<{ allowed: boolean }>(`
+    SELECT pg_catalog.has_table_privilege(
+      'portfolio_runtime',
+      'portfolio.all_skills',
+      'DELETE'
+    ) AS allowed
+  `);
+  assert.equal(canonicalSkillDelete.rows[0]?.allowed, true);
 });
