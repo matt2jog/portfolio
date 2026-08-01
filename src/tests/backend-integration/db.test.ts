@@ -34,14 +34,20 @@ test("drizzle can read the users table (count >= 0)", async () => {
   assert.ok(row.count >= 0);
 });
 
-test("Portfolio skill membership accepts valid groups and rejects dangling references", async () => {
+test("Portfolio rejects canonical skill mutations and preserves existing records", async () => {
   const adminId = `integration-admin-${randomUUID()}`;
   const skillId = randomUUID();
   const groupId = randomUUID();
-  const missingGroupId = randomUUID();
+  const portfolioSkillId = randomUUID();
 
   await db.insert(skillsGroup).values({ id: groupId, name: "Integration group" });
   await db.insert(allSkills).values({ id: skillId, name: "Integration skill" });
+  await db.insert(portfolioSkills).values({
+    id: portfolioSkillId,
+    allSkillId: skillId,
+    groupId,
+    position: 7,
+  });
 
   const app = express();
   app.use(express.json());
@@ -62,48 +68,56 @@ test("Portfolio skill membership accepts valid groups and rejects dangling refer
     server.listen(0, "127.0.0.1", resolve);
   });
   const { port } = server.address() as AddressInfo;
-  const createMembership = (allSkillId: string, groupId: string | null) => fetch(
-    `http://127.0.0.1:${port}/api/admin/skills`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ allSkillId, groupId }),
-    },
-  );
 
   try {
-    const valid = await createMembership(skillId, groupId);
-    assert.equal(valid.status, 200);
-    const created = await valid.json() as { id: string; groupId: string };
-    assert.equal(created.groupId, groupId);
+    const mutations = [
+      { method: "POST", path: "/api/admin/skills", body: { allSkillId: skillId, groupId } },
+      { method: "PUT", path: `/api/admin/skills/${portfolioSkillId}`, body: { groupId: null } },
+      { method: "DELETE", path: `/api/admin/skills/${portfolioSkillId}` },
+      { method: "POST", path: "/api/admin/skills/reorder", body: { order: [portfolioSkillId] } },
+      { method: "POST", path: "/api/admin/skills-groups", body: { name: "Forbidden group" } },
+      { method: "PUT", path: `/api/admin/skills-groups/${groupId}`, body: { name: "Forbidden rename" } },
+      { method: "DELETE", path: `/api/admin/skills-groups/${groupId}` },
+      { method: "POST", path: "/api/admin/skills-groups/reorder", body: { order: [groupId] } },
+      { method: "POST", path: "/api/admin/all-skills", body: { name: "Forbidden skill" } },
+      { method: "PUT", path: `/api/admin/all-skills/${skillId}`, body: { name: "Forbidden rename" } },
+      { method: "DELETE", path: `/api/admin/all-skills/${skillId}` },
+    ] as const;
 
-    const dangling = await createMembership(randomUUID(), missingGroupId);
-    assert.equal(dangling.status, 400);
-    assert.deepEqual(await dangling.json(), { message: "Invalid all_skill reference" });
-
-    const duplicate = await createMembership(skillId, groupId);
-    assert.equal(duplicate.status, 409);
-
-    const invalidMove = await fetch(
-      `http://127.0.0.1:${port}/api/admin/skills/${created.id}`,
-      {
-        method: "PUT",
+    for (const mutation of mutations) {
+      const response = await fetch(`http://127.0.0.1:${port}${mutation.path}`, {
+        method: mutation.method,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ groupId: missingGroupId }),
-      },
-    );
-    assert.equal(invalidMove.status, 400);
-    assert.deepEqual(await invalidMove.json(), { message: "Invalid skills_group reference" });
+        body: "body" in mutation ? JSON.stringify(mutation.body) : undefined,
+      });
+      assert.equal(response.status, 409, `${mutation.method} ${mutation.path}`);
+      assert.deepEqual(await response.json(), {
+        code: "CANONICAL_CAREER_READ_ONLY",
+        message: "Canonical career data is managed by Admin Dashboard.",
+        authority: "https://admin.2jog.dev",
+      });
+    }
 
-    const [preserved] = await db
-      .select({ groupId: portfolioSkills.groupId })
+    const [preservedMembership] = await db
+      .select({ groupId: portfolioSkills.groupId, position: portfolioSkills.position })
       .from(portfolioSkills)
-      .where(eq(portfolioSkills.id, created.id));
-    assert.equal(preserved.groupId, groupId);
+      .where(eq(portfolioSkills.id, portfolioSkillId));
+    const [preservedGroup] = await db
+      .select({ name: skillsGroup.name })
+      .from(skillsGroup)
+      .where(eq(skillsGroup.id, groupId));
+    const [preservedSkill] = await db
+      .select({ name: allSkills.name })
+      .from(allSkills)
+      .where(eq(allSkills.id, skillId));
+
+    assert.deepEqual(preservedMembership, { groupId, position: 7 });
+    assert.equal(preservedGroup.name, "Integration group");
+    assert.equal(preservedSkill.name, "Integration skill");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await db.delete(auditLogs).where(eq(auditLogs.userId, adminId));
-    await db.delete(portfolioSkills).where(eq(portfolioSkills.allSkillId, skillId));
+    await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
     await db.delete(allSkills).where(eq(allSkills.id, skillId));
     await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));
   }

@@ -94,15 +94,17 @@ test("intro does NOT show when force-show flag is absent and TTL is active", asy
 
 // ── Admin personalization panel ───────────────────────────────────────────────
 
-test("admin exposes only Portfolio-owned presentation surfaces", async ({ page }) => {
+test("Portfolio settings exposes only service-owned personalization", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible({ timeout: 15_000 });
 
-  await expect(page.getByText("Canonical career content is managed in Admin Dashboard.")).toBeVisible();
-  await expect(page.getByTestId("admin-tab-project-presentation")).toBeVisible();
-  await expect(page.getByTestId("admin-tab-skill-presentation")).toBeVisible();
-  await expect(page.getByTestId("admin-tab-personalization")).toBeVisible();
+  await expect(page.getByText("Career data is read-only in Portfolio.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin Dashboard" })).toHaveAttribute(
+    "href",
+    "https://admin.2jog.dev",
+  );
+  await expect(page.getByTestId("admin-tabs")).toHaveCount(0);
   await expect(page.getByTestId("admin-tab-bio")).toHaveCount(0);
   await expect(page.getByTestId("admin-tab-projects")).toHaveCount(0);
   await expect(page.getByTestId("admin-tab-skills")).toHaveCount(0);
@@ -110,18 +112,17 @@ test("admin exposes only Portfolio-owned presentation surfaces", async ({ page }
   await expect(page.getByTestId("admin-personalization-panel")).toBeVisible();
 });
 
-test("project and skill tabs expose presentation controls and shared-skill CRUD", async ({ page }) => {
+test("Portfolio settings has no project or skill mutation controls", async ({ page }) => {
   await setup(page);
   await page.goto("/admin");
 
-  await page.getByTestId("admin-tab-project-presentation").click();
-  await expect(page.getByRole("heading", { name: "Project presentation" })).toBeVisible();
-  await expect(page.getByText("Create and edit canonical projects in Admin Dashboard.")).toBeVisible();
-
-  await page.getByTestId("admin-tab-skill-presentation").click();
-  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Shared skill library" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add skill" })).toBeVisible();
+  await expect(page.getByTestId("admin-personalization-panel")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("heading", { name: "Project presentation" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Shared skill library" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add skill" })).toHaveCount(0);
 });
 
 test("admin personalization panel renders message cards from mock data", async ({ page }) => {

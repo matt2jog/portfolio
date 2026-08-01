@@ -84,25 +84,61 @@ test("runtime can perform only the CRUD used by the application", async () => {
     );
     await client.query("DELETE FROM portfolio.welcome_messages WHERE id = $1", [id]);
 
-    await client.query("SAVEPOINT denied_write");
-    await assert.rejects(
-      client.query(
-        `INSERT INTO portfolio.personal_information
-          (name, title, location, short_bio, email, phone, phone_formatted,
-           linkedin_url, github_url, devpost_url, portfolio_url)
-         VALUES ('x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x')`,
-      ),
-      (error: unknown) =>
-        typeof error === "object"
-        && error !== null
-        && "code" in error
-        && error.code === "42501",
-    );
-    await client.query("ROLLBACK TO SAVEPOINT denied_write");
+    const forbiddenCareerWrites = [
+      `INSERT INTO portfolio.personal_information
+        (name, title, location, short_bio, email, phone, phone_formatted,
+         linkedin_url, github_url, devpost_url, portfolio_url)
+       VALUES ('x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x', 'x')`,
+      "UPDATE portfolio.projects SET category = category",
+      "DELETE FROM portfolio.all_skills WHERE false",
+    ];
+    for (const statement of forbiddenCareerWrites) {
+      await client.query("SAVEPOINT denied_write");
+      await assert.rejects(
+        client.query(statement),
+        (error: unknown) =>
+          typeof error === "object"
+          && error !== null
+          && "code" in error
+          && error.code === "42501",
+      );
+      await client.query("ROLLBACK TO SAVEPOINT denied_write");
+    }
     await client.query("ROLLBACK");
   } finally {
     client.release();
   }
+});
+
+test("Admin owns the missing education and experience-bullet CRUD", async () => {
+  const privileges = await pool.query<{
+    educationCrud: boolean;
+    experienceBulletCrud: boolean;
+    projectBulletCrud: boolean;
+  }>(`
+    SELECT
+      pg_catalog.has_table_privilege(
+        'admin_runtime',
+        'portfolio.education',
+        'SELECT,INSERT,UPDATE,DELETE'
+      ) AS "educationCrud",
+      pg_catalog.has_table_privilege(
+        'admin_runtime',
+        'portfolio.experience_bullets',
+        'SELECT,INSERT,UPDATE,DELETE'
+      ) AS "experienceBulletCrud",
+      pg_catalog.has_table_privilege(
+        'admin_runtime',
+        'portfolio.xyz_bullets',
+        'SELECT,INSERT,UPDATE,DELETE'
+      ) AS "projectBulletCrud"
+  `);
+
+  assert.deepEqual(privileges.rows[0], {
+    educationCrud: true,
+    experienceBulletCrud: true,
+    projectBulletCrud: true,
+  });
 });
 
 test("Resume reads protected Portfolio views but not Portfolio tables", async () => {

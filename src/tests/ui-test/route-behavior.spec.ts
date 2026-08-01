@@ -282,52 +282,28 @@ test("unknown routes render the not-found boundary", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "404 Page Not Found" })).toBeVisible();
 });
 
-test("admin presentation dialogs expose editable Portfolio-owned fields", async ({ page }) => {
+test("Portfolio settings exposes no career mutation controls", async ({ page }) => {
+  const careerMutations: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      request.method() !== "GET"
+      && /^\/api\/admin\/(?:projects|experiences|bio|personal-information|skills|skills-groups|all-skills)/.test(pathname)
+    ) {
+      careerMutations.push(`${request.method()} ${pathname}`);
+    }
+  });
+
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible();
-
-  await page.getByTestId("admin-tab-project-presentation").click();
-  await page.getByRole("button", { name: /Project 1/ }).click();
-  await expect(page.getByRole("dialog")).toContainText("Project-chat guidance");
-  await page.getByLabel("Portfolio category").fill("Platform");
-  await page.getByLabel("Primary image URL").fill("https://example.com/primary.png");
-  await page.getByLabel("Hover image URL").fill("https://example.com/hover.png");
-  await page.getByLabel("Project-chat guidance").fill("Explain the tested architecture.");
-  await page.getByRole("button", { name: "Save presentation" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-
-  await page.getByTestId("admin-tab-skill-presentation").click();
-  await page.getByLabel("New group name").fill("Platform");
-  await page.getByRole("button", { name: "Add group" }).click();
-
-  await page.getByRole("button", { name: "Rename Frameworks & Libraries" }).click();
-  await page.getByRole("dialog").getByLabel("Group name").fill("Frontend Systems");
-  await page.getByRole("button", { name: "Save name" }).click();
-  await page.getByLabel("Skill", { exact: true }).selectOption("all-skill-3");
-  await page.getByLabel("Display group", { exact: true }).selectOption("group-2");
-  await page.getByRole("button", { name: "Add to map" }).click();
-  await page.getByLabel("Display group for PostgreSQL").selectOption("group-1");
-  await page.getByRole("button", { name: "Remove PostgreSQL from Portfolio" }).click();
-  await expect(page.getByRole("alertdialog")).toContainText("The canonical skill remains available");
-  await page.getByRole("button", { name: "Cancel" }).click();
-});
-
-test("canonical skill delete remains keyed after the dialog closes", async ({ page }) => {
-  await page.goto("/admin");
-  await page.getByTestId("admin-tab-skill-presentation").click();
-
-  await page.getByRole("button", { name: "Delete Terraform" }).click();
-  await expect(page.getByRole("alertdialog")).toContainText("Delete “Terraform”?");
-
-  const deleteRequestPromise = page.waitForRequest((request) =>
-    request.method() === "DELETE"
-      && new URL(request.url()).pathname === "/api/admin/all-skills/all-skill-3",
+  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible();
+  await expect(page.getByText("Career data is read-only in Portfolio.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin Dashboard" })).toHaveAttribute(
+    "href",
+    "https://admin.2jog.dev",
   );
-  await page.getByRole("button", { name: "Delete unused skill" }).click();
-
-  const deleteRequest = await deleteRequestPromise;
-  expect(new URL(deleteRequest.url()).pathname).toBe("/api/admin/all-skills/all-skill-3");
-  await expect(page.getByText("Unused skill deleted", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("admin-project-presentation-panel")).toHaveCount(0);
+  await expect(page.getByText("Shared skill library")).toHaveCount(0);
+  expect(careerMutations).toEqual([]);
 });
 
 test("admin personalization covers create, edit, archive, restore, and delete operations", async ({ page }) => {
@@ -392,5 +368,5 @@ test("admin requires policy acceptance before rendering controls", async ({ page
   await expect(page.getByRole("heading", { name: "Accept Terms Before Continuing" })).toBeVisible();
   await page.getByLabel(/I have read and agree/).click();
   await page.getByRole("button", { name: "I Agree & Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible();
 });

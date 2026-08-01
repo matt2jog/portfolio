@@ -2,29 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import {
-  canonicalCareerMutationRejected,
-  isForeignKeyViolation,
-  projectPresentationUpdateSchema,
-} from "../../backend/career-authority";
-
-test("project presentation updates accept only Portfolio-owned fields", () => {
-  assert.equal(projectPresentationUpdateSchema.safeParse({ category: "systems", image: "/hero.png" }).success, true);
-  assert.equal(projectPresentationUpdateSchema.safeParse({ aiSystemPrompt: "Use project facts only." }).success, true);
-  assert.equal(projectPresentationUpdateSchema.safeParse({ title: "Canonical title" }).success, false);
-  assert.equal(projectPresentationUpdateSchema.safeParse({ xyzBullets: ["Canonical bullet"] }).success, false);
-  assert.equal(projectPresentationUpdateSchema.safeParse({}).success, false);
-});
-
-test("foreign-key violation matching handles direct and wrapped database errors", () => {
-  const constraint = "all_skills_grouping_id_skills_group_id_fk";
-  const violation = { code: "23503", constraint };
-
-  assert.equal(isForeignKeyViolation(violation, constraint), true);
-  assert.equal(isForeignKeyViolation(new Error("query failed", { cause: violation }), constraint), true);
-  assert.equal(isForeignKeyViolation({ code: "23505", constraint }, constraint), false);
-  assert.equal(isForeignKeyViolation(violation, "another_constraint"), false);
-});
+import { canonicalCareerMutationRejected } from "../../backend/career-authority";
 
 test("canonical career mutation rejection points callers to Admin without touching storage", () => {
   let statusCode = 0;
@@ -50,43 +28,75 @@ test("canonical career mutation rejection points callers to Admin without touchi
   });
 });
 
-test("Portfolio edits only presentation plus the shared skill library", () => {
+test("every Portfolio canonical career mutation route is read-only", () => {
   const routes = readFileSync(path.join(process.cwd(), "src", "backend", "routes.ts"), "utf8");
-  const adminPage = readFileSync(path.join(process.cwd(), "src", "client", "src", "pages", "Admin.tsx"), "utf8");
-  const skillsPanel = readFileSync(
-    path.join(
-      process.cwd(),
-      "src",
-      "client",
-      "src",
-      "components",
-      "admin",
-      "AdminSkillsPanel.tsx",
-    ),
-    "utf8",
-  );
-
-  for (const route of [
+  const rejectedRoutes = [
+    'app.post("/api/admin/projects", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/projects/reorder", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/personal-information", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
     'app.put("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
     'app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/skills-groups", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.delete("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/skills-groups/reorder", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/skills", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.delete("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/skills/reorder", requireAdmin, canonicalCareerMutationRejected)',
+    'app.post("/api/admin/experiences", requireAdmin, canonicalCareerMutationRejected)',
+    'app.put("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected)',
+    'app.delete("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected)',
     'app.post("/api/admin/experiences/reorder", requireAdmin, canonicalCareerMutationRejected)',
-  ]) {
+  ];
+
+  for (const route of rejectedRoutes) {
     assert.ok(routes.includes(route), `missing read-only boundary for ${route}`);
   }
 
-  assert.match(routes, /app\.post\("\/api\/admin\/skills-groups", requireAdmin, async/);
-  assert.match(routes, /app\.post\("\/api\/admin\/skills-groups\/reorder", requireAdmin, async/);
-  assert.match(routes, /app\.post\("\/api\/admin\/all-skills", requireAdmin, async/);
-  assert.match(routes, /app\.put\("\/api\/admin\/all-skills\/:id", requireAdmin, async/);
-  assert.match(routes, /app\.delete\("\/api\/admin\/all-skills\/:id", requireAdmin, async/);
-  assert.match(skillsPanel, /AdminCanonicalSkillLibrary/);
-  assert.doesNotMatch(adminPage, /AdminBioPanel|AdminProjectsPanel/);
-  assert.doesNotMatch(adminPage, /admin-tab-(?:bio|projects|skills)/);
-  assert.match(adminPage, /AdminProjectPresentationPanel/);
-  assert.match(adminPage, /AdminSkillsPanel/);
+  assert.doesNotMatch(routes, /app\.(?:post|put|patch|delete)\("\/api\/admin\/(?:education|educations)/);
+});
+
+test("Portfolio settings exposes no career editing surface", () => {
+  const adminPage = readFileSync(
+    path.join(process.cwd(), "src", "client", "src", "pages", "Admin.tsx"),
+    "utf8",
+  );
+
+  assert.match(adminPage, /Career data is read-only in Portfolio/);
   assert.match(adminPage, /AdminPersonalizationPanel/);
+  assert.doesNotMatch(adminPage, /AdminProjectPresentationPanel|AdminSkillsPanel/);
+  assert.doesNotMatch(adminPage, /admin-tab-(?:bio|projects|skills|project-presentation|skill-presentation)/);
+});
+
+test("Portfolio runtime loses canonical writes while Admin gains the missing career grants", () => {
+  const migration = readFileSync(
+    path.join(
+      process.cwd(),
+      "src",
+      "migrations",
+      "013_enforce_career_write_authority.sql",
+    ),
+    "utf8",
+  );
+
+  assert.match(migration, /to_regrole\('portfolio_runtime'\) IS NOT NULL/);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE[\s\S]+FROM portfolio_runtime/);
+  assert.match(migration, /to_regrole\('admin_runtime'\) IS NOT NULL/);
+  assert.match(
+    migration,
+    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE\s+education,\s+experience_bullets\s+TO admin_runtime/,
+  );
+  assert.match(
+    migration,
+    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE xyz_bullets TO admin_runtime/,
+  );
 });

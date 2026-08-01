@@ -235,17 +235,4 @@ export const adminFixtures = {
     ],
     createdAt: "2026-05-12T12:00:00.000Z",
   },
-  skillGroups: [
-    { id: "group-1", name: "Frameworks & Libraries", position: 0 },
-    { id: "group-2", name: "Cloud & Infrastructure", position: 1 },
-  ],
-  allSkills: [
-    { id: "all-skill-1", name: "React" },
-    { id: "all-skill-2", name: "PostgreSQL" },
-    { id: "all-skill-3", name: "Terraform" },
-  ],
-  portfolioSkills: [
-    { id: "portfolio-skill-1", allSkillId: "all-skill-1", groupId: "group-1", label: "React", groupingName: "Frameworks & Libraries", position: 0 },
-    { id: "portfolio-skill-2", allSkillId: "all-skill-2", groupId: "group-2", label: "PostgreSQL", groupingName: "Cloud & Infrastructure", position: 0 },
-  ],
 };

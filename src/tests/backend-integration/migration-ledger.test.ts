@@ -157,5 +157,5 @@ test("the baseline contains only current tables, views, and ordinary RLS", async
       'DELETE'
     ) AS allowed
   `);
-  assert.equal(canonicalSkillDelete.rows[0]?.allowed, true);
+  assert.equal(canonicalSkillDelete.rows[0]?.allowed, false);
 });
