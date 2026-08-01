@@ -4,6 +4,8 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
+ARG VCS_REF
+RUN node -e 'if (!/^[0-9a-f]{40}$/.test(process.argv[1])) process.exit(1)' "$VCS_REF"
 
 FROM node:22-bookworm-slim@sha256:53ada149d435c38b14476cb57e4a7da73c15595aba79bd6971b547ceb6d018bf AS production-dependencies
 WORKDIR /app
@@ -16,7 +18,8 @@ LABEL org.opencontainers.image.title="portfolio" \
       org.opencontainers.image.source="https://github.com/matt2jog/portfolio" \
       org.opencontainers.image.revision="$VCS_REF"
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    PORTFOLIO_RELEASE_SHA="$VCS_REF"
 COPY package*.json ./
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist

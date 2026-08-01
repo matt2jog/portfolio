@@ -132,11 +132,27 @@ jobs:
           load: true
           pull: true
           tags: ${{ env.LOCAL_IMAGE }}
+          build-args: |
+            VCS_REF=${{ env.COMMIT_SHA }}
           labels: |
             org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=portfolio
           cache-to: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'type=gha,mode=max,scope=portfolio' || '' }}
+
+      - name: Verify image release provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_json="$(docker image inspect "${LOCAL_IMAGE}")"
+          image_revision="$(jq -er '.[0].Config.Labels["org.opencontainers.image.revision"]' \
+            <<<"${image_json}")"
+          image_release_sha="$(jq -er \
+            '.[0].Config.Env[] | select(startswith("PORTFOLIO_RELEASE_SHA="))
+              | ltrimstr("PORTFOLIO_RELEASE_SHA=")' <<<"${image_json}")"
+          [[ "${image_revision}" == "${COMMIT_SHA}" ]]
+          [[ "${image_release_sha}" == "${COMMIT_SHA}" ]]
+          [[ "${image_release_sha}" =~ ^[0-9a-f]{40}$ ]]
 
       - name: Report high image vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -247,6 +263,13 @@ jobs:
             --format='{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           if [[ "${remote_revision}" != "${COMMIT_SHA}" ]]; then
             echo "::error::The immutable commit tag ${COMMIT_SHA} does not carry its exact OCI revision label."
+            exit 1
+          fi
+          remote_release_sha="$(docker image inspect "${remote_image}" \
+            --format='{{ range .Config.Env }}{{ println . }}{{ end }}' \
+            | sed -n 's/^PORTFOLIO_RELEASE_SHA=//p')"
+          if [[ "${remote_release_sha}" != "${COMMIT_SHA}" ]]; then
+            echo "::error::The immutable commit tag ${COMMIT_SHA} does not carry its exact runtime release SHA."
             exit 1
           fi
           resolved_digest="$(gcloud artifacts docker images describe "${remote_image}" \
@@ -363,8 +386,10 @@ jobs:
           CANDIDATE_URL: ${{ steps.staging.outputs.candidate_url }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 10 --retry-all-errors \
-            --retry-delay 3 "${CANDIDATE_URL}/health" >/dev/null
+          candidate_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
+            --retry-delay 3 "${CANDIDATE_URL}/health")"
+          [[ "$(jq -r '.release_sha' <<<"${candidate_health}")" == "${COMMIT_SHA}" ]]
 
       - name: Shift staging traffic and run endpoint/browser E2E with verified rollback
         shell: bash
@@ -424,8 +449,14 @@ jobs:
           [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
             <<<"${service_json}")" == "${STAGING_REVISION}" ]]
           service_url="$(jq -er '.status.url' <<<"${service_json}")"
-          curl --fail --silent --show-error --retry 10 --retry-all-errors \
-            --retry-delay 3 "${service_url}/health" >/dev/null
+          service_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
+            --retry-delay 3 "${service_url}/health")"
+          [[ "$(jq -r '.release_sha' <<<"${service_health}")" == "${COMMIT_SHA}" ]]
+          public_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
+            --retry-delay 3 "${STAGING_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
+          [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
           login_status="$(curl --silent --show-error \
             --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
             --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/login")"
@@ -488,7 +519,7 @@ jobs:
           before_latest_created="$(jq -er '.latestCreatedRevision' <<<"${before_v2}")"
           before_traffic="$(jq -cS '.status.traffic' <<<"${before_v1}")"
           expected_labels="$(jq -ce --arg sha "${COMMIT_SHA}" \
-            '(.labels // {}) + {"commit-sha": $sha}' <<<"${before_v2}")"
+            '(.labels // {}) + {"commit-sha": $sha, "release-sha": $sha}' <<<"${before_v2}")"
           request_body="$(jq -cn \
             --arg name "${service_name}" \
             --arg etag "$(jq -er '.etag' <<<"${before_v2}")" \
@@ -523,6 +554,7 @@ jobs:
             --region "${GCP_REGION}" \
             --format=json)"
           [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.latestCreatedRevision' <<<"${after_v2}")" == "${before_latest_created}" ]]
           [[ "$(jq -cS '.status.traffic' <<<"${service_json}")" == "${before_traffic}" ]]
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
