@@ -115,8 +115,11 @@ test("a subject conflict aborts the migration and preserves every row", async ()
   );
 
   await pool.query("BEGIN");
-  await assert.rejects(pool.query(migrationSql), /already bound to another Portfolio user/);
-  await pool.query("ROLLBACK");
+  try {
+    await assert.rejects(pool.query(migrationSql), /already bound to another Portfolio user/);
+  } finally {
+    await pool.query("ROLLBACK");
+  }
 
   const rows = await pool.query<{
     id: string;
@@ -155,11 +158,14 @@ test("a conflicting subject on the designated row also rolls back", async () => 
   );
 
   await pool.query("BEGIN");
-  await assert.rejects(
-    pool.query(migrationSql),
-    /Designated Portfolio administrator has a conflicting Auth0 subject/,
-  );
-  await pool.query("ROLLBACK");
+  try {
+    await assert.rejects(
+      pool.query(migrationSql),
+      /Designated Portfolio administrator has a conflicting Auth0 subject/,
+    );
+  } finally {
+    await pool.query("ROLLBACK");
+  }
 
   const row = await pool.query<{
     google_sub: string;
