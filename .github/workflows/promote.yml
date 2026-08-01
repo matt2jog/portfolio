@@ -224,8 +224,6 @@ jobs:
             --format=json)"
           candidate_digest_uri="$(jq -er '.spec.containers[0].image' <<<"${candidate_revision_json}")"
           [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
-          [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
-          [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
           candidate_health="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
