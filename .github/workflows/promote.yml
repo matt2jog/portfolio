@@ -19,6 +19,7 @@ env:
   PROD_SERVICE: portfolio--prod
   PROD_MIGRATION_JOB: portfolio-migrate--prod
   PROD_E2E_BASE_URL: https://2jog.dev
+  PROD_HOST: 2jog.dev
   WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
   DEPLOY_SERVICE_ACCOUNT: portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com
 
@@ -189,6 +190,8 @@ jobs:
             --format='value(status.url)')"
           curl --fail --silent --show-error --retry 8 --retry-all-errors \
             --retry-delay 3 "${service_url}/health" >/dev/null
+          curl --fail --silent --show-error --retry 8 --retry-all-errors \
+            --retry-delay 3 "${PROD_E2E_BASE_URL}/health" >/dev/null
           active_json="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format=json)"
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
@@ -198,9 +201,16 @@ jobs:
           [[ "$(gcloud run revisions describe "${candidate_revision}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
+
+          # Exercise canonical-host auth against the Google origin. Cloudflare can
+          # challenge GitHub-hosted runner IPs even while normal browser traffic is
+          # healthy, so its public edge is gated separately through /health above.
+          origin_ip="$(getent ahostsv4 ghs.googlehosted.com | awk 'NR == 1 { print $1 }')"
+          [[ -n "${origin_ip}" ]]
+          origin_curl=(--resolve "${PROD_HOST}:443:${origin_ip}")
           login_status=
           for attempt in {1..12}; do
-            if ! login_status="$(curl --silent --show-error \
+            if ! login_status="$(curl "${origin_curl[@]}" --silent --show-error \
               --connect-timeout 5 --max-time 15 \
               --header 'Cache-Control: no-cache, no-store' \
               --header 'Pragma: no-cache' \
@@ -227,15 +237,15 @@ jobs:
           for required in ("state", "nonce", "code_challenge"):
               assert query.get(required) and query[required][0]
           PY
-          me_status="$(curl --silent --show-error --output "${RUNNER_TEMP}/auth-me-body" \
+          me_status="$(curl "${origin_curl[@]}" --silent --show-error --output "${RUNNER_TEMP}/auth-me-body" \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/api/auth/me")"
           [[ "${me_status}" == "401" ]]
           jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
-          logout_status="$(curl --silent --show-error --request POST \
+          logout_status="$(curl "${origin_curl[@]}" --silent --show-error --request POST \
             --header 'Origin: https://cross-origin.invalid' --output /dev/null \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/logout")"
           [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
-          github_activity="$(curl --fail --silent --show-error \
+          github_activity="$(curl "${origin_curl[@]}" --fail --silent --show-error \
             --retry 5 --retry-all-errors --retry-delay 2 \
             "${PROD_E2E_BASE_URL}/api/public/github/activity?release=${COMMIT_SHA}")"
           jq -e '
