@@ -147,7 +147,7 @@ try {
     },
   );
   assert.ok(activityResponse?.ok(), "/activity must render successfully");
-  await page.getByRole("heading", { name: /ACTIVITY\s+MONITOR/i }).waitFor({
+  await page.getByTestId("activity-toggle").waitFor({
     state: "visible",
   });
   await page
