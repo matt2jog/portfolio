@@ -58,4 +58,3 @@ BEGIN
   END IF;
 END
 $bind_auth0_administrator$;
-
