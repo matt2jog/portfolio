@@ -12,6 +12,12 @@ BEGIN
   IF to_regrole('portfolio_runtime_login') IS NULL THEN
     CREATE ROLE portfolio_runtime_login LOGIN INHERIT;
   END IF;
+  IF to_regrole('admin_runtime') IS NULL THEN
+    CREATE ROLE admin_runtime NOLOGIN NOINHERIT;
+  END IF;
+  IF to_regrole('admin_staging_runtime') IS NULL THEN
+    CREATE ROLE admin_staging_runtime NOLOGIN NOINHERIT;
+  END IF;
 END
 $roles$;
 
@@ -23,6 +29,10 @@ ALTER ROLE portfolio_runtime
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOLOGIN NOINHERIT;
 ALTER ROLE portfolio_runtime_login
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS LOGIN INHERIT;
+ALTER ROLE admin_runtime
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOLOGIN NOINHERIT;
+ALTER ROLE admin_staging_runtime
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOLOGIN NOINHERIT;
 
 GRANT portfolio_migrator TO portfolio_migrator_login;
 GRANT portfolio_runtime TO portfolio_runtime_login

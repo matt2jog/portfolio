@@ -95,5 +95,8 @@ test("Portfolio runtime loses canonical writes while Admin gains the missing car
     migration,
     /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE\s+education,\s+experience_bullets\s+TO admin_runtime/,
   );
-  assert.match(migration, /GRANT UPDATE ON TABLE xyz_bullets TO admin_runtime/);
+  assert.match(
+    migration,
+    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE xyz_bullets TO admin_runtime/,
+  );
 });

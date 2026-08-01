@@ -24,7 +24,7 @@ BEGIN
       education,
       experience_bullets
     TO admin_runtime;
-    GRANT UPDATE ON TABLE xyz_bullets TO admin_runtime;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE xyz_bullets TO admin_runtime;
   END IF;
 END
 $career_write_authority$;

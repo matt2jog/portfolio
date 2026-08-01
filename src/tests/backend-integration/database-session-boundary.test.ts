@@ -114,7 +114,7 @@ test("Admin owns the missing education and experience-bullet CRUD", async () => 
   const privileges = await pool.query<{
     educationCrud: boolean;
     experienceBulletCrud: boolean;
-    projectBulletUpdate: boolean;
+    projectBulletCrud: boolean;
   }>(`
     SELECT
       pg_catalog.has_table_privilege(
@@ -130,14 +130,14 @@ test("Admin owns the missing education and experience-bullet CRUD", async () => 
       pg_catalog.has_table_privilege(
         'admin_runtime',
         'portfolio.xyz_bullets',
-        'UPDATE'
-      ) AS "projectBulletUpdate"
+        'SELECT,INSERT,UPDATE,DELETE'
+      ) AS "projectBulletCrud"
   `);
 
   assert.deepEqual(privileges.rows[0], {
     educationCrud: true,
     experienceBulletCrud: true,
-    projectBulletUpdate: true,
+    projectBulletCrud: true,
   });
 });
 

@@ -116,6 +116,9 @@ test("Portfolio settings has no project or skill mutation controls", async ({ pa
   await setup(page);
   await page.goto("/admin");
 
+  await expect(page.getByTestId("admin-personalization-panel")).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByRole("heading", { name: "Project presentation" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Shared skill library" })).toHaveCount(0);
