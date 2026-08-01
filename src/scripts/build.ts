@@ -14,7 +14,6 @@ const allowlist = [
   "express",
   "express-rate-limit",
   "jsonwebtoken",
-  "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
