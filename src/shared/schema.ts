@@ -9,7 +9,6 @@ const portfolioSchema = pgSchema(portfolioDatabaseBoundary().schema);
 export const users = portfolioSchema.table("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
-  googleSub: text("google_sub").unique(),
   auth0Sub: text("auth0_sub").unique(),
   name: text("name"),
   role: text("role").notNull().default("user"),
@@ -18,7 +17,6 @@ export const users = portfolioSchema.table("users", {
 
 export const insertUserSchema = createInsertSchema(users).pick({
   email: true,
-  googleSub: true,
   auth0Sub: true,
   name: true,
   role: true,
