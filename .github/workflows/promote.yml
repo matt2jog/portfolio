@@ -175,8 +175,9 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')"
           [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
-          curl --fail --silent --show-error --retry 8 --retry-all-errors \
-            --retry-delay 3 "${candidate_url}/health" >/dev/null
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+            --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
+            "${candidate_url}/health" >/dev/null
 
           shifted=1
           gcloud run services update-traffic "${PROD_SERVICE}" \
@@ -188,10 +189,9 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --format='value(status.url)')"
-          curl --fail --silent --show-error --retry 8 --retry-all-errors \
-            --retry-delay 3 "${service_url}/health" >/dev/null
-          curl --fail --silent --show-error --retry 8 --retry-all-errors \
-            --retry-delay 3 "${PROD_E2E_BASE_URL}/health" >/dev/null
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+            --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
+            "${service_url}/health" >/dev/null
           active_json="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format=json)"
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
@@ -202,12 +202,16 @@ jobs:
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
 
-          # Exercise canonical-host auth against the Google origin. Cloudflare can
-          # challenge GitHub-hosted runner IPs even while normal browser traffic is
-          # healthy, so its public edge is gated separately through /health above.
+          # Exercise canonical-host health and auth against the Google origin.
+          # Cloudflare intentionally challenges GitHub-hosted runner IPs, so its
+          # edge is verified independently from a normal client after promotion.
           origin_ip="$(getent ahostsv4 ghs.googlehosted.com | awk 'NR == 1 { print $1 }')"
           [[ -n "${origin_ip}" ]]
           origin_curl=(--resolve "${PROD_HOST}:443:${origin_ip}")
+          curl "${origin_curl[@]}" --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 \
+            --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
+            "${PROD_E2E_BASE_URL}/health" >/dev/null
           login_status=
           for attempt in {1..12}; do
             if ! login_status="$(curl "${origin_curl[@]}" --silent --show-error \
