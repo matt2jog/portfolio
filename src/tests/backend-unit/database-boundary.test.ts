@@ -10,6 +10,7 @@ test("Portfolio maps deployment stages to exact schemas and roles", () => {
   assert.equal(production.schema, "portfolio");
   assert.equal(production.runtimeLogin, "portfolio_runtime_login");
   assert.equal(production.migratorRole, "portfolio_migrator");
+  assert.equal(production.adminRuntimeRole, "admin_runtime");
 
   const staging = portfolioDatabaseBoundary({ DEPLOYMENT_STAGE: "staging" });
   assert.deepEqual(staging, {
@@ -19,6 +20,7 @@ test("Portfolio maps deployment stages to exact schemas and roles", () => {
     runtimeLogin: "portfolio_staging_runtime_login",
     migratorRole: "portfolio_staging_migrator",
     migratorLogin: "portfolio_staging_migrator_login",
+    adminRuntimeRole: "admin_staging_runtime",
     resumeOwnerRole: "resume_staging_owner",
     resumeAppRole: "resume_staging_app",
     searchPath: "portfolio_staging, extensions",
@@ -37,6 +39,7 @@ test("Portfolio renders staging SQL without changing source checksums", () => {
     "SELECT * FROM public.experience_bullets;",
     "GRANT USAGE ON SCHEMA portfolio TO portfolio_runtime;",
     "ALTER DEFAULT PRIVILEGES FOR ROLE portfolio_migrator IN SCHEMA portfolio GRANT SELECT ON TABLES TO portfolio_runtime;",
+    "GRANT SELECT ON portfolio.education TO admin_runtime;",
     "GRANT SELECT ON portfolio.resume_projects TO resume_app;",
     "GRANT SELECT ON portfolio.resume_skill_variants TO resume_owner;",
   ].join("\n");
@@ -53,6 +56,7 @@ test("Portfolio renders staging SQL without changing source checksums", () => {
       "SELECT * FROM portfolio_staging.__no_legacy_experience_bullets;",
       "GRANT USAGE ON SCHEMA portfolio_staging TO portfolio_staging_runtime;",
       "ALTER DEFAULT PRIVILEGES FOR ROLE portfolio_staging_migrator IN SCHEMA portfolio_staging GRANT SELECT ON TABLES TO portfolio_staging_runtime;",
+      "GRANT SELECT ON portfolio_staging.education TO admin_staging_runtime;",
       "GRANT SELECT ON portfolio_staging.resume_projects TO resume_staging_app;",
       "GRANT SELECT ON portfolio_staging.resume_skill_variants TO resume_staging_owner;",
     ].join("\n"),

@@ -274,29 +274,13 @@ test("activity monitor tabs", async ({ page }, testInfo) => {
   });
 });
 
-test("admin dashboard tabs", async ({ page }, testInfo) => {
+test("Portfolio settings", async ({ page }, testInfo) => {
   await preparePage(page);
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Admin Dashboard" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Welcome Messages" })).toBeVisible();
   await settle(page, 700);
   await savePaginatedScreenshots(page, testInfo, "admin-dashboard/personalization", {
-    maxPages: 4,
-    maxScrollDistance: 2_800,
-  });
-
-  await page.getByTestId("admin-tab-project-presentation").click();
-  await expect(page.getByRole("heading", { name: "Project presentation" })).toBeVisible();
-  await settle(page, 700);
-  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/project-presentation", {
-    maxPages: 4,
-    maxScrollDistance: 2_800,
-  });
-
-  await page.getByTestId("admin-tab-skill-presentation").click();
-  await expect(page.getByRole("heading", { name: "Curate what visitors see" })).toBeVisible();
-  await settle(page, 700);
-  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/skill-presentation", {
     maxPages: 4,
     maxScrollDistance: 2_800,
   });

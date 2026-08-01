@@ -7,6 +7,7 @@ export interface PortfolioDatabaseBoundary {
   runtimeLogin: "portfolio_runtime_login" | "portfolio_staging_runtime_login";
   migratorRole: "portfolio_migrator" | "portfolio_staging_migrator";
   migratorLogin: "portfolio_migrator_login" | "portfolio_staging_migrator_login";
+  adminRuntimeRole: "admin_runtime" | "admin_staging_runtime";
   resumeOwnerRole: "resume_owner" | "resume_staging_owner";
   resumeAppRole: "resume_app" | "resume_staging_app";
   searchPath: "portfolio, extensions" | "portfolio_staging, extensions";
@@ -20,6 +21,7 @@ const BOUNDARIES: Record<PortfolioDeploymentStage, PortfolioDatabaseBoundary> = 
     runtimeLogin: "portfolio_runtime_login",
     migratorRole: "portfolio_migrator",
     migratorLogin: "portfolio_migrator_login",
+    adminRuntimeRole: "admin_runtime",
     resumeOwnerRole: "resume_owner",
     resumeAppRole: "resume_app",
     searchPath: "portfolio, extensions",
@@ -31,6 +33,7 @@ const BOUNDARIES: Record<PortfolioDeploymentStage, PortfolioDatabaseBoundary> = 
     runtimeLogin: "portfolio_staging_runtime_login",
     migratorRole: "portfolio_staging_migrator",
     migratorLogin: "portfolio_staging_migrator_login",
+    adminRuntimeRole: "admin_staging_runtime",
     resumeOwnerRole: "resume_staging_owner",
     resumeAppRole: "resume_staging_app",
     searchPath: "portfolio_staging, extensions",
@@ -68,6 +71,7 @@ export function renderPortfolioMigrationSql(
     )
     .replaceAll(/\bresume_owner\b/g, boundary.resumeOwnerRole)
     .replaceAll(/\bresume_app\b/g, boundary.resumeAppRole)
+    .replaceAll(/\badmin_runtime\b/g, boundary.adminRuntimeRole)
     .replaceAll(/\bportfolio_runtime\b/g, boundary.runtimeRole)
     .replaceAll(/\bportfolio_migrator\b/g, boundary.migratorRole)
     .replaceAll(/\bSCHEMA portfolio\b/g, `SCHEMA ${boundary.schema}`)

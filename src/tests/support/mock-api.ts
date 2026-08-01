@@ -132,24 +132,6 @@ export async function installMockApi(page: Page) {
   await page.route("**/api/admin/policy/check-acceptance", (route) =>
     fulfillJson(route, { accepted: true }),
   );
-  await page.route("**/api/admin/personal-information", (route) =>
-    fulfillJson(route, personalInformationFixture),
-  );
-  await page.route("**/api/admin/bio", (route) => fulfillJson(route, adminFixtures.bio));
-  await page.route("**/api/admin/bio/versions", (route) =>
-    fulfillJson(route, [adminFixtures.bio]),
-  );
-  await page.route("**/api/admin/projects", (route) => fulfillJson(route, projectsFixture));
-  await page.route("**/api/admin/archived/projects", (route) => fulfillJson(route, []));
-  await page.route("**/api/admin/skills", (route) =>
-    fulfillJson(route, adminFixtures.portfolioSkills),
-  );
-  await page.route("**/api/admin/skills-groups", (route) =>
-    fulfillJson(route, adminFixtures.skillGroups),
-  );
-  await page.route("**/api/admin/all-skills", (route) =>
-    fulfillJson(route, adminFixtures.allSkills),
-  );
 }
 
 export async function seedBrowserState(

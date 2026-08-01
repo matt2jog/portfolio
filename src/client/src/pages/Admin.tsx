@@ -1,19 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { AdminAcceptanceModal } from "@/components/AdminAcceptanceModal";
 import Footer from "@/components/Footer";
-import AdminProjectPresentationPanel from "@/components/admin/AdminProjectPresentationPanel";
-import AdminSkillsPanel from "@/components/admin/AdminSkillsPanel";
 import AdminPersonalizationPanel from "@/components/admin/AdminPersonalizationPanel";
-
-type AdminTab = "personalization" | "project-presentation" | "skill-presentation";
-
-const tabs: { id: AdminTab; label: string }[] = [
-  { id: "personalization", label: "Welcome messages" },
-  { id: "project-presentation", label: "Project presentation" },
-  { id: "skill-presentation", label: "Skill presentation" },
-];
 
 export default function Admin() {
   const { data: me } = useQuery<{ role?: string } | null>({
@@ -26,7 +16,6 @@ export default function Admin() {
   const [isAccepting, setIsAccepting] = useState(false);
 
   const isAdmin = me?.role === "admin";
-  const [activeTab, setActiveTab] = useState<AdminTab>("personalization");
 
   // Check if admin needs to accept policies
   useEffect(() => {
@@ -71,12 +60,6 @@ export default function Admin() {
     }
   };
 
-  const activePanel = useMemo(() => {
-    if (activeTab === "project-presentation") return <AdminProjectPresentationPanel />;
-    if (activeTab === "skill-presentation") return <AdminSkillsPanel />;
-    return <AdminPersonalizationPanel />;
-  }, [activeTab]);
-
   if (!me) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -119,7 +102,7 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-black text-white px-4 sm:px-6 py-8 sm:py-10 space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Portfolio settings</h1>
         <button
           onClick={() => apiRequest("POST", "/api/auth/logout").then(async (response) => {
             const body = await response.json() as { logout_url?: string };
@@ -132,27 +115,14 @@ export default function Admin() {
       </div>
 
       <p className="max-w-[65ch] text-sm leading-6 text-white/70">
-        Canonical career content is managed in Admin Dashboard. This page owns only Portfolio presentation.
+        Career data is read-only in Portfolio. Manage projects, experience, education, biography, and skills in{" "}
+        <a className="text-white underline underline-offset-4" href="https://admin.2jog.dev">
+          Admin Dashboard
+        </a>
+        . This page manages only Portfolio welcome messages.
       </p>
 
-      <nav data-testid="admin-tabs" aria-label="Portfolio administration" className="border border-white/10 bg-black/40 p-2 md:sticky md:top-2 md:z-10">
-        <div className="grid gap-2 sm:grid-cols-3">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              data-testid={`admin-tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              aria-current={activeTab === tab.id ? "page" : undefined}
-              className={`px-3 py-2 text-sm border ${activeTab === tab.id ? "border-white/60 bg-white/10" : "border-white/20 hover:border-white/40"}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      {activePanel}
+      <AdminPersonalizationPanel />
 
       <Footer />
     </div>

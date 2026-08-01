@@ -61,6 +61,7 @@ test("the full staging plan renders separately while retaining source checksums"
   assert.doesNotMatch(rendered, /\bportfolio\./);
   assert.doesNotMatch(rendered, /\bresume_app\b/);
   assert.doesNotMatch(rendered, /\bresume_owner\b/);
+  assert.doesNotMatch(rendered, /\badmin_runtime\b/);
   assert.doesNotMatch(rendered, /\bportfolio_runtime\b/);
   assert.doesNotMatch(rendered, /\bportfolio_migrator\b/);
   assert.doesNotMatch(rendered, /\bSCHEMA portfolio\b/);
@@ -74,4 +75,6 @@ test("the full staging plan renders separately while retaining source checksums"
   );
   assert.match(rendered, /INSERT INTO users/);
   assert.match(rendered, /matching_administrators <> 1/);
+  assert.match(rendered, /admin_staging_runtime/);
+  assert.match(rendered, /REVOKE INSERT, UPDATE, DELETE ON TABLE/);
 });

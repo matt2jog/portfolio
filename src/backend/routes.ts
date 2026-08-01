@@ -4,11 +4,7 @@ import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
-import {
-  canonicalCareerMutationRejected,
-  isForeignKeyViolation,
-  projectPresentationUpdateSchema,
-} from "./career-authority";
+import { canonicalCareerMutationRejected } from "./career-authority";
 import { publicGeoIpHint } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
@@ -17,15 +13,9 @@ import {
   allSkills,
   bio,
   bioParagraphs,
-  insertAllSkillSchema,
-  insertPortfolioSkillSchema,
-  insertSkillsGroupSchema,
   portfolioSkills,
   projects,
   skillsGroup,
-  updateAllSkillSchema,
-  updatePortfolioSkillSchema,
-  updateSkillsGroupSchema,
   auditLogs,
   xyzBullets,
   personalInformation,
@@ -165,10 +155,6 @@ function getProjectsCacheTtlMs() {
   const parsed = Number.parseInt(process.env.PROJECTS_CACHE_TTL_MINUTES || "", 10);
   const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PROJECTS_CACHE_TTL_MINUTES;
   return minutes * 60_000;
-}
-
-function invalidateProjectsCache() {
-  projectsCache = null;
 }
 
 export async function registerRoutes(
@@ -820,42 +806,11 @@ export async function registerRoutes(
 
   app.post("/api/admin/projects", requireAdmin, canonicalCareerMutationRejected);
 
-  app.put("/api/admin/projects/:id", requireAdmin, async (req, res) => {
-    const projectId = routeId(req.params.id);
-    const parsed = projectPresentationUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [updated] = await db
-      .update(projects)
-      .set(parsed.data)
-      .where(eq(projects.id, projectId))
-      .returning();
-
-    if (!updated) {
-      return res.status(404).json({ message: "Project not found" });
-    }
-
-    invalidateProjectsCache();
-    await logAudit(req, "project.presentation.update", { id: projectId, ...parsed.data });
-    const [hydrated] = await hydrateProjectsWithBullets([updated]);
-    res.json(hydrated);
-  });
+  app.put("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected);
 
   app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected);
 
-  app.post("/api/admin/projects/reorder", requireAdmin, async (req, res) => {
-    const order = Array.isArray(req.body?.order) ? req.body.order : [];
-    await db.transaction(async (tx) => {
-      await Promise.all(
-        order.map((id: string, index: number) =>
-          tx.update(projects).set({ position: index }).where(eq(projects.id, id))
-        )
-      );
-    });
-    invalidateProjectsCache();
-    await logAudit(req, "project.reorder", { order });
-    res.json({ ok: true });
-  });
+  app.post("/api/admin/projects/reorder", requireAdmin, canonicalCareerMutationRejected);
 
   app.get("/api/admin/bio", requireAdmin, async (_req, res) => {
     const [row] = await db.select().from(bio)
@@ -908,82 +863,10 @@ export async function registerRoutes(
     res.json(rows);
   });
 
-  app.post("/api/admin/skills-groups", requireAdmin, async (req, res) => {
-    const parsed = insertSkillsGroupSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-    const [duplicate] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-      .where(sql`lower(trim(${skillsGroup.name})) = lower(trim(${parsed.data.name}))`)
-      .limit(1);
-    if (duplicate) return res.status(409).json({ message: "A display group with that name already exists" });
-
-    const [maxRow] = await db
-      .select({ max: sql<number>`max(${skillsGroup.position})` })
-      .from(skillsGroup);
-    const [created] = await db
-      .insert(skillsGroup)
-      .values({ ...parsed.data, position: (maxRow?.max ?? -1) + 1 })
-      .returning();
-    await logAudit(req, "skillsGroup.create", created);
-    res.json(created);
-  });
-
-  app.put("/api/admin/skills-groups/:id", requireAdmin, async (req, res) => {
-    const groupId = routeId(req.params.id);
-    const parsed = updateSkillsGroupSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-    if (parsed.data.name) {
-      const [duplicate] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-        .where(and(
-          sql`lower(trim(${skillsGroup.name})) = lower(trim(${parsed.data.name}))`,
-          sql`${skillsGroup.id} <> ${groupId}`,
-        ))
-        .limit(1);
-      if (duplicate) return res.status(409).json({ message: "A display group with that name already exists" });
-    }
-
-    const [updated] = await db
-      .update(skillsGroup)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(eq(skillsGroup.id, groupId))
-      .returning();
-
-    await logAudit(req, "skillsGroup.update", { id: groupId, ...parsed.data });
-    res.json(updated);
-  });
-
-  app.delete("/api/admin/skills-groups/:id", requireAdmin, async (req, res) => {
-    const groupId = routeId(req.params.id);
-    const [membership] = await db.select({ id: portfolioSkills.id }).from(portfolioSkills)
-      .where(and(
-        eq(portfolioSkills.groupId, groupId),
-        sql`${portfolioSkills.deletedAt} IS NULL`,
-      ))
-      .limit(1);
-    if (membership) {
-      return res.status(409).json({ message: "Move or remove this group's visible skills before deleting it" });
-    }
-    const [deleted] = await db.delete(skillsGroup)
-      .where(eq(skillsGroup.id, groupId))
-      .returning({ id: skillsGroup.id });
-    if (!deleted) return res.status(404).json({ message: "Display group not found" });
-    await logAudit(req, "skillsGroup.delete", { id: groupId });
-    res.json({ ok: true });
-  });
-
-  app.post("/api/admin/skills-groups/reorder", requireAdmin, async (req, res) => {
-    const order: string[] = Array.isArray(req.body?.order)
-      ? req.body.order.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
-      : [];
-    await db.transaction(async (tx) => {
-      await Promise.all(
-        order.map((id, index) =>
-          tx.update(skillsGroup).set({ position: index }).where(eq(skillsGroup.id, id))
-        ),
-      );
-    });
-    await logAudit(req, "skillsGroup.reorder", { order });
-    res.json({ ok: true });
-  });
+  app.post("/api/admin/skills-groups", requireAdmin, canonicalCareerMutationRejected);
+  app.put("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.delete("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.post("/api/admin/skills-groups/reorder", requireAdmin, canonicalCareerMutationRejected);
 
   app.get("/api/admin/all-skills", requireAdmin, async (_req, res) => {
     const rows = await db.select({
@@ -1011,246 +894,14 @@ export async function registerRoutes(
     })));
   });
 
-  app.post("/api/admin/all-skills", requireAdmin, async (req, res) => {
-    const parsed = insertAllSkillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-    if (parsed.data.groupingId) {
-      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-        .where(eq(skillsGroup.id, parsed.data.groupingId))
-        .limit(1);
-      if (!group) return res.status(400).json({ message: "Choose an existing skill group" });
-    }
-    const [duplicate] = await db.select({ id: allSkills.id }).from(allSkills)
-      .where(sql`lower(trim(${allSkills.name})) = lower(trim(${parsed.data.name}))`)
-      .limit(1);
-    if (duplicate) return res.status(409).json({ message: "A skill with that name already exists" });
+  app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected);
+  app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
 
-    const [created] = await db.insert(allSkills).values(parsed.data).returning();
-    await logAudit(req, "allSkill.create", {
-      id: created.id,
-      name: created.name,
-      groupingId: created.groupingId,
-    });
-    const [hydrated] = await hydrateCanonicalSkills([created]);
-    res.status(201).json(hydrated);
-  });
-
-  app.put("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
-    const skillId = routeId(req.params.id);
-    const parsed = updateAllSkillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-    if (parsed.data.groupingId) {
-      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-        .where(eq(skillsGroup.id, parsed.data.groupingId))
-        .limit(1);
-      if (!group) return res.status(400).json({ message: "Choose an existing skill group" });
-    }
-    if (parsed.data.name) {
-      const [duplicate] = await db.select({ id: allSkills.id }).from(allSkills)
-        .where(and(
-          sql`lower(trim(${allSkills.name})) = lower(trim(${parsed.data.name}))`,
-          sql`${allSkills.id} <> ${skillId}`,
-        ))
-        .limit(1);
-      if (duplicate) return res.status(409).json({ message: "A skill with that name already exists" });
-    }
-
-    const [updated] = await db
-      .update(allSkills)
-      .set(parsed.data)
-      .where(eq(allSkills.id, skillId))
-      .returning();
-    if (!updated) return res.status(404).json({ message: "Skill not found" });
-    await logAudit(req, "allSkill.update", {
-      id: skillId,
-      name: updated.name,
-      groupingId: updated.groupingId,
-    });
-    const [hydrated] = await hydrateCanonicalSkills([updated]);
-    res.json(hydrated);
-  });
-
-  app.delete("/api/admin/all-skills/:id", requireAdmin, async (req, res) => {
-    const skillId = routeId(req.params.id);
-    const [portfolioReference] = await db
-      .select({ id: portfolioSkills.id })
-      .from(portfolioSkills)
-      .where(eq(portfolioSkills.allSkillId, skillId))
-      .limit(1);
-    if (portfolioReference) {
-      return res.status(409).json({
-        message: "Remove this skill from the Portfolio map before deleting it",
-      });
-    }
-
-    try {
-      const [deleted] = await db
-        .delete(allSkills)
-        .where(eq(allSkills.id, skillId))
-        .returning({ id: allSkills.id });
-      if (!deleted) return res.status(404).json({ message: "Skill not found" });
-    } catch (error) {
-      if (isForeignKeyViolation(
-        error,
-        "portfolio_skills_all_skill_id_all_skills_id_fk",
-      )) {
-        return res.status(409).json({
-          message: "Remove this skill from the Portfolio map before deleting it",
-        });
-      }
-      if (isForeignKeyViolation(
-        error,
-        "doc_skill_category_variants_variant_id_all_skills_id_fk",
-      )) {
-        return res.status(409).json({
-          message: "This skill is used by a Resume. Remove those Resume references first.",
-        });
-      }
-      throw error;
-    }
-
-    await logAudit(req, "allSkill.delete", { id: skillId });
-    res.json({ ok: true });
-  });
-
-  app.post("/api/admin/skills", requireAdmin, async (req, res) => {
-    const parsed = insertPortfolioSkillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [allSkill] = await db.select().from(allSkills)
-      .where(eq(allSkills.id, parsed.data.allSkillId))
-      .limit(1);
-    if (!allSkill) return res.status(400).json({ message: "Invalid all_skill reference" });
-
-    if (parsed.data.groupId) {
-      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-        .where(eq(skillsGroup.id, parsed.data.groupId))
-        .limit(1);
-      if (!group) return res.status(400).json({ message: "Invalid skills_group reference" });
-    }
-
-    const [existingMembership] = await db.select({ id: portfolioSkills.id }).from(portfolioSkills)
-      .where(and(
-        eq(portfolioSkills.allSkillId, parsed.data.allSkillId),
-        sql`${portfolioSkills.deletedAt} IS NULL`,
-      ))
-      .limit(1);
-    if (existingMembership) {
-      return res.status(409).json({ message: "Skill is already visible in Portfolio" });
-    }
-
-    const [maxRow] = await db
-      .select({ max: sql<number>`max(${portfolioSkills.position})` })
-      .from(portfolioSkills)
-      .where(parsed.data.groupId
-        ? eq(portfolioSkills.groupId, parsed.data.groupId)
-        : isNull(portfolioSkills.groupId));
-    const nextPos = (maxRow?.max ?? -1) + 1;
-
-    let created;
-    try {
-      [created] = await db
-        .insert(portfolioSkills)
-        .values({ ...parsed.data, position: nextPos })
-        .returning();
-    } catch (error) {
-      if (isForeignKeyViolation(error, "portfolio_skills_all_skill_id_all_skills_id_fk")) {
-        return res.status(400).json({ message: "Invalid all_skill reference" });
-      }
-      throw error;
-    }
-
-    await logAudit(req, "portfolioSkill.create", created);
-    const [hydrated] = await hydratePortfolioSkills([created]);
-    res.json(hydrated);
-  });
-
-  app.put("/api/admin/skills/:id", requireAdmin, async (req, res) => {
-    const skillId = routeId(req.params.id);
-    const parsed = updatePortfolioSkillSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const [existingMembership] = await db.select({
-      id: portfolioSkills.id,
-      groupId: portfolioSkills.groupId,
-    }).from(portfolioSkills)
-      .where(eq(portfolioSkills.id, skillId))
-      .limit(1);
-    if (!existingMembership) {
-      return res.status(404).json({ message: "Portfolio skill not found" });
-    }
-
-    if (parsed.data.allSkillId) {
-      const [allSkill] = await db.select().from(allSkills)
-        .where(eq(allSkills.id, parsed.data.allSkillId))
-        .limit(1);
-      if (!allSkill) return res.status(400).json({ message: "Invalid all_skill reference" });
-    }
-
-    if (parsed.data.groupId) {
-      const [group] = await db.select({ id: skillsGroup.id }).from(skillsGroup)
-        .where(eq(skillsGroup.id, parsed.data.groupId))
-        .limit(1);
-      if (!group) return res.status(400).json({ message: "Invalid skills_group reference" });
-    }
-
-    let updateValues: Partial<typeof portfolioSkills.$inferInsert> = parsed.data;
-    if (
-      parsed.data.groupId !== undefined
-      && parsed.data.groupId !== existingMembership.groupId
-    ) {
-      const [maxRow] = await db
-        .select({ max: sql<number>`max(${portfolioSkills.position})` })
-        .from(portfolioSkills)
-        .where(eq(portfolioSkills.groupId, parsed.data.groupId));
-      updateValues = {
-        ...parsed.data,
-        position: (maxRow?.max ?? -1) + 1,
-      };
-    }
-
-    let updated;
-    try {
-      [updated] = await db
-        .update(portfolioSkills)
-        .set(updateValues)
-        .where(eq(portfolioSkills.id, skillId))
-        .returning();
-    } catch (error) {
-      if (isForeignKeyViolation(error, "portfolio_skills_all_skill_id_all_skills_id_fk")) {
-        return res.status(400).json({ message: "Invalid all_skill reference" });
-      }
-      if (isForeignKeyViolation(error, "portfolio_skills_group_id_skills_group_id_fk")) {
-        return res.status(400).json({ message: "Invalid skills_group reference" });
-      }
-      throw error;
-    }
-
-    await logAudit(req, "portfolioSkill.update", { id: skillId, ...updateValues });
-    const [hydrated] = await hydratePortfolioSkills([updated]);
-    res.json(hydrated);
-  });
-
-  app.delete("/api/admin/skills/:id", requireAdmin, async (req, res) => {
-    const skillId = routeId(req.params.id);
-    await db.delete(portfolioSkills)
-      .where(eq(portfolioSkills.id, skillId));
-    await logAudit(req, "portfolioSkill.delete", { id: skillId });
-    res.json({ ok: true });
-  });
-
-  app.post("/api/admin/skills/reorder", requireAdmin, async (req, res) => {
-    const order = Array.isArray(req.body?.order) ? req.body.order : [];
-    await db.transaction(async (tx) => {
-      await Promise.all(
-        order.map((id: string, index: number) =>
-          tx.update(portfolioSkills).set({ position: index }).where(eq(portfolioSkills.id, id))
-        )
-      );
-    });
-    await logAudit(req, "portfolioSkill.reorder", { order });
-    res.json({ ok: true });
-  });
+  app.post("/api/admin/skills", requireAdmin, canonicalCareerMutationRejected);
+  app.put("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.delete("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected);
+  app.post("/api/admin/skills/reorder", requireAdmin, canonicalCareerMutationRejected);
 
   // Experience endpoints
   app.get("/api/admin/experiences", requireAdmin, async (_req, res) => {
@@ -1399,7 +1050,6 @@ async function logAudit(req: Request, action: string, payload: unknown) {
     payload,
   });
 }
-
 function routeId(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
@@ -1551,24 +1201,3 @@ async function hydratePortfolioSkills(skillRows: any[]) {
     };
   });
 }
-
-async function hydrateCanonicalSkills(skillRows: any[]) {
-  if (!Array.isArray(skillRows) || skillRows.length === 0) return [];
-  const groupIds = skillRows
-    .map((row) => row.groupingId)
-    .filter((value): value is string => typeof value === "string" && value.length > 0);
-  const groups = groupIds.length
-    ? await db.select({ id: skillsGroup.id, name: skillsGroup.name })
-      .from(skillsGroup)
-      .where(inArray(skillsGroup.id, groupIds))
-    : [];
-  const groupById = new Map(groups.map((group) => [group.id, group.name]));
-  return skillRows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    groupingId: row.groupingId ?? null,
-    groupingName: row.groupingId ? groupById.get(row.groupingId) ?? null : null,
-    portfolioReferences: 0,
-  }));
-}
-

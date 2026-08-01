@@ -28,6 +28,15 @@ async function main(): Promise<void> {
       END
       $resume_test_role$
     `);
+    await client.query(`
+      DO $admin_test_role$
+      BEGIN
+        IF to_regrole('admin_runtime') IS NULL THEN
+          CREATE ROLE admin_runtime NOLOGIN NOINHERIT;
+        END IF;
+      END
+      $admin_test_role$
+    `);
     await client.query(sql);
   } finally {
     await client.end();
