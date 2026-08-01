@@ -124,9 +124,9 @@ try {
     },
   );
   assert.ok(portfolioResponse?.ok(), "/portfolio must render successfully");
-  await page.getByRole("heading", { name: /DEPLOYED\s+MODULES/i }).waitFor({
-    state: "visible",
-  });
+  await page
+    .locator('[data-testid="portfolio-cube-scene"], [data-testid="portfolio-empty"]')
+    .waitFor({ state: "visible" });
   if (projects.length > 0) {
     await page.getByText(projects[0].title, { exact: true }).first().waitFor({
       state: "visible",
