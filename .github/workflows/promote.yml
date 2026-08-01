@@ -201,7 +201,6 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${DIGEST_URI}" \
-            --update-env-vars "PORTFOLIO_RELEASE_SHA=${COMMIT_SHA}" \
             --update-labels "commit-sha=${COMMIT_SHA},release-sha=${COMMIT_SHA}" \
             --no-traffic \
             --tag "${candidate_tag}" \
@@ -226,8 +225,6 @@ jobs:
           [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
           [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
-          [[ "$(jq -r '.spec.containers[0].env[] | select(.name == "PORTFOLIO_RELEASE_SHA") | .value' \
-            <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
           candidate_health="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \

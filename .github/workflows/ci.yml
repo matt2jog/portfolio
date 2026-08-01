@@ -132,11 +132,27 @@ jobs:
           load: true
           pull: true
           tags: ${{ env.LOCAL_IMAGE }}
+          build-args: |
+            VCS_REF=${{ env.COMMIT_SHA }}
           labels: |
             org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=portfolio
           cache-to: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && 'type=gha,mode=max,scope=portfolio' || '' }}
+
+      - name: Verify image release provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_json="$(docker image inspect "${LOCAL_IMAGE}")"
+          image_revision="$(jq -er '.[0].Config.Labels["org.opencontainers.image.revision"]' \
+            <<<"${image_json}")"
+          image_release_sha="$(jq -er \
+            '.[0].Config.Env[] | select(startswith("PORTFOLIO_RELEASE_SHA="))
+              | ltrimstr("PORTFOLIO_RELEASE_SHA=")' <<<"${image_json}")"
+          [[ "${image_revision}" == "${COMMIT_SHA}" ]]
+          [[ "${image_release_sha}" == "${COMMIT_SHA}" ]]
+          [[ "${image_release_sha}" =~ ^[0-9a-f]{40}$ ]]
 
       - name: Report high image vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -249,6 +265,13 @@ jobs:
             echo "::error::The immutable commit tag ${COMMIT_SHA} does not carry its exact OCI revision label."
             exit 1
           fi
+          remote_release_sha="$(docker image inspect "${remote_image}" \
+            --format='{{ range .Config.Env }}{{ println . }}{{ end }}' \
+            | sed -n 's/^PORTFOLIO_RELEASE_SHA=//p')"
+          if [[ "${remote_release_sha}" != "${COMMIT_SHA}" ]]; then
+            echo "::error::The immutable commit tag ${COMMIT_SHA} does not carry its exact runtime release SHA."
+            exit 1
+          fi
           resolved_digest="$(gcloud artifacts docker images describe "${remote_image}" \
             --project "${GCP_PROJECT_ID}" \
             --format='value(image_summary.digest)')"
@@ -315,7 +338,6 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${{ needs.publish.outputs.digest_uri }}" \
-            --update-env-vars "PORTFOLIO_RELEASE_SHA=${COMMIT_SHA}" \
             --revision-suffix="" \
             --no-traffic \
             --tag "${candidate_tag}" \
@@ -327,12 +349,6 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')"
           [[ "${deployed_digest_uri}" == "${{ needs.publish.outputs.digest_uri }}" ]]
-          staging_revision_json="$(gcloud run revisions describe "${staging_revision}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --format=json)"
-          [[ "$(jq -r '.spec.containers[0].env[] | select(.name == "PORTFOLIO_RELEASE_SHA") | .value' \
-            <<<"${staging_revision_json}")" == "${COMMIT_SHA}" ]]
           service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
