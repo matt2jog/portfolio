@@ -27,6 +27,7 @@ test("all migrations are checksummed and idempotent", async () => {
   assert.ok(plan.some((migration) => migration.version === "007_remove_false_pubsub_skill"));
   assert.ok(plan.some((migration) => migration.version === "010_allow_canonical_skill_deletion"));
   assert.ok(plan.some((migration) => migration.version === "011_bind_auth0_administrator"));
+  assert.ok(plan.some((migration) => migration.version === "012_drop_google_sub"));
   assert.ok(
     plan.findIndex((migration) => migration.version === "007_clean_obsolete_messaging_epilogues")
       < plan.findIndex((migration) => migration.version === "008_neutralize_obsolete_messaging_references"),
@@ -108,6 +109,15 @@ test("the baseline contains only current tables, views, and ordinary RLS", async
     WHERE routine.pronamespace = 'portfolio'::regnamespace
   `);
   assert.equal(customCode.rows[0]?.count, "0");
+
+  const legacyGoogleSubject = await pool.query<{ count: string }>(`
+    SELECT count(*)::text AS count
+    FROM information_schema.columns
+    WHERE table_schema = 'portfolio'
+      AND table_name = 'users'
+      AND column_name = 'google_sub'
+  `);
+  assert.equal(legacyGoogleSubject.rows[0]?.count, "0");
 
   const triggers = await pool.query<{ count: string }>(`
     SELECT count(*)::text AS count
