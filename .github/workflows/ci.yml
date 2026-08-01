@@ -386,7 +386,8 @@ jobs:
           CANDIDATE_URL: ${{ steps.staging.outputs.candidate_url }}
         run: |
           set -euo pipefail
-          candidate_health="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \
+          candidate_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${CANDIDATE_URL}/health")"
           [[ "$(jq -r '.release_sha' <<<"${candidate_health}")" == "${COMMIT_SHA}" ]]
 
@@ -448,10 +449,12 @@ jobs:
           [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
             <<<"${service_json}")" == "${STAGING_REVISION}" ]]
           service_url="$(jq -er '.status.url' <<<"${service_json}")"
-          service_health="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \
+          service_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${service_url}/health")"
           [[ "$(jq -r '.release_sha' <<<"${service_health}")" == "${COMMIT_SHA}" ]]
-          public_health="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \
+          public_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${STAGING_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
           login_status="$(curl --silent --show-error \

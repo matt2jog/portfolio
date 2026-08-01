@@ -75,7 +75,8 @@ jobs:
             --format='value(spec.containers[0].image)')"
           [[ "${digest_uri}" == "${IMAGE_URI}@sha256:"* ]]
           staging_url="$(jq -er '.status.url' <<<"${service_json}")"
-          staging_health="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
+          staging_health="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 15 --retry 5 --retry-all-errors \
             --retry-delay 2 "${staging_url}/health")"
           [[ "$(jq -r '.release_sha' <<<"${staging_health}")" == "${commit_sha}" ]]
           digest="${digest_uri##*@}"
