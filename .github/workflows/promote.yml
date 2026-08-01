@@ -75,8 +75,9 @@ jobs:
             --format='value(spec.containers[0].image)')"
           [[ "${digest_uri}" == "${IMAGE_URI}@sha256:"* ]]
           staging_url="$(jq -er '.status.url' <<<"${service_json}")"
-          curl --fail --silent --show-error --retry 5 --retry-all-errors \
-            --retry-delay 2 "${staging_url}/health" >/dev/null
+          staging_health="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            --retry-delay 2 "${staging_url}/health")"
+          [[ "$(jq -r '.release_sha' <<<"${staging_health}")" == "${commit_sha}" ]]
           digest="${digest_uri##*@}"
           tagged_digest="$(gcloud artifacts docker images describe "${IMAGE_URI}:${commit_sha}" \
             --project "${GCP_PROJECT_ID}" \
@@ -101,36 +102,80 @@ jobs:
             <<<"${prod_json}")" == "1" ]]
           previous_revision="$(jq -er '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
             <<<"${prod_json}")"
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${PROD_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          access_token="$(gcloud auth print-access-token)"
+          before_v2="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${access_token}" \
+            "${service_endpoint}")"
+          previous_labels="$(jq -ce '.labels // {}' <<<"${before_v2}")"
+          access_token=
           shifted=0
+          labels_touched=0
+          restore_labels() {
+            local token current request_body
+            token="$(gcloud auth print-access-token)" || return 1
+            current="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${token}" \
+              "${service_endpoint}")" || return 1
+            request_body="$(jq -cn \
+              --arg name "${service_name}" \
+              --arg etag "$(jq -er '.etag' <<<"${current}")" \
+              --argjson labels "${previous_labels}" \
+              '{name: $name, etag: $etag, labels: $labels}')" || return 1
+            curl --fail --silent --show-error \
+              --request PATCH \
+              --header "Authorization: Bearer ${token}" \
+              --header "Content-Type: application/json" \
+              --data-binary "${request_body}" \
+              "${service_endpoint}?updateMask=labels&forceNewRevision=false" >/dev/null || return 1
+            for attempt in {1..60}; do
+              current="$(curl --fail --silent --show-error \
+                --header "Authorization: Bearer ${token}" \
+                "${service_endpoint}")" || return 1
+              if [[ "$(jq -cS '.labels // {}' <<<"${current}")" == \
+                "$(jq -cS . <<<"${previous_labels}")" ]]; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
           rollback() {
             status=$?
-            if [[ ${status} -ne 0 && ${shifted} -eq 1 ]]; then
+            if [[ ${status} -ne 0 ]]; then
               set +e
-              echo "::warning::Post-shift verification failed; restoring ${previous_revision}."
               rollback_failed=0
-              if ! gcloud run services update-traffic "${PROD_SERVICE}" \
-                --project "${GCP_PROJECT_ID}" \
-                --region "${GCP_REGION}" \
-                --to-revisions "${previous_revision}=100" \
-                --quiet; then
-                rollback_failed=1
-              fi
-              if restored_json="$(gcloud run services describe "${PROD_SERVICE}" \
-                --project "${GCP_PROJECT_ID}" \
-                --region "${GCP_REGION}" \
-                --format=json)"; then
-                restored_count="$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
-                  <<<"${restored_json}")"
-                restored_revision="$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
-                  <<<"${restored_json}")"
-                if [[ "${restored_count}" != "1" || "${restored_revision}" != "${previous_revision}" ]]; then
+              if [[ ${shifted} -eq 1 ]]; then
+                echo "::warning::Post-shift verification failed; restoring ${previous_revision}."
+                if ! gcloud run services update-traffic "${PROD_SERVICE}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --to-revisions "${previous_revision}=100" \
+                  --quiet; then
                   rollback_failed=1
                 fi
-              else
+                if restored_json="$(gcloud run services describe "${PROD_SERVICE}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --format=json)"; then
+                  restored_count="$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+                    <<<"${restored_json}")"
+                  restored_revision="$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+                    <<<"${restored_json}")"
+                  if [[ "${restored_count}" != "1" || "${restored_revision}" != "${previous_revision}" ]]; then
+                    rollback_failed=1
+                  fi
+                else
+                  rollback_failed=1
+                fi
+              fi
+              if [[ ${labels_touched} -eq 1 ]] && ! restore_labels; then
+                echo "::error::Automatic rollback failed to restore the prior service labels."
                 rollback_failed=1
               fi
               if [[ ${rollback_failed} -ne 0 ]]; then
-                echo "::error::Automatic rollback failed to restore ${previous_revision} at 100% traffic."
+                echo "::error::Automatic production rollback was incomplete."
               fi
             fi
             exit "${status}"
@@ -151,10 +196,13 @@ jobs:
             --wait
 
           candidate_tag="cand"
+          labels_touched=1
           gcloud run deploy "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --image "${DIGEST_URI}" \
+            --update-env-vars "PORTFOLIO_RELEASE_SHA=${COMMIT_SHA}" \
+            --update-labels "commit-sha=${COMMIT_SHA},release-sha=${COMMIT_SHA}" \
             --no-traffic \
             --tag "${candidate_tag}" \
             --revision-suffix="" \
@@ -170,14 +218,22 @@ jobs:
             '.status.traffic[] | select(.tag == $tag) | {revisionName, url}' <<<"${service_json}")"
           candidate_revision="$(jq -er '.revisionName' <<<"${candidate_entry}")"
           candidate_url="$(jq -er '.url' <<<"${candidate_entry}")"
-          candidate_digest_uri="$(gcloud run revisions describe "${candidate_revision}" \
+          candidate_revision_json="$(gcloud run revisions describe "${candidate_revision}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --format='value(spec.containers[0].image)')"
+            --format=json)"
+          candidate_digest_uri="$(jq -er '.spec.containers[0].image' <<<"${candidate_revision_json}")"
           [[ "${candidate_digest_uri}" == "${DIGEST_URI}" ]]
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+          [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.spec.containers[0].env[] | select(.name == "PORTFOLIO_RELEASE_SHA") | .value' \
+            <<<"${candidate_revision_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${service_json}")" == "${COMMIT_SHA}" ]]
+          candidate_health="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
             --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
-            "${candidate_url}/health" >/dev/null
+            "${candidate_url}/health")"
+          [[ "$(jq -r '.release_sha' <<<"${candidate_health}")" == "${COMMIT_SHA}" ]]
 
           shifted=1
           gcloud run services update-traffic "${PROD_SERVICE}" \
@@ -189,15 +245,18 @@ jobs:
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
             --format='value(status.url)')"
-          curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+          service_health="$(curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
             --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
-            "${service_url}/health" >/dev/null
+            "${service_url}/health")"
+          [[ "$(jq -r '.release_sha' <<<"${service_health}")" == "${COMMIT_SHA}" ]]
           active_json="$(gcloud run services describe "${PROD_SERVICE}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format=json)"
           [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
             <<<"${active_json}")" == "1" ]]
           [[ "$(jq -r '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
             <<<"${active_json}")" == "${candidate_revision}" ]]
+          [[ "$(jq -r '.metadata.labels["commit-sha"]' <<<"${active_json}")" == "${COMMIT_SHA}" ]]
+          [[ "$(jq -r '.metadata.labels["release-sha"]' <<<"${active_json}")" == "${COMMIT_SHA}" ]]
           [[ "$(gcloud run revisions describe "${candidate_revision}" \
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
@@ -208,10 +267,11 @@ jobs:
           origin_ip="$(getent ahostsv4 ghs.googlehosted.com | awk 'NR == 1 { print $1 }')"
           [[ -n "${origin_ip}" ]]
           origin_curl=(--resolve "${PROD_HOST}:443:${origin_ip}")
-          curl "${origin_curl[@]}" --fail --silent --show-error \
+          public_health="$(curl "${origin_curl[@]}" --fail --silent --show-error \
             --connect-timeout 5 --max-time 15 \
             --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
-            "${PROD_E2E_BASE_URL}/health" >/dev/null
+            "${PROD_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
+          [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
           login_status=
           for attempt in {1..12}; do
             if ! login_status="$(curl "${origin_curl[@]}" --silent --show-error \

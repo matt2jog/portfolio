@@ -15,10 +15,12 @@ import {
   requestContextMiddleware,
   structuredRequestLogMiddleware,
 } from "./request-observability";
+import { portfolioHealth, resolveReleaseSha } from "./release-provenance";
 
 const app = express();
 const httpServer = createServer(app);
 const isProd = process.env.NODE_ENV === "production";
+const health = portfolioHealth(resolveReleaseSha());
 
 app.use(requestContextMiddleware);
 app.use(structuredRequestLogMiddleware);
@@ -37,11 +39,11 @@ app.use(dynamicResponseCachePolicy);
 
 app.get("/healthz", (_req, res) => {
   res.set("Cache-Control", "no-store");
-  res.json({ ok: true, service: "portfolio" });
+  res.json(health);
 });
 app.get("/health", (_req, res) => {
   res.set("Cache-Control", "no-store");
-  res.json({ ok: true, service: "portfolio" });
+  res.json(health);
 });
 
 if (isProd || Boolean(process.env.K_SERVICE)) {
