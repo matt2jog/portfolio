@@ -3,12 +3,6 @@ import type { Server } from "http";
 import { createHash } from "crypto";
 import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
-import {
-  getRequestTrackerUuid,
-  issueTrackingCookie,
-  registerTrackedUuid,
-  upsertTrEn,
-} from "./tracking";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
 import {
   canonicalCareerMutationRejected,
@@ -183,17 +177,15 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.get("/auth/login", authRoutes.start);
   app.get("/auth/callback", authRoutes.callback);
-  app.get("/auth/google", authRoutes.legacyStart);
-  app.get("/auth/google/callback", authRoutes.legacyCallback);
 
   // ========== AUTH ==========
   app.get("/api/auth/me", requireAuth, (req, res) => {
     return res.json({
       id: req.user?.id,
-      subject: req.auth0Identity?.subject ?? req.user?.googleSub,
+      subject: req.auth0Identity?.subject ?? req.user?.auth0Sub,
       name: req.user?.name,
       role: req.user?.role,
-      auth_method: req.auth0Identity ? "auth0" : "legacy-google",
+      auth_method: "auth0",
     });
   });
 
@@ -817,24 +809,6 @@ export async function registerRoutes(
       .limit(1);
 
     res.json(buildPublicPersonalInformationResponse(row));
-  });
-
-  // ========== BROWSER TRACKING ==========
-  app.post("/api/public/tracking/init", async (req, res) => {
-    const uuid = issueTrackingCookie(req, res);
-    await registerTrackedUuid(uuid);
-    return res.json({ ok: true });
-  });
-
-  app.post("/api/public/tracking/tr-en", async (req, res) => {
-    const uuid = getRequestTrackerUuid(req);
-    if (!uuid) return res.status(400).json({ error: "No tracking cookie present" });
-
-    const trEn = typeof req.body?.trEn === "string" ? req.body.trEn.slice(0, 256) : null;
-    if (!trEn) return res.status(400).json({ error: "trEn value required" });
-
-    await upsertTrEn(uuid, trEn);
-    return res.json({ ok: true });
   });
 
   app.get("/api/admin/projects", requireAdmin, async (_req, res) => {

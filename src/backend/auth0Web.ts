@@ -413,17 +413,6 @@ export function loadAuth0WebConfig(options: {
   };
 }
 
-export function isLegacyAuthEnabled(
-  environment: NodeJS.ProcessEnv = process.env,
-  now = Date.now(),
-): boolean {
-  if (environment.LEGACY_AUTH_ENABLED === "false") return false;
-  const expiresAt = environment.LEGACY_AUTH_EXPIRES_AT;
-  if (!expiresAt) return true;
-  const deadline = Date.parse(expiresAt);
-  return Number.isFinite(deadline) && now < deadline;
-}
-
 export function isSameOriginMutation(request: Request, publicBaseUrl: string): boolean {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
   const origin = request.get("origin");

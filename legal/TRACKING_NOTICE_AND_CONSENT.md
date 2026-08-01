@@ -1,7 +1,7 @@
 # Tracking Notice & Consent Policy
 
-**Last Updated:** July 28, 2026
-**Effective Date:** July 28, 2026
+**Last Updated:** July 31, 2026
+**Effective Date:** July 31, 2026
 
 ## 1. What We Track
 
@@ -30,19 +30,20 @@ We have configured LogRocket to **not** record:
 
 ### 1.3 Cookie & Storage
 
-We use browser storage technologies to track your activity:
+We use browser storage technologies only after applying your consent choice:
 
-- **Consent Identifier Cookie (`tr_uuid`):** A randomly generated identifier cookie is set with a 30-day lifetime. It is `HttpOnly`, so site JavaScript cannot read it. The identifier is recorded by our application only after analytics consent is granted.
+- **Tab-scoped analytics identifier:** A random identifier is kept in `sessionStorage` for the current tab and is not written to the application database.
+- **Consent record:** Your choice and policy version are stored in local browser storage so the Site can honor them on later visits.
 - **Cookies:** We store a `sidebar_state` cookie to remember your UI preferences (sidebar open/closed).
-- **Session Cookies:** For authenticated admin users, we store session cookies for authentication.
+- **Session Cookies:** For authenticated admin users, we store a secure, host-only Auth0 session cookie.
 
 ### 1.4 Security & Rate-Limit Logging
 
-The edge and application process an IP address transiently to enforce geographic access controls and an in-memory API rate limit. The application does not store raw IP request logs or link IP addresses to the consent identifier. Operational request logs contain a generated request ID, method, path, status, and duration, but no raw IP address.
+Cloudflare and Google Cloud may process network metadata while delivering requests. The application discards forwarded visitor IP and country headers before route handling and does not retain a visitor identifier in its database. Operational request logs contain a generated request ID, route template, status, and duration, but no raw IP address.
 
 ### 1.5 Campaign Source Tracking
 
-If you arrive at the Site via a link containing a campaign reference parameter, and you have granted analytics consent, we may record that campaign source in our systems to understand how visitors discover the Site. No personally identifiable information is collected through this mechanism. If you have not granted consent, the parameter is discarded without being recorded.
+If you arrive at the Site via a link containing the retired `tr_en` campaign parameter, the Site removes it from the browser URL without recording or forwarding it.
 
 ## 2. Categories of Tracking
 
@@ -74,7 +75,7 @@ We categorize tracking as follows:
 - Session replay and analytics are disabled by default.
 - A consent interface is presented to visitors and non-essential tracking is enabled only after explicit opt-in.
 - Consent remains valid for 12 months unless withdrawn.
-- The Site is intended primarily for US traffic and may restrict access from non-US regions.
+- The application does not infer a visitor's geographic location.
 
 ### 3.2 Consent Storage
 

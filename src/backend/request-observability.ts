@@ -36,7 +36,6 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
         : undefined;
     const actorSubject = boundedActorSubject(req.auth0Identity?.subject
       ?? req.user?.auth0Sub
-      ?? req.user?.googleSub
       ?? undefined);
     console.log(JSON.stringify({
       event: "portfolio.request.completed",
@@ -52,9 +51,7 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
       duration_ms: Date.now() - startedAt,
       actor_type: req.auth0Identity
         ? "auth0-admin"
-        : req.user
-          ? "legacy-admin"
-          : "anonymous",
+        : "anonymous",
       ...(actorSubject ? { actor_subject: actorSubject } : {}),
     }));
   });

@@ -1,7 +1,7 @@
 # Terms of Use
 
-**Last Updated:** March 27, 2026  
-**Effective Date:** March 27, 2026
+**Last Updated:** July 31, 2026
+**Effective Date:** July 31, 2026
 
 ## 1. Acceptance of Terms
 
@@ -14,7 +14,7 @@ These Terms constitute the entire agreement between you and Matthew Tujague (the
 The Site is a personal portfolio and professional showcase operated by Matthew Tujague. It includes:
 
 - Public pages displaying portfolio projects, skills, bio, and professional information.
-- An admin panel (restricted to authorized users via Google OAuth) for managing portfolio content.
+- An admin panel (restricted to authorized users via Auth0) for managing portfolio content.
 - Links to external profiles and contact methods (email, LinkedIn, GitHub).
 
 The Site is provided as-is for informational and professional purposes. We do not offer any commercial services, transactions, or customer data processing.
@@ -99,7 +99,7 @@ Use of the Site is also governed by the Privacy Policy, which describes applicab
 The Site uses third-party services, including:
 
 - **LogRocket:** Session replay and analytics service. Use of LogRocket is subject to LogRocket's terms and privacy policy.
-- **Google OAuth:** Authentication service. Use is subject to Google's terms of service.
+- **Auth0:** Authentication service. Use is subject to Auth0's terms of service.
 - **Cloud Infrastructure Providers:** Database and hosting. Use is subject to their terms.
 
 By using the Site, you acknowledge and accept these third-party terms.
