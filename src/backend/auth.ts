@@ -5,7 +5,7 @@ import type {
   RequestHandler,
   Response,
 } from "express";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { users } from "@shared/schema";
 import { db } from "./data/db";
 import {
@@ -42,54 +42,19 @@ export function selectSingleAdminIdentityMatch<T>(matches: readonly T[]): T | un
 }
 
 async function localAuth0Admin(identity: Auth0BrowserIdentity): Promise<Express.User> {
-  const email = identity.email?.trim().toLowerCase();
   const existing = selectSingleAdminIdentityMatch(
-    await db.select().from(users).where(
-      email
-        ? or(eq(users.auth0Sub, identity.subject), eq(users.email, email))
-        : eq(users.auth0Sub, identity.subject),
-    ),
+    await db.select().from(users).where(eq(users.auth0Sub, identity.subject)).limit(2),
   );
-  const update = auth0AdminIdentityUpdate(existing, identity);
-  if (!update) return existing!;
-  const [updated] = await db.update(users)
-    .set(update)
-    .where(eq(users.id, existing!.id))
-    .returning();
-  if (!updated) throw new Error("auth0_admin_bind_failed");
-  return updated;
+  return requirePreboundAuth0Admin(existing);
 }
 
-export function auth0AdminIdentityUpdate(
+export function requirePreboundAuth0Admin(
   existing: Express.User | undefined,
-  identity: Auth0BrowserIdentity,
-): {
-  auth0Sub: string;
-  email: string;
-  name: string | null;
-  role: "admin";
-} | undefined {
+): Express.User {
   if (!existing || existing.role !== "admin") {
-    throw new Error("auth0_admin_not_preapproved");
+    throw new Error("auth0_admin_subject_not_prebound");
   }
-  if (existing.auth0Sub && existing.auth0Sub !== identity.subject) {
-    throw new Error("auth0_admin_subject_mismatch");
-  }
-
-  const email = identity.email?.trim().toLowerCase();
-  if (!email) {
-    if (existing.auth0Sub !== identity.subject) {
-      throw new Error("auth0_admin_subject_not_bound");
-    }
-    return undefined;
-  }
-
-  return {
-    auth0Sub: identity.subject,
-    email,
-    name: identity.name ?? existing.name,
-    role: "admin",
-  };
+  return existing;
 }
 
 export function setupAuth(app: Express): void {
@@ -197,7 +162,6 @@ declare global {
     interface User {
       id: string;
       email: string;
-      googleSub: string | null;
       auth0Sub: string | null;
       name: string | null;
       role: string;

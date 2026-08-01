@@ -26,6 +26,7 @@ test("all migrations are checksummed and idempotent", async () => {
   assert.ok(plan.some((migration) => migration.version === "007_clean_obsolete_messaging_epilogues"));
   assert.ok(plan.some((migration) => migration.version === "007_remove_false_pubsub_skill"));
   assert.ok(plan.some((migration) => migration.version === "010_allow_canonical_skill_deletion"));
+  assert.ok(plan.some((migration) => migration.version === "011_bind_auth0_administrator"));
   assert.ok(
     plan.findIndex((migration) => migration.version === "007_clean_obsolete_messaging_epilogues")
       < plan.findIndex((migration) => migration.version === "008_neutralize_obsolete_messaging_references"),

@@ -49,7 +49,7 @@ test("Portfolio skill membership accepts valid groups and rejects dangling refer
     req.user = {
       id: adminId,
       email: "portfolio-integration@example.invalid",
-      googleSub: "integration-test",
+      auth0Sub: "auth0|portfolio-integration-test",
       name: "Portfolio integration test",
       role: "admin",
     };

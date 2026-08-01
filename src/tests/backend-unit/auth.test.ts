@@ -9,9 +9,9 @@ testDatabaseUrl.password = "test";
 process.env.DATABASE_URL ||= testDatabaseUrl.toString();
 
 const {
-  auth0AdminIdentityUpdate,
   buildLoginUrl,
   normalizePortfolioReturn,
+  requirePreboundAuth0Admin,
   selectSingleAdminIdentityMatch,
 } = await import("../../backend/auth");
 
@@ -24,33 +24,19 @@ test("local administrator reconciliation rejects ambiguous rows", () => {
   assert.equal(selectSingleAdminIdentityMatch([]), undefined);
 });
 
-test("Auth0 sessions reuse only a preapproved administrator subject", () => {
+test("Auth0 sessions reuse only an exact prebound administrator subject", () => {
   const admin = {
     id: "admin-id",
     email: "admin@example.test",
-    googleSub: null,
     auth0Sub: "auth0|admin",
     name: "Admin",
     role: "admin" as const,
   };
-  const subjectOnlySession = {
-    subject: "auth0|admin",
-    scopes: ["platform:admin"],
-    expiresAt: Math.floor(Date.now() / 1000) + 900,
-    authMethod: "auth0" as const,
-  };
-
-  assert.equal(auth0AdminIdentityUpdate(admin, subjectOnlySession), undefined);
+  assert.equal(requirePreboundAuth0Admin(admin), admin);
+  assert.throws(() => requirePreboundAuth0Admin(undefined), /subject_not_prebound/);
   assert.throws(
-    () => auth0AdminIdentityUpdate({ ...admin, auth0Sub: null }, subjectOnlySession),
-    /subject_not_bound/,
-  );
-  assert.throws(
-    () => auth0AdminIdentityUpdate(
-      { ...admin, role: "user" },
-      { ...subjectOnlySession, email: "admin@example.test" },
-    ),
-    /not_preapproved/,
+    () => requirePreboundAuth0Admin({ ...admin, role: "user" }),
+    /subject_not_prebound/,
   );
 });
 

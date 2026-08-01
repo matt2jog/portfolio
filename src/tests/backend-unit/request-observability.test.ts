@@ -144,7 +144,6 @@ test("completion log uses route templates, Auth0 subject, and no PII", () => {
       user: {
         email: "person@example.test",
         auth0Sub: "auth0|admin-7",
-        googleSub: null,
       },
     } as any;
     structuredRequestLogMiddleware(request, response as any, () => undefined);
