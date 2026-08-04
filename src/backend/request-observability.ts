@@ -29,11 +29,15 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
   const startedAt = Date.now();
 
   res.once("finish", () => {
-    const failureCode = res.statusCode >= 500
-      ? "server_error"
-      : res.statusCode >= 400
-        ? "client_error"
-        : undefined;
+    const localFailureWasSet = res.locals?.failureCode !== undefined;
+    const localFailureCode = boundedFailureCode(res.locals?.failureCode);
+    const failureCode = localFailureWasSet
+      ? localFailureCode ?? "request_failed"
+      : res.statusCode >= 500
+        ? "server_error"
+        : res.statusCode >= 400
+          ? "client_error"
+          : undefined;
     console.log(JSON.stringify({
       event: "portfolio.request.completed",
       request_id: req.requestId,
@@ -42,9 +46,7 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
       route: routeTemplate(req),
       status: res.statusCode,
       outcome: failureCode ? "failure" : "success",
-      ...(failureCode
-        ? { failure_code: res.locals?.failureCode ?? failureCode }
-        : {}),
+      ...(failureCode ? { failure_code: failureCode } : {}),
       duration_ms: Date.now() - startedAt,
       actor_type: "anonymous",
     }));
@@ -102,4 +104,10 @@ function routeTemplate(req: Request): string {
   const baseUrl = req.baseUrl && req.baseUrl !== "/" ? req.baseUrl : "";
   const template = `${baseUrl}${path}`.replace(/\/{2,}/g, "/") || "/";
   return template.length <= 256 && !template.includes("?") ? template : "unmatched";
+}
+
+function boundedFailureCode(value: unknown): string | undefined {
+  return typeof value === "string" && SAFE_CORRELATION_VALUE.test(value)
+    ? value
+    : undefined;
 }

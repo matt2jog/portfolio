@@ -49,7 +49,7 @@ function responseFor(path: string, status: number) {
 
 test("all API responses are explicitly no-store", () => {
   for (const [path, status] of [
-    ["/api/public/geoip", 200],
+    ["/api/public/skills", 200],
     ["/api/public/projects", 503],
     ["/api/missing", 404],
   ] as const) {

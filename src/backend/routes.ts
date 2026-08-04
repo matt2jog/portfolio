@@ -3,7 +3,6 @@ import type { Server } from "http";
 import { createHash } from "crypto";
 import { db } from "./data/db";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
-import { publicGeoIpHint } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
@@ -172,12 +171,6 @@ export async function registerRoutes(
 
   app.get("/api/legal/privacy", sendLegalDoc("PRIVACY_POLICY.md", "Privacy Policy not found"));
   app.get("/api/legal/terms", sendLegalDoc("TERMS_OF_USE.md", "Terms of Use not found"));
-  app.get("/api/legal/tracking", sendLegalDoc("TRACKING_NOTICE_AND_CONSENT.md", "Tracking Notice not found"));
-
-  // ========== GEOLOCATION ==========
-  app.get("/api/public/geoip", (_req, res) => {
-    res.json(publicGeoIpHint());
-  });
 
   // ========== PUBLIC DATA ==========
   
@@ -665,13 +658,14 @@ export async function registerRoutes(
       return;
     } catch (error) {
       if (agent.isRateLimitError(error)) {
+        res.locals.failureCode = "ai_rate_limited";
         writeSseAssistantMessage(res, agent.rateLimitMessage);
         res.end();
         return;
       }
 
+      res.locals.failureCode = "ai_request_failed";
       if (!res.headersSent) {
-        console.error(JSON.stringify({ event: "portfolio.ai.request_failed" }));
         res.status(500).json({ error: "AI request failed" });
       } else {
         res.end();

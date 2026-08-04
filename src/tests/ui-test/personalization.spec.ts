@@ -7,13 +7,9 @@ const FORCE_SHOW_KEY = "__intro_force_show";
 const WELCOME_SLUG_KEY = "__intro_welcome_slug";
 const INTRO_SEEN_KEY = "__root_intro_seen_until";
 
-async function setup(page: import("@playwright/test").Page, consent: "accept_all" | "reject_all" | "none" = "reject_all") {
+async function setup(page: import("@playwright/test").Page) {
   await installMockApi(page);
-  await seedBrowserState(page, {
-    introSeen: true,
-    consent,
-    logRocketTestMode: true,
-  });
+  await seedBrowserState(page);
 }
 
 test("?welcome= param is stripped from URL after page load", async ({ page }) => {
@@ -56,11 +52,8 @@ test("intro shows when force-show flag is set even if TTL is active", async ({ p
   await installMockApi(page);
   await page.addInitScript((keys) => {
     Math.random = () => 0.42;
-    window.__LOGROCKET_TEST_MODE = true;
-    window.__LOGROCKET_TEST_EVENTS = [];
     window.localStorage.setItem(keys.seenKey, String(Date.now() + 3 * 24 * 60 * 60 * 1000));
     window.localStorage.setItem(keys.forceKey, "1");
-    window.localStorage.removeItem("__consent_record");
   }, { seenKey: INTRO_SEEN_KEY, forceKey: FORCE_SHOW_KEY });
 
   await page.goto("/");

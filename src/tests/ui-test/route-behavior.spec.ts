@@ -16,7 +16,6 @@ test("home renders the configured public entry point", async ({ page }) => {
 test("first-visit intro can complete without waiting for production animation timers", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.removeItem("__root_intro_seen_until");
-    window.localStorage.removeItem("__consent_record");
     window.__FIRST_VISIT_INTRO_TEST_STATE = {
       stage: "name",
       typingPhase: "button",
@@ -39,7 +38,6 @@ test("first-visit intro advances through the production timer sequence", async (
     window.localStorage.removeItem("__root_intro_seen_until");
     window.localStorage.removeItem("__intro_force_show");
     window.localStorage.removeItem("__intro_welcome_slug");
-    window.localStorage.removeItem("__consent_record");
   });
 
   await page.goto("/");
@@ -269,7 +267,7 @@ test("activity surfaces provider errors and empty timelines", async ({ page }) =
   await expect(page.getByText("GitHub Integration Pending")).toBeVisible();
 });
 
-for (const route of ["/privacy", "/terms", "/tracking"] as const) {
+for (const route of ["/privacy", "/terms"] as const) {
   test(`${route} renders the versioned legal document`, async ({ page }) => {
     await page.goto(route);
     await expect(page.getByRole("heading", { name: "Policy Document" })).toBeVisible();

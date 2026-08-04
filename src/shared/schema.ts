@@ -325,19 +325,6 @@ export const legalDocumentVersions = portfolioSchema.table(
 
 export type DbLegalDocumentVersion = typeof legalDocumentVersions.$inferSelect;
 
-// ─── Browser Tracking ────────────────────────────────────────────────────────
-
-export const browserTracking = portfolioSchema.table("browser_tracking", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  hashedUuid: text("hashed_uuid").notNull().unique(),
-  trEn: text("tr_en"),
-  consentedAt: timestamp("consented_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type BrowserTracking = typeof browserTracking.$inferSelect;
-
 // ─── Welcome Messages (Personalization) ──────────────────────────────────────
 
 export const welcomeMessages = portfolioSchema.table("welcome_messages", {

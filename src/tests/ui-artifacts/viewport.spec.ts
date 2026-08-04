@@ -6,14 +6,11 @@ async function preparePage(
   page: Page,
   options: {
     introSeen?: boolean;
-    consent?: "accept_all" | "reject_all" | "none";
   } = {},
 ) {
   await installMockApi(page);
   await seedBrowserState(page, {
     introSeen: options.introSeen ?? true,
-    consent: options.consent ?? "reject_all",
-    logRocketTestMode: true,
   });
 }
 
@@ -120,11 +117,8 @@ test("first-visit-intro animation steps", async ({ page }, testInfo) => {
   for (const { name, state } of introStates) {
     await page.addInitScript((introState) => {
       Math.random = () => 0.42;
-      window.__LOGROCKET_TEST_MODE = true;
-      window.__LOGROCKET_TEST_EVENTS = [];
       window.__FIRST_VISIT_INTRO_TEST_STATE = introState;
       window.localStorage.removeItem("__root_intro_seen_until");
-      window.localStorage.removeItem("__consent_record");
     }, state);
     await page.goto("/");
     await expect(page.getByTestId("first-visit-intro")).toBeVisible();
@@ -133,28 +127,11 @@ test("first-visit-intro animation steps", async ({ page }, testInfo) => {
   }
 });
 
-test("consent clickwrap states", async ({ page }, testInfo) => {
-  await preparePage(page, { introSeen: true, consent: "none" });
-  await page.goto("/");
-  await expect(page.getByTestId("consent-banner")).toBeVisible();
-  await saveViewportScreenshot(page, testInfo, "consent-clickwrap/regular");
-
-  await page.getByRole("button", { name: "Manage Preferences" }).click();
-  await expect(page.getByRole("heading", { name: "Manage Preferences" })).toBeVisible();
-  await saveViewportScreenshot(page, testInfo, "consent-clickwrap/manage");
-
-  const analytics = page.getByRole("checkbox", { name: "Analytics & Performance" });
-  await analytics.click();
-  await expect(analytics).not.toBeChecked();
-  await saveViewportScreenshot(page, testInfo, "consent-clickwrap/manage-analytics-off");
-});
-
 test("legal document pages", async ({ page }, testInfo) => {
   await preparePage(page);
 
   for (const [route, shotName, title] of [
     ["/privacy", "privacy-policy", "Privacy Policy"],
-    ["/tracking", "tracking-notice", "Tracking Notice & Consent"],
     ["/terms", "terms-of-use", "Terms of Use"],
   ] as const) {
     await page.goto(route);

@@ -1,7 +1,7 @@
 # Terms of Use
 
-**Last Updated:** July 31, 2026
-**Effective Date:** July 31, 2026
+**Last Updated:** August 4, 2026
+**Effective Date:** August 4, 2026
 
 ## 1. Acceptance of Terms
 
@@ -98,7 +98,6 @@ Use of the Site is also governed by the Privacy Policy, which describes applicab
 
 The Site uses third-party services, including:
 
-- **LogRocket:** Session replay and analytics service. Use of LogRocket is subject to LogRocket's terms and privacy policy.
 - **Auth0:** Authentication service. Use is subject to Auth0's terms of service.
 - **Cloud Infrastructure Providers:** Database and hosting. Use is subject to their terms.
 

@@ -5,15 +5,12 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ConsentBanner } from "@/components/ConsentBanner";
 import {
   FirstVisitIntro,
   shouldShowFirstVisitIntro,
   INTRO_FORCE_SHOW_KEY,
   INTRO_WELCOME_SLUG_KEY,
 } from "@/components/FirstVisitIntro";
-import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
-import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Tree from "@/pages/Tree";
@@ -23,41 +20,6 @@ import ProjectChatPage from "@/pages/ProjectChatPage";
 import About from "@/pages/About";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
-import Tracking from "@/pages/Tracking";
-import { identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
-
-function LogRocketBridge() {
-  const [location] = useLocation();
-  const [consentGranted, setConsentGranted] = useState(false);
-
-  useEffect(() => {
-    const handleConsentChange = () => {
-      setConsentGranted(true);
-    };
-    window.addEventListener("consent-granted", handleConsentChange);
-    return () => window.removeEventListener("consent-granted", handleConsentChange);
-  }, []);
-
-  useEffect(() => {
-    trackLogRocketRoute(location);
-  }, [location, consentGranted]);
-
-  useEffect(() => {
-    const emit = () => trackLogRocketRoute(window.location.pathname);
-    window.addEventListener("popstate", emit);
-    window.addEventListener("hashchange", emit);
-    return () => {
-      window.removeEventListener("popstate", emit);
-      window.removeEventListener("hashchange", emit);
-    };
-  }, [consentGranted, location]);
-
-  useEffect(() => {
-    identifyLogRocketUser(null);
-  }, [consentGranted]);
-
-  return null;
-}
 
 // Discards the retired campaign parameter without retaining it or sending it elsewhere.
 function CampaignQueryCleaner() {
@@ -106,50 +68,6 @@ function WelcomeProcessor() {
   return null;
 }
 
-function ConsentManager({ disabled = false }: { disabled?: boolean }) {
-  const [showBanner, setShowBanner] = useState(false);
-  const [jurisdiction, setJurisdiction] = useState<string | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [location] = useLocation();
-
-  useEffect(() => {
-    if (disabled) {
-      setShowBanner(false);
-      return;
-    }
-
-    (async () => {
-      const jurisdiction = await detectJurisdiction();
-      setJurisdiction(jurisdiction);
-
-      const hasConsent = getStoredConsent() !== null;
-      const globalOptOut = isGlobalOptOutEnabled();
-
-      const isLegalPage = ["/privacy", "/terms", "/tracking"].includes(location);
-
-      if (globalOptOut) {
-        setShowBanner(false);
-        setIsLoaded(true);
-        return;
-      }
-
-      const shouldShow = !hasConsent && !isLegalPage;
-      setShowBanner(shouldShow);
-      setIsLoaded(true);
-    })();
-  }, [disabled, location]);
-
-  if (!isLoaded) return null;
-
-  return (
-    <ConsentBanner
-      isOpen={showBanner}
-      onClose={() => setShowBanner(false)}
-      jurisdiction={jurisdiction}
-    />
-  );
-}
-
 function Router() {
   return (
     <Switch>
@@ -161,7 +79,6 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
-      <Route path="/tracking" component={Tracking} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -171,7 +88,6 @@ function App() {
   const [location] = useLocation();
   const [showIntro, setShowIntro] = useState(() => location === "/" && shouldShowFirstVisitIntro());
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
-  const consentDisabled = showIntro && location === "/";
 
   useEffect(() => {
     if (location === "/" && shouldShowFirstVisitIntro()) {
@@ -201,8 +117,6 @@ function App() {
       <TooltipProvider>
         <CampaignQueryCleaner />
         <WelcomeProcessor />
-        <ConsentManager disabled={consentDisabled} />
-        <LogRocketBridge />
         <Toaster />
         <Router />
         {showIntro && location === "/" && (

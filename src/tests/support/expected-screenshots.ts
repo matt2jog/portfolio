@@ -8,9 +8,6 @@ export const expectedScreenshotItems = [
   "first-visit-intro/prompt-cursor",
   "first-visit-intro/prompt-typed",
   "first-visit-intro/button",
-  "consent-clickwrap/regular",
-  "consent-clickwrap/manage",
-  "consent-clickwrap/manage-analytics-off",
   "hero",
   "portfolio/page-1",
   "portfolio/page-2",
@@ -26,7 +23,6 @@ export const expectedScreenshotItems = [
 
 export const expectedPaginatedScreenshotItems = [
   "privacy-policy",
-  "tracking-notice",
   "terms-of-use",
   "project-chat-page",
   "about/timeline",

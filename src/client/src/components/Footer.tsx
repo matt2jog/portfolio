@@ -27,8 +27,6 @@ export default function Footer() {
           <a href="/privacy" className="hover:text-gray-500 transition-colors">Privacy Policy</a>
           <span>•</span>
           <a href="/terms" className="hover:text-gray-500 transition-colors">Terms of Use</a>
-          <span>•</span>
-          <a href="/tracking" className="hover:text-gray-500 transition-colors">Tracking & Cookies</a>
         </div>
       </div>
     </footer>

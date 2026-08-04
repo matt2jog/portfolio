@@ -163,3 +163,32 @@ test("completion log uses route templates and no identity or PII", () => {
   });
   assert.doesNotMatch(messages[0]!, /private-record|person@example\.test/u);
 });
+
+test("completion log reports an SSE failure after HTTP 200 headers", () => {
+  const messages: string[] = [];
+  const originalLog = console.log;
+  console.log = (message?: unknown) => messages.push(String(message));
+  try {
+    const response = Object.assign(new EventEmitter(), {
+      statusCode: 200,
+      locals: { failureCode: "ai_request_failed" },
+    });
+    const request = {
+      method: "POST",
+      route: { path: "/api/public/chat" },
+      baseUrl: "",
+      requestId: "request-8",
+      correlationId: "correlation-8",
+    } as any;
+    structuredRequestLogMiddleware(request, response as any, () => undefined);
+    response.emit("finish");
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(messages.length, 1);
+  const event = JSON.parse(messages[0]!);
+  assert.equal(event.status, 200);
+  assert.equal(event.outcome, "failure");
+  assert.equal(event.failure_code, "ai_request_failed");
+});
