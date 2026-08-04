@@ -71,6 +71,39 @@ apply_environment_aliases() {
   done
 }
 
+validate_secret_tags() {
+  secret_tags_are_set=false
+  secret_tags=""
+  [ "${INFISICAL_SECRET_TAGS+x}" = x ] || return 0
+
+  secret_tags="${INFISICAL_SECRET_TAGS}"
+  case "${secret_tags}" in
+    ""|,*|*,|*,,*)
+      echo "infisical-runtime: INFISICAL_SECRET_TAGS must be comma-separated tag slugs" >&2
+      exit 78
+      ;;
+  esac
+
+  tags_to_validate="${secret_tags}"
+  while [ -n "${tags_to_validate}" ]; do
+    tag_slug="${tags_to_validate%%,*}"
+    if [ "${tag_slug}" = "${tags_to_validate}" ]; then
+      tags_to_validate=""
+    else
+      tags_to_validate="${tags_to_validate#*,}"
+    fi
+
+    case "${tag_slug}" in
+      *[!a-z0-9-]*|-*|*-|*--*)
+        echo "infisical-runtime: INFISICAL_SECRET_TAGS contains an invalid tag slug" >&2
+        exit 78
+        ;;
+    esac
+  done
+
+  secret_tags_are_set=true
+}
+
 if [ "${1:-}" = "__infisical_runtime_apply_aliases__" ]; then
   shift
   if [ "$#" -eq 0 ]; then
@@ -104,6 +137,8 @@ esac
 : "${INFISICAL_ENVIRONMENT:?infisical-runtime: INFISICAL_ENVIRONMENT is required}"
 : "${INFISICAL_SECRET_PATH:?infisical-runtime: INFISICAL_SECRET_PATH is required}"
 
+validate_secret_tags
+
 export INFISICAL_DISABLE_UPDATE_CHECK=true
 if ! INFISICAL_TOKEN="$(
   infisical login \
@@ -121,6 +156,16 @@ if [ -z "${INFISICAL_TOKEN}" ]; then
   exit 1
 fi
 export INFISICAL_TOKEN
+
+if [ "${secret_tags_are_set}" = true ]; then
+  exec infisical run \
+    --silent \
+    --projectId="${INFISICAL_PROJECT_ID}" \
+    --env="${INFISICAL_ENVIRONMENT}" \
+    --path="${INFISICAL_SECRET_PATH}" \
+    --tags="${secret_tags}" \
+    -- "$0" __infisical_runtime_apply_aliases__ "$@"
+fi
 
 exec infisical run \
   --silent \
