@@ -461,34 +461,17 @@ jobs:
             --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${STAGING_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
-          login_status="$(curl --silent --show-error \
-            --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
-            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/login")"
-          [[ "${login_status}" == "302" ]]
-          auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
-            head -1 | cut -d' ' -f2- | tr -d '\r')"
-          AUTH_LOCATION="${auth_location}" EXPECTED_CALLBACK="${STAGING_E2E_BASE_URL}/auth/callback" python3 - <<'PY'
-          import os
-          from urllib.parse import parse_qs, urlparse
-          location = urlparse(os.environ["AUTH_LOCATION"])
-          assert f"{location.scheme}://{location.netloc}{location.path}" == "https://auth.2jog.dev/authorize"
-          query = parse_qs(location.query)
-          assert query.get("response_type") == ["code"]
-          assert query.get("redirect_uri") == [os.environ["EXPECTED_CALLBACK"]]
-          assert query.get("code_challenge_method") == ["S256"]
-          for required in ("state", "nonce", "code_challenge"):
-              assert query.get(required) and query[required][0]
-          PY
-          me_status="$(curl --silent --show-error \
-            --dump-header "${RUNNER_TEMP}/auth-me-headers" --output "${RUNNER_TEMP}/auth-me-body" \
-            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/api/auth/me")"
-          [[ "${me_status}" == "401" ]]
-          grep --ignore-case --quiet '^content-type: application/json' "${RUNNER_TEMP}/auth-me-headers"
-          jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
+          # Portfolio is public and has no browser-auth surface. Canonical career
+          # mutations belong to Admin, so stale auth endpoints must stay absent.
+          for route in /auth/login /api/auth/me; do
+            status="$(curl --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}${route}")"
+            [[ "${status}" == "404" ]]
+          done
           logout_status="$(curl --silent --show-error --request POST \
             --header 'Origin: https://cross-origin.invalid' --output /dev/null \
             --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/logout")"
-          [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          [[ "${logout_status}" == "404" ]]
           npm ci
           npx playwright install --with-deps chromium
           PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:live-smoke

@@ -257,7 +257,7 @@ jobs:
             --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')" == "${DIGEST_URI}" ]]
 
-          # Exercise canonical-host health and auth against the Google origin.
+          # Exercise canonical-host health against the Google origin.
           # Cloudflare intentionally challenges GitHub-hosted runner IPs, so its
           # edge is verified independently from a normal client after promotion.
           origin_ip="$(getent ahostsv4 ghs.googlehosted.com | awk 'NR == 1 { print $1 }')"
@@ -268,43 +268,16 @@ jobs:
             --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
             "${PROD_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
-          login_status=
-          for attempt in {1..12}; do
-            if ! login_status="$(curl "${origin_curl[@]}" --silent --show-error \
-              --connect-timeout 5 --max-time 15 \
-              --header 'Cache-Control: no-cache, no-store' \
-              --header 'Pragma: no-cache' \
-              --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
-              --write-out '%{http_code}' \
-              "${PROD_E2E_BASE_URL}/auth/login?release=${COMMIT_SHA}&attempt=${attempt}")"; then
-              login_status=000
-            fi
-            [[ "${login_status}" == "302" ]] && break
-            sleep 5
+          # Portfolio is public and intentionally exposes no browser-auth routes.
+          for route in /auth/login /api/auth/me; do
+            status="$(curl "${origin_curl[@]}" --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' "${PROD_E2E_BASE_URL}${route}")"
+            [[ "${status}" == "404" ]]
           done
-          [[ "${login_status}" == "302" ]]
-          auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
-            head -1 | cut -d' ' -f2- | tr -d '\r')"
-          AUTH_LOCATION="${auth_location}" EXPECTED_CALLBACK="${PROD_E2E_BASE_URL}/auth/callback" python3 - <<'PY'
-          import os
-          from urllib.parse import parse_qs, urlparse
-          location = urlparse(os.environ["AUTH_LOCATION"])
-          assert f"{location.scheme}://{location.netloc}{location.path}" == "https://auth.2jog.dev/authorize"
-          query = parse_qs(location.query)
-          assert query.get("response_type") == ["code"]
-          assert query.get("redirect_uri") == [os.environ["EXPECTED_CALLBACK"]]
-          assert query.get("code_challenge_method") == ["S256"]
-          for required in ("state", "nonce", "code_challenge"):
-              assert query.get(required) and query[required][0]
-          PY
-          me_status="$(curl "${origin_curl[@]}" --silent --show-error --output "${RUNNER_TEMP}/auth-me-body" \
-            --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/api/auth/me")"
-          [[ "${me_status}" == "401" ]]
-          jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
           logout_status="$(curl "${origin_curl[@]}" --silent --show-error --request POST \
             --header 'Origin: https://cross-origin.invalid' --output /dev/null \
             --write-out '%{http_code}' "${PROD_E2E_BASE_URL}/auth/logout")"
-          [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          [[ "${logout_status}" == "404" ]]
           github_activity="$(curl "${origin_curl[@]}" --fail --silent --show-error \
             --retry 5 --retry-all-errors --retry-delay 2 \
             "${PROD_E2E_BASE_URL}/api/public/github/activity?release=${COMMIT_SHA}")"

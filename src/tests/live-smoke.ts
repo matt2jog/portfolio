@@ -154,7 +154,7 @@ try {
     .getByText(`@${githubLogin}`, { exact: true })
     .waitFor({ state: "attached" });
   if (contributionWeeks.length > 0) {
-    await page.getByText("Contribution Activity", { exact: true }).waitFor({
+    await page.getByRole("heading", { name: /Contribution Activity/ }).waitFor({
       state: "attached",
     });
   } else {
