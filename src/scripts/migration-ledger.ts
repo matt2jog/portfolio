@@ -37,7 +37,7 @@ export function loadMigrationPlan(folder: string): Migration[] {
   }
 
   return files.map((file) => {
-    const sql = readFileSync(path.join(folder, file), "utf8");
+    const sql = readFileSync(path.join(folder, file), "utf8").replace(/\r\n/g, "\n");
     return {
       version: file.slice(0, -4),
       checksum: createHash("sha256").update(sql).digest("hex"),

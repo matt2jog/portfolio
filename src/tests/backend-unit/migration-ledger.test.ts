@@ -29,6 +29,32 @@ test("migration plan is filename-ordered and checksums exact SQL", () => {
   }
 });
 
+test("migration plan normalizes CRLF before checksumming and execution", () => {
+  const lfFolder = mkdtempSync(path.join(tmpdir(), "portfolio-migrations-lf-"));
+  const crlfFolder = mkdtempSync(path.join(tmpdir(), "portfolio-migrations-crlf-"));
+  const lfSql = "BEGIN;\nSELECT 1;\nCOMMIT;\n";
+  const crlfSql = lfSql.replace(/\n/g, "\r\n");
+
+  try {
+    writeFileSync(path.join(lfFolder, "001_first.sql"), lfSql);
+    writeFileSync(path.join(crlfFolder, "001_first.sql"), crlfSql);
+
+    const [lfMigration] = loadMigrationPlan(lfFolder);
+    const [crlfMigration] = loadMigrationPlan(crlfFolder);
+
+    assert.equal(crlfMigration?.sql, lfMigration?.sql);
+    assert.equal(crlfMigration?.sql, lfSql);
+    assert.equal(crlfMigration?.checksum, lfMigration?.checksum);
+    assert.equal(
+      crlfMigration?.checksum,
+      createHash("sha256").update(lfSql).digest("hex"),
+    );
+  } finally {
+    rmSync(lfFolder, { recursive: true, force: true });
+    rmSync(crlfFolder, { recursive: true, force: true });
+  }
+});
+
 test("migration plan rejects missing and malformed migration files", () => {
   const empty = mkdtempSync(path.join(tmpdir(), "portfolio-migrations-empty-"));
   const malformed = mkdtempSync(path.join(tmpdir(), "portfolio-migrations-bad-"));
