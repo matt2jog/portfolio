@@ -47,23 +47,11 @@ function responseFor(path: string, status: number) {
   return response;
 }
 
-test("API successes and unauthenticated failures are explicitly no-store", () => {
+test("all API responses are explicitly no-store", () => {
   for (const [path, status] of [
     ["/api/public/geoip", 200],
-    ["/api/admin/projects", 401],
+    ["/api/public/projects", 503],
     ["/api/missing", 404],
-  ] as const) {
-    const response = responseFor(path, status);
-    assert.equal(response.statusCode, status);
-    assert.equal(response.headers.get("cache-control"), "no-store", path);
-  }
-});
-
-test("auth redirects and callback failures are explicitly no-store", () => {
-  for (const [path, status] of [
-    ["/auth/login", 302],
-    ["/auth/callback", 403],
-    ["/auth/logout", 401],
   ] as const) {
     const response = responseFor(path, status);
     assert.equal(response.statusCode, status);
@@ -78,6 +66,7 @@ test("cache middleware leaves static and similarly prefixed paths to their owner
     "/assets/logo-flat.png",
     "/apiary",
     "/authorize",
+    "/auth/login",
   ]) {
     assert.equal(requiresNoStore(path), false, path);
     const response = responseFor(path, 200);

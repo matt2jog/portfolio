@@ -14,8 +14,6 @@ let lastRoute = "";
 let lastIdentity = "";
 let uuidEmitted = false;
 
-const SENSITIVE_ROUTE_PREFIXES = ["/admin", "/auth/callback"];
-
 declare global {
   interface Window {
     __LOGROCKET_TEST_MODE?: boolean;
@@ -111,7 +109,6 @@ export function trackLogRocketRoute(path: string) {
   initLogRocket();
 
   if (!path) return;
-  if (SENSITIVE_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
   if (path === lastRoute) return;
 
   lastRoute = path;

@@ -34,9 +34,6 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
       : res.statusCode >= 400
         ? "client_error"
         : undefined;
-    const actorSubject = boundedActorSubject(req.auth0Identity?.subject
-      ?? req.user?.auth0Sub
-      ?? undefined);
     console.log(JSON.stringify({
       event: "portfolio.request.completed",
       request_id: req.requestId,
@@ -49,10 +46,7 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
         ? { failure_code: res.locals?.failureCode ?? failureCode }
         : {}),
       duration_ms: Date.now() - startedAt,
-      actor_type: req.auth0Identity
-        ? "auth0-admin"
-        : "anonymous",
-      ...(actorSubject ? { actor_subject: actorSubject } : {}),
+      actor_type: "anonymous",
     }));
   });
   next();
@@ -108,11 +102,4 @@ function routeTemplate(req: Request): string {
   const baseUrl = req.baseUrl && req.baseUrl !== "/" ? req.baseUrl : "";
   const template = `${baseUrl}${path}`.replace(/\/{2,}/g, "/") || "/";
   return template.length <= 256 && !template.includes("?") ? template : "unmatched";
-}
-
-function boundedActorSubject(value: string | undefined): string | undefined {
-  const candidate = value?.trim();
-  return candidate && /^[A-Za-z0-9|._:-]{1,160}$/.test(candidate)
-    ? candidate
-    : undefined;
 }

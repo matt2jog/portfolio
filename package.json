@@ -70,7 +70,6 @@
     "framer-motion": "^12.27.1",
     "gsap": "^3.14.2",
     "input-otp": "^1.4.2",
-    "jose": "^6.2.3",
     "jsdom": "^29.1.1",
     "katex": "^0.16.44",
     "logrocket": "^12.0.0",

@@ -67,7 +67,6 @@ async function mockDbRoute(page: Page, url: string, body: JsonValue) {
 }
 
 export async function installMockApi(page: Page) {
-  await page.route("**/api/admin/**", (route) => fulfillJson(route, { ok: true }));
   await page.route("**/api/public/geoip", (route) =>
     fulfillJson(route, { country_code: null, status: "unknown" }),
   );
@@ -121,17 +120,6 @@ export async function installMockApi(page: Page) {
     return fulfillJson(route, { error: "Welcome message not found" }, 404);
   });
 
-  await page.route("**/api/admin/welcome-messages/archived", (route) =>
-    fulfillJson(route, []),
-  );
-  await page.route("**/api/admin/welcome-messages", (route) =>
-    fulfillJson(route, welcomeMessagesFixture),
-  );
-
-  await page.route("**/api/auth/me", (route) => fulfillJson(route, adminFixtures.me));
-  await page.route("**/api/admin/policy/check-acceptance", (route) =>
-    fulfillJson(route, { accepted: true }),
-  );
 }
 
 export async function seedBrowserState(

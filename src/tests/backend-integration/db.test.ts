@@ -13,7 +13,7 @@ if (!databaseUrl) {
 process.env.DATABASE_URL = databaseUrl;
 
 const { db, pool } = await import("../../backend/data/db");
-const { allSkills, auditLogs, portfolioSkills, skillsGroup, users } = await import("../../shared/schema");
+const { allSkills, portfolioSkills, skillsGroup, users } = await import("../../shared/schema");
 const { registerRoutes } = await import("../../backend/routes");
 
 after(async () => {
@@ -34,8 +34,7 @@ test("drizzle can read the users table (count >= 0)", async () => {
   assert.ok(row.count >= 0);
 });
 
-test("Portfolio rejects canonical skill mutations and preserves existing records", async () => {
-  const adminId = `integration-admin-${randomUUID()}`;
+test("Portfolio has no canonical skill mutation API and preserves existing records", async () => {
   const skillId = randomUUID();
   const groupId = randomUUID();
   const portfolioSkillId = randomUUID();
@@ -51,16 +50,6 @@ test("Portfolio rejects canonical skill mutations and preserves existing records
 
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => {
-    req.user = {
-      id: adminId,
-      email: "portfolio-integration@example.invalid",
-      auth0Sub: "auth0|portfolio-integration-test",
-      name: "Portfolio integration test",
-      role: "admin",
-    };
-    next();
-  });
   const server = createServer(app);
   await registerRoutes(server, app);
   await new Promise<void>((resolve, reject) => {
@@ -70,6 +59,12 @@ test("Portfolio rejects canonical skill mutations and preserves existing records
   const { port } = server.address() as AddressInfo;
 
   try {
+    const adminRedirect = await fetch(`http://127.0.0.1:${port}/admin`, {
+      redirect: "manual",
+    });
+    assert.equal(adminRedirect.status, 308);
+    assert.equal(adminRedirect.headers.get("location"), "https://admin.2jog.dev/");
+
     const mutations = [
       { method: "POST", path: "/api/admin/skills", body: { allSkillId: skillId, groupId } },
       { method: "PUT", path: `/api/admin/skills/${portfolioSkillId}`, body: { groupId: null } },
@@ -90,12 +85,7 @@ test("Portfolio rejects canonical skill mutations and preserves existing records
         headers: { "content-type": "application/json" },
         body: "body" in mutation ? JSON.stringify(mutation.body) : undefined,
       });
-      assert.equal(response.status, 409, `${mutation.method} ${mutation.path}`);
-      assert.deepEqual(await response.json(), {
-        code: "CANONICAL_CAREER_READ_ONLY",
-        message: "Canonical career data is managed by Admin Dashboard.",
-        authority: "https://admin.2jog.dev",
-      });
+      assert.equal(response.status, 404, `${mutation.method} ${mutation.path}`);
     }
 
     const [preservedMembership] = await db
@@ -116,7 +106,6 @@ test("Portfolio rejects canonical skill mutations and preserves existing records
     assert.equal(preservedSkill.name, "Integration skill");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    await db.delete(auditLogs).where(eq(auditLogs.userId, adminId));
     await db.delete(portfolioSkills).where(eq(portfolioSkills.id, portfolioSkillId));
     await db.delete(allSkills).where(eq(allSkills.id, skillId));
     await db.delete(skillsGroup).where(eq(skillsGroup.id, groupId));

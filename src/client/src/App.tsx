@@ -1,10 +1,8 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { getQueryFn } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConsentBanner } from "@/components/ConsentBanner";
@@ -18,7 +16,6 @@ import { getStoredConsent, isGlobalOptOutEnabled } from "@/lib/consent";
 import { detectJurisdiction } from "@/lib/geoip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
-import Admin from "@/pages/Admin";
 import Tree from "@/pages/Tree";
 import Activity from "@/pages/Activity";
 import Portfolio from "@/pages/Portfolio";
@@ -32,10 +29,6 @@ import { identifyLogRocketUser, trackLogRocketRoute } from "@/lib/logrocket";
 function LogRocketBridge() {
   const [location] = useLocation();
   const [consentGranted, setConsentGranted] = useState(false);
-  const { data: me } = useQuery({
-    queryKey: ["/api/auth/me"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
 
   useEffect(() => {
     const handleConsentChange = () => {
@@ -60,8 +53,8 @@ function LogRocketBridge() {
   }, [consentGranted, location]);
 
   useEffect(() => {
-    identifyLogRocketUser((me as any) ?? null);
-  }, [me, consentGranted]);
+    identifyLogRocketUser(null);
+  }, [consentGranted]);
 
   return null;
 }
@@ -169,7 +162,6 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
       <Route path="/tracking" component={Tracking} />
-      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -3,8 +3,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { setupAuth } from "./auth";
-import { isSameOriginMutation } from "./auth0Web";
 import { dynamicResponseCachePolicy } from "./cache-policy";
 import {
   createCanonicalHostMiddleware,
@@ -68,19 +66,6 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-setupAuth(app);
-app.use((req, res, next) => {
-  if (
-    req.user
-    && !isSameOriginMutation(
-      req,
-      process.env.PUBLIC_BASE_URL || (isProd ? "https://2jog.dev" : "http://localhost:3000"),
-    )
-  ) {
-    return res.status(403).json({ error: "cross_site_request_rejected" });
-  }
-  return next();
-});
 export function log(event: string, fields: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ event, ...fields }));
 }
@@ -88,7 +73,7 @@ export function log(event: string, fields: Record<string, unknown> = {}) {
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use(["/api", "/auth"], (_req, res) => {
+  app.use("/api", (_req, res) => {
     res.locals.failureCode = "route_not_found";
     res.status(404).json({ error: "route_not_found" });
   });

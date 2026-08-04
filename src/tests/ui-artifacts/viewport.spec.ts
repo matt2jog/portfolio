@@ -273,15 +273,3 @@ test("activity monitor tabs", async ({ page }, testInfo) => {
     maxScrollDistance: 2_800,
   });
 });
-
-test("Portfolio settings", async ({ page }, testInfo) => {
-  await preparePage(page);
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Welcome Messages" })).toBeVisible();
-  await settle(page, 700);
-  await savePaginatedScreenshots(page, testInfo, "admin-dashboard/personalization", {
-    maxPages: 4,
-    maxScrollDistance: 2_800,
-  });
-});
