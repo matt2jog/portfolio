@@ -465,6 +465,7 @@ jobs:
             --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${STAGING_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
+          bash .github/scripts/verify-career-read-model.sh "${STAGING_E2E_BASE_URL}"
           # Portfolio is public and has no browser-auth surface. Canonical career
           # mutations belong to Admin, so stale auth endpoints must stay absent.
           for route in /auth/login /api/auth/me; do

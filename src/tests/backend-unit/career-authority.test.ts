@@ -43,10 +43,37 @@ test("Portfolio releases never run the Admin-owned career migration job", () => 
 
   assert.doesNotMatch(workflows, /(?:STAGING|PROD)_MIGRATION_JOB/);
   assert.doesNotMatch(workflows, /gcloud run jobs (?:describe|execute|update)/);
+  assert.match(
+    workflowSources.find(({ filename }) => filename === "ci.yml")!.source,
+    /bash \.github\/scripts\/verify-career-read-model\.sh "\$\{STAGING_E2E_BASE_URL\}"/,
+  );
+  assert.match(
+    workflowSources.find(({ filename }) => filename === "promote.yml")!.source,
+    /bash \.github\/scripts\/verify-career-read-model\.sh "\$\{PROD_E2E_BASE_URL\}"/,
+  );
   for (const { filename, source } of workflowSources) {
     assert.ok(
       [...source.matchAll(/--clear-tags/g)].length >= 2,
       `${filename} must clear candidate tags on success and rollback`,
     );
   }
+});
+
+test("the release verifier requires real Admin-owned career rows", () => {
+  const verifier = readFileSync(
+    path.join(process.cwd(), ".github", "scripts", "verify-career-read-model.sh"),
+    "utf8",
+  );
+
+  for (const endpoint of [
+    "/api/public/projects",
+    "/api/public/experiences",
+    "/api/skills-constellation",
+    "/api/public/bio",
+    "/api/public/personal-information",
+  ]) {
+    assert.ok(verifier.includes(endpoint), `missing row-level verification for ${endpoint}`);
+  }
+  assert.match(verifier, /type == \\"array\\" and length > 0/);
+  assert.match(verifier, /Portfolio will not migrate or write canonical career data/);
 });

@@ -276,6 +276,8 @@ jobs:
             --retry 8 --retry-all-errors --retry-delay 3 --retry-max-time 120 \
             "${PROD_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
+          PORTFOLIO_CURL_RESOLVE="${PROD_HOST}:443:${origin_ip}" \
+            bash .github/scripts/verify-career-read-model.sh "${PROD_E2E_BASE_URL}"
           # Portfolio is public and intentionally exposes no browser-auth routes.
           for route in /auth/login /api/auth/me; do
             status="$(curl "${origin_curl[@]}" --silent --show-error --output /dev/null \
