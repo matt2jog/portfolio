@@ -31,14 +31,20 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 65
-    env:
-      TURSO_DATABASE_URL: file:${{ runner.temp }}/portfolio-career.db
-      TEST_TURSO_DATABASE_URL: file:${{ runner.temp }}/portfolio-career.db
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - name: Configure the isolated test database
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "TURSO_DATABASE_URL=file:${RUNNER_TEMP}/portfolio-career.db"
+            echo "TEST_TURSO_DATABASE_URL=file:${RUNNER_TEMP}/portfolio-career.db"
+          } >> "${GITHUB_ENV}"
 
       - name: Verify direct Infisical runtime wrapper
         shell: bash
