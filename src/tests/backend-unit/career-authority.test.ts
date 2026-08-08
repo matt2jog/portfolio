@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import {
+  assertPortfolioRuntimeStatement,
+  createPortfolioClient,
+  validateTursoConnection,
+} from "../../shared/turso-connection";
 
 test("Portfolio exposes public career reads but no embedded Admin API or UI", () => {
   const routes = readFileSync(path.join(process.cwd(), "src", "backend", "routes.ts"), "utf8");
@@ -26,9 +31,49 @@ test("Portfolio runtime loses canonical writes while Admin retains canonical aut
   assert.match(adapter, /INSERT\\s\+\(\?:OR\\s\+IGNORE/);
   assert.match(adapter, /github_timeline_events/);
   assert.match(adapter, /UPDATE\|DELETE\|REPLACE/);
+  assert.doesNotThrow(() => assertPortfolioRuntimeStatement(
+    "INSERT INTO github_timeline_events (ext_id) VALUES ('new') ON CONFLICT DO NOTHING",
+  ));
+  assert.throws(
+    () => assertPortfolioRuntimeStatement(
+      "INSERT INTO github_timeline_events (ext_id) VALUES ('existing') ON CONFLICT(ext_id) DO UPDATE SET title = 'changed'",
+    ),
+    /may only read career data or append GitHub activity/,
+  );
+  assert.throws(
+    () => assertPortfolioRuntimeStatement("SELECT 1; DELETE FROM projects"),
+    /exactly one SQL statement/,
+  );
+  assert.throws(
+    () => validateTursoConnection({ url: "not-a-database-url", authToken: "unused" }),
+    /local file or Turso URL/,
+  );
+  assert.equal(
+    validateTursoConnection({ url: "C:\\data\\career.db" }).url,
+    "file:///C:/data/career.db",
+  );
+  assert.doesNotThrow(() => assertPortfolioRuntimeStatement(
+    "WITH career AS (SELECT * FROM projects) SELECT * FROM career",
+  ));
+  assert.throws(
+    () => assertPortfolioRuntimeStatement(
+      "WITH stale AS (SELECT id FROM projects) DELETE FROM projects WHERE id IN (SELECT id FROM stale)",
+    ),
+    /may only read career data or append GitHub activity/,
+  );
+
+  const guarded = createPortfolioClient({ url: ":memory:", runtimeGuard: true });
+  try {
+    assert.throws(
+      () => guarded.executeMultiple("SELECT 1"),
+      /does not expose bulk or transaction write primitives/,
+    );
+  } finally {
+    guarded.close();
+  }
 });
 
-test("Portfolio releases never run the Admin-owned career migration job", () => {
+test("Portfolio releases never run or substitute for Admin's career transfer", () => {
   const workflowSources = ["ci.yml", "promote.yml"]
     .map((filename) => ({
       filename,
@@ -43,37 +88,11 @@ test("Portfolio releases never run the Admin-owned career migration job", () => 
 
   assert.doesNotMatch(workflows, /(?:STAGING|PROD)_MIGRATION_JOB/);
   assert.doesNotMatch(workflows, /gcloud run jobs (?:describe|execute|update)/);
-  assert.match(
-    workflowSources.find(({ filename }) => filename === "ci.yml")!.source,
-    /bash \.github\/scripts\/verify-career-read-model\.sh "\$\{STAGING_E2E_BASE_URL\}"/,
-  );
-  assert.match(
-    workflowSources.find(({ filename }) => filename === "promote.yml")!.source,
-    /bash \.github\/scripts\/verify-career-read-model\.sh "\$\{PROD_E2E_BASE_URL\}"/,
-  );
+  assert.doesNotMatch(workflows, /verify-career-read-model|db:migrate|db:transfer/);
   for (const { filename, source } of workflowSources) {
     assert.ok(
       [...source.matchAll(/--clear-tags/g)].length >= 2,
       `${filename} must clear candidate tags on success and rollback`,
     );
   }
-});
-
-test("the release verifier requires real Admin-owned career rows", () => {
-  const verifier = readFileSync(
-    path.join(process.cwd(), ".github", "scripts", "verify-career-read-model.sh"),
-    "utf8",
-  );
-
-  for (const endpoint of [
-    "/api/public/projects",
-    "/api/public/experiences",
-    "/api/skills-constellation",
-    "/api/public/bio",
-    "/api/public/personal-information",
-  ]) {
-    assert.ok(verifier.includes(endpoint), `missing row-level verification for ${endpoint}`);
-  }
-  assert.match(verifier, /type == \\"array\\" and length > 0/);
-  assert.match(verifier, /Portfolio will not migrate or write canonical career data/);
 });

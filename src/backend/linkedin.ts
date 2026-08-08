@@ -148,7 +148,7 @@ async function readLinkedinTimelineRows(limit: number, offset: number) {
     return rows;
   } catch (err) {
     if (isMissingLinkedinTableError(err)) {
-      lastSyncError = 'LinkedIn migration missing: run "npm run db:migrate" to create linkedin_timeline_events';
+      lastSyncError = "Admin-owned career schema is missing linkedin_timeline_events";
       return [];
     }
     throw err;

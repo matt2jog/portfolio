@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { eq } from "drizzle-orm";
+import {
+  assertRuntimeDatabaseClient,
+  PORTFOLIO_RUNTIME_DATABASE_OBJECTS,
+} from "../../backend/data/runtime-database-boundary";
 import { createPortfolioClient } from "../../shared/turso-connection";
 import { githubTimelineEvents, projects } from "../../shared/schema";
-import { applyPortfolioMigrations, loadMigrationPlan } from "../../scripts/migration-ledger";
 
 const folder = mkdtempSync(path.join(tmpdir(), "portfolio-turso-"));
 const databaseUrl = `file:${path.join(folder, "career.db").replace(/\\/gu, "/")}`;
@@ -15,9 +18,10 @@ process.env.TURSO_DATABASE_URL = databaseUrl;
 before(async () => {
   const client = createPortfolioClient({ url: databaseUrl });
   try {
-    const plan = loadMigrationPlan(path.resolve("src", "migrations"));
-    assert.deepEqual(await applyPortfolioMigrations(client, plan), { applied: 1, total: 1 });
-    assert.deepEqual(await applyPortfolioMigrations(client, plan), { applied: 0, total: 1 });
+    await client.executeMultiple(readFileSync(
+      path.resolve("src", "tests", "fixtures", "admin-career-read-model.sql"),
+      "utf8",
+    ));
   } finally {
     client.close();
   }
@@ -31,18 +35,37 @@ after(async () => {
 test("canonical career tables and Resume compatibility views exist", async () => {
   const client = createPortfolioClient({ url: databaseUrl });
   try {
+    await assertRuntimeDatabaseClient(client);
+    const runtime = await client.execute({
+      sql: `SELECT name FROM sqlite_master WHERE name IN (${PORTFOLIO_RUNTIME_DATABASE_OBJECTS.map(() => "?").join(", ")}) ORDER BY name`,
+      args: [...PORTFOLIO_RUNTIME_DATABASE_OBJECTS],
+    });
+    assert.deepEqual(
+      runtime.rows.map((row) => row.name),
+      [...PORTFOLIO_RUNTIME_DATABASE_OBJECTS].sort(),
+    );
     const result = await client.execute(`
       SELECT name, type FROM sqlite_master
       WHERE name IN (
         'projects', 'experiences', 'experience_bullets', 'all_skills',
         'resume_projects', 'resume_experiences', 'resume_experience_bullets',
-        'resume_skill_variants', 'career_schema_migrations'
+        'resume_skill_variants'
       ) ORDER BY name
     `);
-    assert.equal(result.rows.length, 9);
+    assert.equal(result.rows.length, 8);
     assert.equal(result.rows.filter((row) => row.type === "view").length, 4);
   } finally {
     client.close();
+  }
+
+  const incomplete = createPortfolioClient({ url: ":memory:" });
+  try {
+    await assert.rejects(
+      () => assertRuntimeDatabaseClient(incomplete),
+      /Portfolio career schema is unavailable/,
+    );
+  } finally {
+    incomplete.close();
   }
 });
 

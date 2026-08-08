@@ -82,7 +82,8 @@ Your data is shared with or processed by:
 
 - **Auth0:** Processes administrator authentication and account profile claims.
 - **Cloudflare and Google Cloud:** Deliver DNS, CDN, and application traffic and may process network metadata and operational logs.
-- **Supabase:** Hosts application data for the Site.
+- **Supabase:** Currently hosts or processes the Site's application data during migration.
+- **Turso:** Is the pending canonical database destination. Supabase becomes a temporary read-only migration or rollback processor only after the exact transfer is verified.
 
 These providers may process data in the United States under their respective data-protection terms.
 

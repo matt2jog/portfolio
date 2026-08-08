@@ -14,7 +14,8 @@ before changing a platform boundary.
 ## Work from owning sources
 
 - Runtime and UI behavior: `src/`
-- Application data changes: `src/migrations/`
+- Portfolio-owned persistence changes: the owning service store, never the
+  Admin-owned career migration
 - Build and verification commands: `package.json` and `.github/workflows/ci.yml`
 - Promotion behavior: `.github/workflows/promote.yml`
 - Runtime contract names: `.env.example` and actual configuration consumers
@@ -27,7 +28,9 @@ that shared concern and ownership is coordinated.
 
 Canonical career data is read-only in Portfolio. Portfolio must not update or
 delete it and may write only Portfolio-owned data. Full career CRUD goes through
-Admin. Preserve production Portfolio data.
+Admin. Admin also owns the career migration and one-time provider transfer;
+Portfolio must not ship a career migration runner or transfer gate. Preserve
+production Portfolio data.
 
 Do not add event sourcing, application Pub/Sub, message-broker abstractions,
 Cloudflare Workers, global agent configuration, or parallel catalogs. Never

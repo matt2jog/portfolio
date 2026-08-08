@@ -65,7 +65,10 @@ export function assertPortfolioRuntimeStatement(sql: string): void {
     /^WITH\b/i.test(inspected)
     && !/\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|ATTACH|DETACH|PRAGMA|VACUUM)\b/i.test(inspected)
   ) return;
-  if (/^INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+["`\[]?github_timeline_events["`\]]?\b/i.test(inspected)) {
+  if (
+    /^INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+["`\[]?github_timeline_events["`\]]?\b/i.test(inspected)
+    && !/\bDO\s+UPDATE\b/i.test(inspected)
+  ) {
     return;
   }
   throw new Error("Portfolio runtime may only read career data or append GitHub activity");

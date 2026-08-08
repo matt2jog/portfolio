@@ -35,7 +35,6 @@ COPY package*.json ./
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/legal ./legal
-COPY --from=build /app/src/migrations ./migrations
 USER nonroot
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/infisical-runtime"]
