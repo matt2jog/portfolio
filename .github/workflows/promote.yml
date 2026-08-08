@@ -170,6 +170,28 @@ jobs:
                   rollback_failed=1
                 fi
               fi
+              if [[ ${labels_touched} -eq 1 ]]; then
+                if ! gcloud run services update-traffic "${PROD_SERVICE}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --clear-tags \
+                  --quiet; then
+                  echo "::error::Automatic production rollback failed to clear candidate tags."
+                  rollback_failed=1
+                else
+                  if ! tagged_json="$(gcloud run services describe "${PROD_SERVICE}" \
+                    --project "${GCP_PROJECT_ID}" \
+                    --region "${GCP_REGION}" \
+                    --format=json)"; then
+                    echo "::error::Automatic production rollback could not verify candidate tags."
+                    rollback_failed=1
+                  elif [[ "$(jq '[.status.traffic[] | select(.tag != null)] | length' \
+                    <<<"${tagged_json}")" != "0" ]]; then
+                    echo "::error::The production candidate tag remained after rollback."
+                    rollback_failed=1
+                  fi
+                fi
+              fi
               if [[ ${labels_touched} -eq 1 ]] && ! restore_labels; then
                 echo "::error::Automatic rollback failed to restore the prior service labels."
                 rollback_failed=1

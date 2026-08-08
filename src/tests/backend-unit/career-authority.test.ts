@@ -29,13 +29,24 @@ test("Portfolio runtime loses canonical writes while Admin retains canonical aut
 });
 
 test("Portfolio releases never run the Admin-owned career migration job", () => {
-  const workflows = ["ci.yml", "promote.yml"]
-    .map((filename) => readFileSync(
-      path.join(process.cwd(), ".github", "workflows", filename),
-      "utf8",
-    ))
+  const workflowSources = ["ci.yml", "promote.yml"]
+    .map((filename) => ({
+      filename,
+      source: readFileSync(
+        path.join(process.cwd(), ".github", "workflows", filename),
+        "utf8",
+      ),
+    }));
+  const workflows = workflowSources
+    .map(({ source }) => source)
     .join("\n");
 
   assert.doesNotMatch(workflows, /(?:STAGING|PROD)_MIGRATION_JOB/);
   assert.doesNotMatch(workflows, /gcloud run jobs (?:describe|execute|update)/);
+  for (const { filename, source } of workflowSources) {
+    assert.ok(
+      [...source.matchAll(/--clear-tags/g)].length >= 2,
+      `${filename} must clear candidate tags on success and rollback`,
+    );
+  }
 });

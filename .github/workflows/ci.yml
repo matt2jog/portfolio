@@ -587,6 +587,15 @@ jobs:
             rollback_failed=1
           fi
 
+          if ! gcloud run services update-traffic "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --clear-tags \
+            --quiet; then
+            echo "::error::Automatic staging rollback failed to clear candidate tags."
+            rollback_failed=1
+          fi
+
           if restored_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -599,6 +608,11 @@ jobs:
               <<<"${restored_json}")"
             if [[ "${restored_count}" != "1" || "${restored_revision}" != "${PREVIOUS_REVISION}" ]]; then
               echo "::error::The staging service traffic did not converge during rollback."
+              rollback_failed=1
+            fi
+            if [[ "$(jq '[.status.traffic[] | select(.tag != null)] | length' \
+              <<<"${restored_json}")" != "0" ]]; then
+              echo "::error::The staging candidate tag remained after rollback."
               rollback_failed=1
             fi
           else
