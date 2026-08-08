@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { Pool, type PoolClient } from "pg";
+import { Pool, type PoolClient, type QueryResult } from "pg";
 import { createPortfolioClient } from "../shared/turso-connection";
 import { readRepeatableReadSnapshot } from "./legacy-postgres-snapshot";
 
@@ -40,6 +40,50 @@ interface TransferArtifact {
   format: "personal-brand-career-v1";
   content_sha256: string;
   tables: Record<string, TransferRow[]>;
+}
+
+class TransferStepError extends Error {
+  constructor(
+    readonly step: string,
+    cause: unknown,
+  ) {
+    super("Career transfer step failed", { cause });
+    this.name = "TransferStepError";
+  }
+}
+
+function sanitizedErrorMessage(value: unknown): string {
+  const message = value instanceof Error ? value.message : "Unknown transfer failure";
+  return message
+    .replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[redacted-certificate]")
+    .replace(/\b(?:postgres(?:ql)?|libsql|https?):\/\/[^\s"']+/gi, "[redacted-url]")
+    .replace(/\b(?:authorization|password|token|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .replace(/\beyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){1,2}\b/g, "[redacted-token]")
+    .replace(/\b[A-Za-z0-9_-]{48,}\b/g, "[redacted-value]")
+    .slice(0, 500);
+}
+
+function safeErrorDiagnostic(error: unknown): {
+  step: string;
+  type: string;
+  code?: string;
+  message: string;
+} {
+  const step = error instanceof TransferStepError ? error.step : "transfer";
+  let cause: unknown = error;
+  while (cause instanceof Error && cause.cause !== undefined) cause = cause.cause;
+  const candidate = cause && typeof cause === "object" ? cause as { code?: unknown } : undefined;
+  const rawCode = candidate?.code;
+  const code = (typeof rawCode === "string" || typeof rawCode === "number")
+    && /^[A-Za-z0-9_-]{1,32}$/.test(String(rawCode))
+    ? String(rawCode)
+    : undefined;
+  return {
+    step,
+    type: cause instanceof Error ? cause.name : "UnknownError",
+    ...(code ? { code } : {}),
+    message: sanitizedErrorMessage(cause),
+  };
 }
 
 function canonical(value: unknown): string {
@@ -91,26 +135,48 @@ function normalizeRow(row: TransferRow, contract: TableContract): TransferRow {
 }
 
 async function exportLegacy(outputPath: string): Promise<void> {
-  const connectionString = process.env.LEGACY_DATABASE_URL;
-  if (!connectionString) throw new Error("LEGACY_DATABASE_URL is required for export");
-  const ca = process.env.LEGACY_DATABASE_CA_CERT?.replace(/\\n/g, "\n");
+  const connectionString = process.env.LEGACY_DATABASE_URL
+    ?? process.env.PORTFOLIO_MIGRATION_DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("LEGACY_DATABASE_URL or PORTFOLIO_MIGRATION_DATABASE_URL is required for export");
+  }
+  const ca = (process.env.LEGACY_DATABASE_CA_CERT
+    ?? process.env.PORTFOLIO_SUPABASE_CA_CERT)?.replace(/\\n/g, "\n");
+  let poolConnectionString = connectionString;
+  if (ca) {
+    const parsed = new URL(connectionString);
+    for (const parameter of ["ssl", "sslmode", "sslcert", "sslkey", "sslrootcert"]) {
+      parsed.searchParams.delete(parameter);
+    }
+    poolConnectionString = parsed.toString();
+  }
   const pool = new Pool({
-    connectionString,
+    connectionString: poolConnectionString,
     max: 1,
     ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
   });
   let tables: Record<string, TransferRow[]>;
   let client: PoolClient | undefined;
   try {
-    const connected = await pool.connect();
+    let connected: PoolClient;
+    try {
+      connected = await pool.connect();
+    } catch (error) {
+      throw new TransferStepError("connect_to_legacy_database", error);
+    }
     client = connected;
     tables = await readRepeatableReadSnapshot(connected, async () => {
       const snapshot: Record<string, TransferRow[]> = {};
       for (const contract of TABLES) {
         const columns = contract.columns.map((column) => `"${column}"`).join(", ");
-        const result = await connected.query<TransferRow>(
-          `SELECT ${columns} FROM portfolio."${contract.name}" ORDER BY id`,
-        );
+        let result: QueryResult<TransferRow>;
+        try {
+          result = await connected.query<TransferRow>(
+            `SELECT ${columns} FROM portfolio."${contract.name}" ORDER BY id`,
+          );
+        } catch (error) {
+          throw new TransferStepError(`read_portfolio_${contract.name}`, error);
+        }
         snapshot[contract.name] = result.rows.map((row) => normalizeRow(row, contract));
       }
       return snapshot;
@@ -216,7 +282,11 @@ async function main(): Promise<void> {
   else await verifyTarget(file);
 }
 
-void main().catch(() => {
-  console.error(JSON.stringify({ event: "career_transfer_failed", remediation: "Check the command, scoped database credentials, schema migration, and unopened output path." }));
+void main().catch((error: unknown) => {
+  console.error(JSON.stringify({
+    event: "career_transfer_failed",
+    ...safeErrorDiagnostic(error),
+    remediation: "Use the reported step and code to check scoped database access, the source schema, or the unopened output path. Secret values were redacted.",
+  }));
   process.exitCode = 1;
 });
