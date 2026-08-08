@@ -1,47 +1,54 @@
 # Portfolio service agent guide
 
-Read the workspace rules at `../../AGENTS.md` before working here. This
-repository owns Portfolio runtime code, Portfolio-owned migrations, tests, its
-image, and GitHub workflows. The parent workspace owns its infrastructure at
-`../../infra/terraform/services/portfolio/` and shared resources at
-`../../infra/terraform/`.
+This guide is sufficient for Portfolio-owned work. This repository owns runtime,
+UI, Portfolio-owned data, tests, its image, and GitHub Actions workflows.
 
-If the parent checkout is unavailable, read the
-[workspace rules](https://github.com/matt2jog/personal_brand_workspace/blob/main/AGENTS.md)
-and [Portfolio Terraform source](https://github.com/matt2jog/personal_brand_workspace/tree/main/infra/terraform/services/portfolio)
-before changing a platform boundary.
+## Use owning sources
 
-## Work from owning sources
+Use the current user instruction first, then live state and refreshed plans,
+runtime/tests/workflows, Terraform source, and finally wiki prose.
 
-- Runtime and UI behavior: `src/`
-- Portfolio-owned persistence changes: the owning service store, never the
-  Admin-owned career migration
-- Build and verification commands: `package.json` and `.github/workflows/ci.yml`
-- Promotion behavior: `.github/workflows/promote.yml`
-- Runtime contract names: `.env.example` and actual configuration consumers
-- Navigation: `wiki/Home.md`
+- Runtime, UI, and routes: `src/`
+- Portfolio-owned persistence: owning code and migrations, never Admin career migrations
+- Commands: `package.json`
+- Verification/release: `.github/workflows/ci.yml` and `promote.yml`
+- Source navigation: `wiki/Home.md` and `wiki/Sources.md`
 
-Inspect parent Terraform, state, and live resources before changing a runtime
-identity, endpoint, provider, database/storage target, analytics dependency, or
-secret consumer. Read parent files freely; edit them only when the task includes
-that shared concern and ownership is coordinated.
+Canonical career data is read-only. Portfolio must not update or delete it; full
+career CRUD and transfer ownership belong to Admin. Portfolio may append its
+explicitly owned GitHub timeline data. Preserve production availability and all
+Portfolio production data.
 
-Canonical career data is read-only in Portfolio. Portfolio must not update or
-delete it and may write only Portfolio-owned data. Full career CRUD goes through
-Admin. Admin also owns the career migration and one-time provider transfer;
-Portfolio must not ship a career migration runner or transfer gate. Preserve
-production Portfolio data.
+## Use parent context only when needed
 
-Do not add event sourcing, application Pub/Sub, message-broker abstractions,
-Cloudflare Workers, global agent configuration, or parallel catalogs. Never
-expose secret values, visitor identifiers, authorization/session data, or
-private activity payloads.
+When embedded in the workspace, read `../../AGENTS.md`, `../../wiki/Home.md`,
+`../../CI_CD.md`, `../../infra/terraform/services/portfolio/`, and
+`../../infra/terraform/` before changing infrastructure, identity, providers,
+data/storage, analytics, or secret consumers. Edit parent files only when scoped
+and coordinated. Use source-map remote links otherwise.
 
-Before provisioning or expanding a metered resource, present direct monthly and
-upper-bound estimates plus consequences and obtain explicit human approval. Use
-the workspace Communications email skill when the owner is away.
+GitHub Actions owns build, test, scan, and release. Parent Terraform owns durable
+infrastructure. Do not introduce Cloud Build or use Terraform as a release runner.
+Keep staging structurally equivalent to production with isolated state/data.
 
-Preserve unrelated dirty changes. Run the applicable package, migration,
-backend/client, image, browser, activity-provider, authorization, and canonical
-host checks. Do not claim a deployment or migration succeeded without observing
-it.
+## Apply platform guardrails
+
+Do not add Kafka, CQRS, event sourcing, application Pub/Sub, Cloudflare Workers,
+global platform skills/profiles/prompts, wrapper CLIs, or parallel catalogs.
+Never expose secrets, visitor identifiers, session data, or private activity.
+
+Report metered-change estimates. Email and wait only above `$3/month`, when
+replacing a technology selected in the active goal, or when introducing an
+undisclosed technology. Destructive, public, sensitive-data, and data-loss gates
+remain separate.
+
+For subagents, send objective/done condition, sources, exclusive scope, caveats,
+dependencies, unknowns, mutation limits, checks, and return fields up front.
+Do not create a custom A2A protocol.
+
+## Verify and reconcile context
+
+Run applicable package, backend/client, image, browser, activity-provider,
+authorization, and canonical-host checks. Before completion, reconcile this file
+and `wiki/Sources.md`, delete task-created contradictions, validate links, and add
+no inventories or history.

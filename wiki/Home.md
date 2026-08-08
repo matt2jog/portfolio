@@ -1,14 +1,20 @@
 # Portfolio service
 
-This wiki points to Portfolio's owning sources. It is not a route, skill, or live
-resource inventory.
+This compact wiki maps Portfolio work to owning sources. It is not a route,
+skill, provider, or live-resource inventory.
 
 - [Source map](Sources)
-- [Repository agent rules](https://github.com/matt2jog/portfolio/blob/main/AGENTS.md)
+- [Local agent rules](../AGENTS.md)
 - [Portfolio repository](https://github.com/matt2jog/portfolio)
-- [Workspace navigation source](https://github.com/matt2jog/personal_brand_workspace/tree/main/wiki)
 
 Portfolio owns its public experience and Portfolio-specific data. Canonical
-career data is read-only here; Admin owns full career CRUD. The parent workspace
-owns Portfolio's Terraform roots. Derive current routes, providers, identities,
-storage/database targets, and deployments from source and live state.
+career data is read-only; Admin owns full career CRUD.
+
+When nested under the workspace, use the parent
+[workspace wiki](../../../wiki/Home.md), [release standard](../../../CI_CD.md),
+[Portfolio Terraform](../../../infra/terraform/services/portfolio/), and
+[shared Terraform](../../../infra/terraform/) only for cross-boundary work. If
+the parent is absent, use remote workspace links in [Sources](Sources).
+
+Before finishing a task, reconcile changed ownership/source paths and validate
+links. Do not record history or copied live state.

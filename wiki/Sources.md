@@ -2,15 +2,18 @@
 
 | Concern | Owning source |
 |---|---|
-| Runtime, UI, and routes | [`src/`](https://github.com/matt2jog/portfolio/tree/main/src) |
-| Canonical career schema | [Admin career migrations](https://github.com/matt2jog/admin_dashboard/tree/main/migrations/career) |
-| One-time career transfer | [Admin transfer script](https://github.com/matt2jog/admin_dashboard/blob/main/src/scripts/transferCareerData.ts) |
-| Portfolio read-model contract tests | [`src/tests/fixtures/`](https://github.com/matt2jog/portfolio/tree/main/src/tests/fixtures) |
-| Dependencies and commands | [`package.json`](https://github.com/matt2jog/portfolio/blob/main/package.json) |
-| Verification and image build | [`.github/workflows/ci.yml`](https://github.com/matt2jog/portfolio/blob/main/.github/workflows/ci.yml) |
-| Production promotion | [`.github/workflows/promote.yml`](https://github.com/matt2jog/portfolio/blob/main/.github/workflows/promote.yml) |
-| Portfolio infrastructure | [`infra/terraform/services/portfolio`](https://github.com/matt2jog/personal_brand_workspace/tree/main/infra/terraform/services/portfolio) |
-| Shared infrastructure | [`infra/terraform`](https://github.com/matt2jog/personal_brand_workspace/tree/main/infra/terraform) |
-| Release standard | [`CI_CD.md`](https://github.com/matt2jog/personal_brand_workspace/blob/main/CI_CD.md) |
+| Runtime, UI, and routes | [`src/`](../src/) |
+| Canonical career schema | [Admin career migrations](../../admin_dashboard/migrations/career/) |
+| Career transfer owner | [Admin transfer script](../../admin_dashboard/src/scripts/transferCareerData.ts) |
+| Portfolio read-model fixtures | [`src/tests/fixtures/`](../src/tests/fixtures/) |
+| Dependencies and commands | [`package.json`](../package.json) |
+| Verification and image build | [`ci.yml`](../.github/workflows/ci.yml) |
+| Production promotion | [`promote.yml`](../.github/workflows/promote.yml) |
+| Portfolio infrastructure, when parent exists | [`infra/terraform/services/portfolio`](../../../infra/terraform/services/portfolio/) |
+| Shared infrastructure, when parent exists | [`infra/terraform`](../../../infra/terraform/) |
+| Release standard, when parent exists | [`CI_CD.md`](../../../CI_CD.md) |
 
-Use live provider state and refreshed Terraform plans for deployed reality.
+When Admin or the workspace is absent, use the
+[Admin repository](https://github.com/matt2jog/admin_dashboard) and
+[workspace repository](https://github.com/matt2jog/personal_brand_workspace) as
+remote entry points. Use live state and refreshed plans for deployed reality.
