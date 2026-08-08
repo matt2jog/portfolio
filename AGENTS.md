@@ -29,9 +29,10 @@ Canonical career data is read-only in Portfolio. Portfolio must not update or
 delete it and may write only Portfolio-owned data. Full career CRUD goes through
 Admin. Preserve production Portfolio data.
 
-Do not add Kafka, CQRS, event sourcing, application Pub/Sub, Cloudflare Workers,
-global agent configuration, or parallel catalogs. Never expose secret values,
-visitor identifiers, authorization/session data, or private activity payloads.
+Do not add event sourcing, application Pub/Sub, message-broker abstractions,
+Cloudflare Workers, global agent configuration, or parallel catalogs. Never
+expose secret values, visitor identifiers, authorization/session data, or
+private activity payloads.
 
 Before provisioning or expanding a metered resource, present direct monthly and
 upper-bound estimates plus consequences and obtain explicit human approval. Use
