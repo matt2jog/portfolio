@@ -1,12 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import type { PoolClient } from "pg";
-import {
-  portfolioDatabaseBoundary,
-  renderPortfolioMigrationSql,
-  type PortfolioDatabaseBoundary,
-} from "../shared/database-boundary";
+import type { Client } from "@libsql/client";
 
 export interface Migration {
   version: string;
@@ -14,30 +9,18 @@ export interface Migration {
   sql: string;
 }
 
-export interface MigrationResult {
-  applied: number;
-  total: number;
-}
-
 const MIGRATION_FILE = /^\d{3}_[a-z0-9_]+\.sql$/;
-const MIGRATION_LOCK = "portfolio-schema-migrations";
 
 export function loadMigrationPlan(folder: string): Migration[] {
-  const files = readdirSync(folder)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-
-  if (files.length === 0) {
-    throw new Error("No Portfolio migrations were found");
+  const files = readdirSync(folder).filter((file) => file.endsWith(".sql")).sort();
+  if (files.length !== 1 || files[0] !== "001_initial.sql") {
+    throw new Error("Portfolio must contain exactly one canonical career migration");
   }
-  for (const file of files) {
-    if (!MIGRATION_FILE.test(file)) {
-      throw new Error(`Invalid Portfolio migration filename: ${file}`);
-    }
+  if (!files.every((file) => MIGRATION_FILE.test(file))) {
+    throw new Error("Portfolio contains an invalid migration filename");
   }
-
   return files.map((file) => {
-    const sql = readFileSync(path.join(folder, file), "utf8").replace(/\r\n/g, "\n");
+    const sql = readFileSync(path.join(folder, file), "utf8").replace(/\r\n?/g, "\n");
     return {
       version: file.slice(0, -4),
       checksum: createHash("sha256").update(sql).digest("hex"),
@@ -47,53 +30,52 @@ export function loadMigrationPlan(folder: string): Migration[] {
 }
 
 export async function applyPortfolioMigrations(
-  client: Pick<PoolClient, "query">,
+  client: Client,
   migrations: readonly Migration[],
-  boundary: PortfolioDatabaseBoundary = portfolioDatabaseBoundary(),
-): Promise<MigrationResult> {
-  await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-  try {
-    await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext($1))", [
-      `${MIGRATION_LOCK}:${boundary.schema}`,
-    ]);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS ${boundary.schema}.schema_migrations (
-        version text PRIMARY KEY,
-        checksum character(64) NOT NULL CHECK (checksum ~ '^[0-9a-f]{64}$'),
-        applied_at timestamptz NOT NULL DEFAULT now()
-      )
-    `);
-
-    const existing = await client.query<{ version: string; checksum: string }>(
-      `SELECT version, checksum FROM ${boundary.schema}.schema_migrations ORDER BY version`,
-    );
-    const known = new Map(migrations.map((migration) => [migration.version, migration]));
-    for (const row of existing.rows) {
-      const migration = known.get(row.version);
-      if (!migration) {
-        throw new Error(`Database contains unknown Portfolio migration: ${row.version}`);
-      }
-      if (migration.checksum !== row.checksum) {
-        throw new Error(`Portfolio migration checksum mismatch: ${row.version}`);
-      }
+): Promise<{ applied: number; total: number }> {
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS career_schema_migrations (
+      migration_id TEXT PRIMARY KEY,
+      source_name TEXT NOT NULL,
+      checksum TEXT NOT NULL CHECK (
+        length(checksum) = 64 AND checksum NOT GLOB '*[^0-9a-f]*'
+      ),
+      applied_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )
+  `);
+  const existing = await client.execute(
+    "SELECT migration_id, checksum FROM career_schema_migrations ORDER BY migration_id",
+  );
+  const expected = new Map(migrations.map((migration) => [migration.version, migration]));
+  for (const row of existing.rows) {
+    const version = String(row.migration_id);
+    const migration = expected.get(version);
+    if (!migration) throw new Error(`Database contains unknown career migration: ${version}`);
+    if (migration.checksum !== row.checksum) {
+      throw new Error(`Career migration checksum mismatch: ${version}`);
     }
-
-    const appliedVersions = new Set(existing.rows.map((row) => row.version));
-    let applied = 0;
-    for (const migration of migrations) {
-      if (appliedVersions.has(migration.version)) continue;
-      await client.query(renderPortfolioMigrationSql(migration.sql, boundary));
-      await client.query(
-        `INSERT INTO ${boundary.schema}.schema_migrations (version, checksum) VALUES ($1, $2)`,
-        [migration.version, migration.checksum],
-      );
-      applied += 1;
-    }
-
-    await client.query("COMMIT");
-    return { applied, total: migrations.length };
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
   }
+
+  const appliedVersions = new Set(existing.rows.map((row) => String(row.migration_id)));
+  let applied = 0;
+  for (const migration of migrations) {
+    if (appliedVersions.has(migration.version)) continue;
+    const transaction = await client.transaction("write");
+    try {
+      await transaction.executeMultiple(migration.sql);
+      await transaction.execute({
+        sql: `INSERT INTO career_schema_migrations
+              (migration_id, source_name, checksum) VALUES (?, ?, ?)`,
+        args: [migration.version, `${migration.version}.sql`, migration.checksum],
+      });
+      await transaction.commit();
+      applied += 1;
+    } catch (error) {
+      await transaction.rollback().catch(() => undefined);
+      throw error;
+    } finally {
+      transaction.close();
+    }
+  }
+  return { applied, total: migrations.length };
 }

@@ -15,7 +15,7 @@ test("migration entrypoint emits one bounded completion event on failure", () =>
       env: {
         ...process.env,
         CLOUD_RUN_EXECUTION: "portfolio-migration-test",
-        DATABASE_URL: "",
+        TURSO_DATABASE_URL: "",
         NODE_ENV: "production",
       },
     },
@@ -30,7 +30,7 @@ test("migration entrypoint emits one bounded completion event on failure", () =>
     duration_ms: 0,
     event: "job_completed",
     failure_code: "migration_failed",
-    job: "portfolio_migration",
+    job: "portfolio_career_migration",
     run_id: "portfolio-migration-test",
     status: "failed",
   });

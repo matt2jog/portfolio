@@ -1,82 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  loadRuntimeEnvironment,
-  validateRuntimeEnvironment,
-} from "../../backend/runtime-config";
-import {
-  TEST_SUPABASE_CA_CERT,
-  TEST_SUPABASE_CA_SHA256,
-  TEST_SUPABASE_PROJECT_REF,
-  testSupabaseDatabaseUrl,
-} from "../support/supabase";
+import { loadRuntimeEnvironment, validateRuntimeEnvironment } from "../../backend/runtime-config";
 
-function runtimeEnvironment(
-  stage: "production" | "staging" = "production",
-): NodeJS.ProcessEnv {
+function productionEnvironment(): NodeJS.ProcessEnv {
   return {
     NODE_ENV: "production",
-    DEPLOYMENT_STAGE: stage,
-    DATABASE_URL: testSupabaseDatabaseUrl(
-      stage === "production" ? "portfolio_runtime_login" : "portfolio_staging_runtime_login",
-    ),
-    SUPABASE_CA_CERT: TEST_SUPABASE_CA_CERT,
-    SUPABASE_CA_SHA256: TEST_SUPABASE_CA_SHA256,
-    SUPABASE_PROJECT_REF: TEST_SUPABASE_PROJECT_REF,
+    TURSO_DATABASE_URL: "libsql://personal-brand-career-prod.example.turso.io",
+    TURSO_AUTH_TOKEN: "fixture",
     GITHUB_USERNAME: "matt2jog",
-    GITHUB_TOKEN: "read-only-fixture",
-    GRADIENT_AI_TOKEN: "gradient-fixture",
-    FIREWORKS_AI_TOKEN: "fireworks-fixture",
   };
 }
 
-test("production validates individual runtime bindings without mutating them", () => {
-  const target = runtimeEnvironment();
+test("production accepts credential-free Turso coordinates with a separate token", () => {
+  const target = productionEnvironment();
   const snapshot = { ...target };
   assert.doesNotThrow(() => loadRuntimeEnvironment(target));
   assert.deepEqual(target, snapshot);
 });
 
-test("staging requires its isolated runtime role", () => {
-  const staging = runtimeEnvironment("staging");
-  assert.doesNotThrow(() => validateRuntimeEnvironment(staging));
-  assert.throws(
-    () => validateRuntimeEnvironment({
-      ...staging,
-      DATABASE_URL: testSupabaseDatabaseUrl("portfolio_runtime_login"),
-    }),
-    /scoped Supabase runtime role/,
-  );
+test("production rejects local databases, embedded credentials, and missing tokens", () => {
+  assert.throws(() => validateRuntimeEnvironment({ ...productionEnvironment(), TURSO_DATABASE_URL: "file:test.db" }), /remote Turso/);
+  assert.throws(() => validateRuntimeEnvironment({ ...productionEnvironment(), TURSO_DATABASE_URL: "libsql://user:secret@example.turso.io" }), /credential-free/);
+  assert.throws(() => validateRuntimeEnvironment({ ...productionEnvironment(), TURSO_AUTH_TOKEN: undefined }), /TURSO_AUTH_TOKEN/);
 });
 
-test("production rejects missing or privileged database bindings", () => {
-  for (const databaseUrl of [
-    undefined,
-    "postgresql://portfolio_runtime:fixture@localhost:5432/portfolio",
-    testSupabaseDatabaseUrl("postgres"),
-  ]) {
-    assert.throws(
-      () => validateRuntimeEnvironment({ ...runtimeEnvironment(), DATABASE_URL: databaseUrl }),
-      /DATABASE_URL|Supabase|role|username/i,
-    );
-  }
+test("GitHub activity configuration remains explicit", () => {
+  assert.throws(() => validateRuntimeEnvironment({ ...productionEnvironment(), GITHUB_USERNAME: undefined }), /GITHUB_USERNAME/);
+  assert.throws(() => validateRuntimeEnvironment({ ...productionEnvironment(), GITHUB_TOKEN: "" }), /GITHUB_TOKEN/);
 });
 
-test("GitHub activity configuration is explicit and an optional token cannot be empty", () => {
-  assert.throws(
-    () => validateRuntimeEnvironment({ ...runtimeEnvironment(), GITHUB_USERNAME: undefined }),
-    /GITHUB_USERNAME/,
-  );
-  assert.throws(
-    () => validateRuntimeEnvironment({ ...runtimeEnvironment(), GITHUB_TOKEN: "" }),
-    /GITHUB_TOKEN/,
-  );
-  assert.doesNotThrow(() => validateRuntimeEnvironment({
-    ...runtimeEnvironment(),
-    GITHUB_TOKEN: undefined,
-  }));
-});
-
-test("development does not require production cloud bindings", () => {
+test("development can load before local database coordinates are supplied", () => {
   assert.doesNotThrow(() => loadRuntimeEnvironment({ NODE_ENV: "development" }));
 });

@@ -18,7 +18,6 @@ const allowlist = [
   "nanoid",
   "nodemailer",
   "openai",
-  "pg",
   "stripe",
   "uuid",
   "ws",

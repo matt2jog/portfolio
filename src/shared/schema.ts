@@ -1,18 +1,20 @@
 import { sql } from "drizzle-orm";
-import { integer, jsonb, pgSchema, text, timestamp, varchar, boolean, uniqueIndex, vector } from "drizzle-orm/pg-core";
+import { integer, text, uniqueIndex, sqliteTable } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { portfolioDatabaseBoundary } from "./database-boundary";
 
-const portfolioSchema = pgSchema(portfolioDatabaseBoundary().schema);
+const id = (name = "id") => text(name).primaryKey().default(sql`lower(hex(randomblob(16)))`);
+const timestamp = (name: string) => integer(name, { mode: "timestamp_ms" })
+  .notNull()
+  .default(sql`(unixepoch() * 1000)`);
 
-export const users = portfolioSchema.table("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const users = sqliteTable("users", {
+  id: id(),
   email: text("email").notNull().unique(),
   auth0Sub: text("auth0_sub").unique(),
   name: text("name"),
   role: text("role").notNull().default("user"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -22,89 +24,99 @@ export const insertUserSchema = createInsertSchema(users).pick({
   role: true,
 });
 
-export const projects = portfolioSchema.table("projects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const projects = sqliteTable("projects", {
+  id: id(),
   title: text("title").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
   longDescription: text("long_description"),
-  tech: text("tech").array().notNull().default(sql`'{}'::text[]`),
+  tech: text("tech", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
   image: text("image"),
   hoverImage: text("hover_image"),
   deployedUrl: text("deployed_url"),
   githubUrl: text("github_url"),
   aiSystemPrompt: text("ai_system_prompt"),
   position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-  archivedBy: varchar("archived_by"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+  archivedBy: text("archived_by"),
 });
 
-export const aiModels = portfolioSchema.table("ai_models", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const aiModels = sqliteTable("ai_models", {
+  id: id(),
   label: text("label").notNull(),
   modelId: text("model_id").notNull().unique(),
   provider: text("provider").notNull(),
   fireworksModelId: text("fireworks_model_id"),
-  enabled: boolean("enabled").notNull().default(true),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at"),
 });
 
-export const xyzBullets = portfolioSchema.table("xyz_bullets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull(),
+export const xyzBullets = sqliteTable("xyz_bullets", {
+  id: id(),
+  projectId: text("project_id").notNull(),
   bulletText: text("bullet_text").notNull(),
   position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });
 
-export const bio = portfolioSchema.table("bio", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const experienceBullets = sqliteTable("experience_bullets", {
+  id: id(),
+  experienceId: text("experience_id").notNull(),
+  bulletText: text("bullet_text").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const bio = sqliteTable("bio", {
+  id: id(),
   headline: text("headline"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });
 
-export const bioParagraphs = portfolioSchema.table("bio_paragraphs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  bioId: varchar("bio_id").notNull(),
+export const bioParagraphs = sqliteTable("bio_paragraphs", {
+  id: id(),
+  bioId: text("bio_id").notNull(),
   content: text("content").notNull(),
   position: integer("position").notNull().default(0),
 });
 
-export const skillsGroup = portfolioSchema.table("skills_group", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const skillsGroup = sqliteTable("skills_group", {
+  id: id(),
   name: text("name").notNull(),
   position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });
 
-export const allSkills = portfolioSchema.table("all_skills", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const allSkills = sqliteTable("all_skills", {
+  id: id(),
   name: text("name").notNull(),
-  groupingId: varchar("grouping_id").references(() => skillsGroup.id, { onDelete: "set null" }),
-  embedding: vector("embedding", { dimensions: 768 }),
+  groupingId: text("grouping_id").references(() => skillsGroup.id, { onDelete: "set null" }),
+  embedding: text("embedding", { mode: "json" }).$type<number[] | null>(),
   embeddingModel: text("embedding_model"),
 });
-export const portfolioSkills = portfolioSchema.table("portfolio_skills", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  allSkillId: varchar("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "restrict" }),
-  groupId: varchar("group_id").references(() => skillsGroup.id, { onDelete: "set null" }),
+
+export const portfolioSkills = sqliteTable("portfolio_skills", {
+  id: id(),
+  allSkillId: text("all_skill_id").notNull().references(() => allSkills.id, { onDelete: "restrict" }),
+  groupId: text("group_id").references(() => skillsGroup.id, { onDelete: "set null" }),
   position: integer("position").notNull().default(0),
-  deletedAt: timestamp("deleted_at"),
-  archivedBy: varchar("archived_by"),
+  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+  archivedBy: text("archived_by"),
 });
 
-export const auditLogs = portfolioSchema.table("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+export const auditLogs = sqliteTable("audit_logs", {
+  id: id(),
+  userId: text("user_id").notNull(),
   action: text("action").notNull(),
-  payload: jsonb("payload"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  payload: text("payload", { mode: "json" }).$type<unknown>(),
+  createdAt: timestamp("created_at"),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).pick({
@@ -129,9 +141,7 @@ export const insertAiModelSchema = createInsertSchema(aiModels).pick({
 
 export const updateProjectSchema = insertProjectSchema.partial();
 
-export const insertBioSchema = createInsertSchema(bio).pick({
-  headline: true,
-}).extend({
+export const insertBioSchema = createInsertSchema(bio).pick({ headline: true }).extend({
   paragraphs: z.array(z.string()).optional(),
 });
 
@@ -140,12 +150,9 @@ export const insertBioParagraphSchema = createInsertSchema(bioParagraphs).pick({
   position: true,
 });
 
-export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({
-  name: true,
-}).extend({
+export const insertSkillsGroupSchema = createInsertSchema(skillsGroup).pick({ name: true }).extend({
   name: z.string().trim().min(1).max(80),
 });
-
 export const updateSkillsGroupSchema = insertSkillsGroupSchema.partial();
 
 export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
@@ -155,7 +162,6 @@ export const insertAllSkillSchema = createInsertSchema(allSkills).pick({
   name: z.string().trim().min(1).max(120),
   groupingId: z.string().min(1).nullable().optional(),
 });
-
 export const updateAllSkillSchema = insertAllSkillSchema.partial();
 
 export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pick({
@@ -165,41 +171,38 @@ export const insertPortfolioSkillSchema = createInsertSchema(portfolioSkills).pi
   allSkillId: z.string().min(1),
   groupId: z.string().min(1),
 });
-
 export const updatePortfolioSkillSchema = insertPortfolioSkillSchema.partial();
 
-export const githubTimelineEvents = portfolioSchema.table("github_timeline_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  extId: varchar("ext_id").notNull().unique(), // GitHub event ID
-  type: text("type").notNull(), // commit, pr, repo
+export const githubTimelineEvents = sqliteTable("github_timeline_events", {
+  id: id(),
+  extId: text("ext_id").notNull().unique(),
+  type: text("type").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   url: text("url"),
   repo: text("repo").notNull(),
-  timestamp: timestamp("timestamp").notNull(),
-  meta: jsonb("meta").default({}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  timestamp: timestamp("timestamp"),
+  meta: text("meta", { mode: "json" }).$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
+  createdAt: timestamp("created_at"),
 });
-
 export const insertGithubTimelineEventSchema = createInsertSchema(githubTimelineEvents).omit({ id: true, createdAt: true });
 
-export const linkedinTimelineEvents = portfolioSchema.table("linkedin_timeline_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  extId: varchar("ext_id").notNull().unique(),
-  type: text("type").notNull(), // post, repost, article
+export const linkedinTimelineEvents = sqliteTable("linkedin_timeline_events", {
+  id: id(),
+  extId: text("ext_id").notNull().unique(),
+  type: text("type").notNull(),
   title: text("title").notNull(),
   description: text("description"),
   url: text("url"),
   source: text("source").notNull(),
-  timestamp: timestamp("timestamp").notNull(),
-  meta: jsonb("meta").default({}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  timestamp: timestamp("timestamp"),
+  meta: text("meta", { mode: "json" }).$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
+  createdAt: timestamp("created_at"),
 });
-
 export const insertLinkedinTimelineEventSchema = createInsertSchema(linkedinTimelineEvents).omit({ id: true, createdAt: true });
 
-export const personalInformation = portfolioSchema.table("personal_information", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const personalInformation = sqliteTable("personal_information", {
+  id: id(),
   name: text("name").notNull(),
   title: text("title").notNull(),
   location: text("location").notNull(),
@@ -211,33 +214,27 @@ export const personalInformation = portfolioSchema.table("personal_information",
   githubUrl: text("github_url").notNull(),
   devpostUrl: text("devpost_url").notNull(),
   portfolioUrl: text("portfolio_url").notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
 });
-
 export const insertPersonalInformationSchema = createInsertSchema(personalInformation).omit({ id: true, updatedAt: true });
 export const updatePersonalInformationSchema = insertPersonalInformationSchema.partial();
 
-export const adminPolicyAcceptance = portfolioSchema.table(
-  "admin_policy_acceptance",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    adminId: varchar("admin_id").notNull(),
-    timestamp: timestamp("timestamp").defaultNow().notNull(),
-    policyVersion: varchar("policy_version").notNull(),
-    termsVersion: varchar("terms_version").notNull(),
-    privacyVersion: varchar("privacy_version").notNull(),
-    accepted: boolean("accepted").notNull().default(false),
-  },
-  (table) => [
-    uniqueIndex("admin_policy_acceptance_unique_idx").on(
-      table.adminId,
-      table.policyVersion,
-      table.termsVersion,
-      table.privacyVersion,
-    ),
-  ],
-);
-
+export const adminPolicyAcceptance = sqliteTable("admin_policy_acceptance", {
+  id: id(),
+  adminId: text("admin_id").notNull(),
+  timestamp: timestamp("timestamp"),
+  policyVersion: text("policy_version").notNull(),
+  termsVersion: text("terms_version").notNull(),
+  privacyVersion: text("privacy_version").notNull(),
+  accepted: integer("accepted", { mode: "boolean" }).notNull().default(false),
+}, (table) => [
+  uniqueIndex("admin_policy_acceptance_unique_idx").on(
+    table.adminId,
+    table.policyVersion,
+    table.termsVersion,
+    table.privacyVersion,
+  ),
+]);
 export const insertAdminPolicyAcceptanceSchema = createInsertSchema(adminPolicyAcceptance).pick({
   adminId: true,
   policyVersion: true,
@@ -246,9 +243,80 @@ export const insertAdminPolicyAcceptanceSchema = createInsertSchema(adminPolicyA
   accepted: true,
 });
 
+export const education = sqliteTable("education", {
+  id: id(),
+  school: text("school").notNull(),
+  location: text("location").notNull(),
+  degree: text("degree").notNull(),
+  dates: text("dates").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const experiences = sqliteTable("experiences", {
+  id: id(),
+  role: text("role").notNull(),
+  company: text("company").notNull(),
+  location: text("location").notNull().default("Remote"),
+  duration: text("duration").notNull(),
+  description: text("description").notNull(),
+  technologies: text("technologies", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+export const insertExperienceSchema = createInsertSchema(experiences).pick({
+  role: true,
+  company: true,
+  location: true,
+  duration: true,
+  description: true,
+  technologies: true,
+  isActive: true,
+});
+export const updateExperienceSchema = insertExperienceSchema.partial();
+
+export const legalDocumentVersions = sqliteTable("legal_document_versions", {
+  id: id(),
+  docType: text("doc_type").notNull(),
+  content: text("content").notNull(),
+  contentHash: text("content_hash").notNull(),
+  commitSha: text("commit_sha").notNull(),
+  committedAt: timestamp("committed_at"),
+  recordedAt: timestamp("recorded_at"),
+}, (table) => [
+  uniqueIndex("legal_document_versions_doc_type_content_hash_key").on(table.docType, table.contentHash),
+]);
+
+export const browserTracking = sqliteTable("browser_tracking", {
+  id: id(),
+  hashedUuid: text("hashed_uuid").notNull().unique(),
+  trEn: text("tr_en"),
+  consentedAt: integer("consented_at", { mode: "timestamp_ms" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const welcomeMessages = sqliteTable("welcome_messages", {
+  id: id(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  message: text("message").notNull(),
+  archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+export const insertWelcomeMessageSchema = createInsertSchema(welcomeMessages).pick({
+  slug: true,
+  label: true,
+  message: true,
+});
+export const updateWelcomeMessageSchema = insertWelcomeMessageSchema.partial();
+
 export type AdminPolicyAcceptance = typeof adminPolicyAcceptance.$inferSelect;
 export type InsertAdminPolicyAcceptance = typeof insertAdminPolicyAcceptanceSchema._type;
-
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
@@ -261,88 +329,7 @@ export type PortfolioSkill = typeof portfolioSkills.$inferSelect;
 export type GithubTimelineEvent = typeof githubTimelineEvents.$inferSelect;
 export type LinkedinTimelineEvent = typeof linkedinTimelineEvents.$inferSelect;
 export type AiModel = typeof aiModels.$inferSelect;
-
-// Resume reads this career presentation data through the private views in the
-// Portfolio schema.
-export const education = portfolioSchema.table("education", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  school: text("school").notNull(),
-  location: text("location").notNull(),
-  degree: text("degree").notNull(),
-  dates: text("dates").notNull(),
-  position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
 export type Education = typeof education.$inferSelect;
-
-export const experiences = portfolioSchema.table("experiences", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  role: text("role").notNull(),
-  company: text("company").notNull(),
-  location: text("location").notNull().default("Remote"),
-  duration: text("duration").notNull(),
-  description: text("description").notNull(),
-  technologies: text("technologies").array().notNull().default(sql`'{}'::text[]`),
-  isActive: boolean("is_active").notNull().default(false),
-  position: integer("position").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const insertExperienceSchema = createInsertSchema(experiences).pick({
-  role: true,
-  company: true,
-  location: true,
-  duration: true,
-  description: true,
-  technologies: true,
-  isActive: true,
-});
-
-export const updateExperienceSchema = insertExperienceSchema.partial();
 export type DbExperience = typeof experiences.$inferSelect;
-
-export const legalDocumentVersions = portfolioSchema.table(
-  "legal_document_versions",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    docType: text("doc_type").notNull(),
-    content: text("content").notNull(),
-    contentHash: text("content_hash").notNull(),
-    commitSha: text("commit_sha").notNull(),
-    committedAt: timestamp("committed_at", { withTimezone: true }).notNull(),
-    recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (t) => ({
-    uniqueDocHash: uniqueIndex("legal_document_versions_doc_type_content_hash_key").on(
-      t.docType,
-      t.contentHash,
-    ),
-  }),
-);
-
 export type DbLegalDocumentVersion = typeof legalDocumentVersions.$inferSelect;
-
-// ─── Welcome Messages (Personalization) ──────────────────────────────────────
-
-export const welcomeMessages = portfolioSchema.table("welcome_messages", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  slug: text("slug").notNull().unique(),
-  label: text("label").notNull(),
-  message: text("message").notNull(),
-  archivedAt: timestamp("archived_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const insertWelcomeMessageSchema = createInsertSchema(welcomeMessages).pick({
-  slug: true,
-  label: true,
-  message: true,
-});
-
-export const updateWelcomeMessageSchema = insertWelcomeMessageSchema.partial();
-
 export type WelcomeMessage = typeof welcomeMessages.$inferSelect;

@@ -17,20 +17,12 @@ test("Portfolio exposes public career reads but no embedded Admin API or UI", ()
 });
 
 test("Portfolio runtime loses canonical writes while Admin retains canonical authority", () => {
-  const migration = readFileSync(
-    path.join(process.cwd(), "src", "migrations", "013_enforce_career_write_authority.sql"),
+  const adapter = readFileSync(
+    path.join(process.cwd(), "src", "shared", "turso-connection.ts"),
     "utf8",
   );
-
-  assert.match(migration, /to_regrole\('portfolio_runtime'\) IS NOT NULL/);
-  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE[\s\S]+FROM portfolio_runtime/);
-  assert.match(migration, /to_regrole\('admin_runtime'\) IS NOT NULL/);
-  assert.match(
-    migration,
-    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE\s+education,\s+experience_bullets\s+TO admin_runtime/,
-  );
-  assert.match(
-    migration,
-    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE xyz_bullets TO admin_runtime/,
-  );
+  assert.match(adapter, /Portfolio runtime may only read career data or append GitHub activity/);
+  assert.match(adapter, /INSERT\\s\+\(\?:OR\\s\+IGNORE/);
+  assert.match(adapter, /github_timeline_events/);
+  assert.match(adapter, /UPDATE\|DELETE\|REPLACE/);
 });

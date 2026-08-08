@@ -1,31 +1,13 @@
-import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
-import { portfolioDatabaseBoundary } from "../../shared/database-boundary";
+import type { Client } from "@libsql/client";
 
-interface Queryable {
-  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
-}
-
-interface ReleasableQueryable extends Queryable {
-  release(): void;
-}
-
-interface ConnectablePool {
-  connect(): Promise<ReleasableQueryable>;
-}
-
-export async function assertRuntimeDatabaseSession(queryable: Queryable): Promise<void> {
-  await assertUnprivilegedDatabaseSession(
-    queryable,
-    portfolioDatabaseBoundary().runtimeRole,
-    "Portfolio runtime",
-  );
-}
-
-export async function assertRuntimeDatabasePool(pool: ConnectablePool): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await assertRuntimeDatabaseSession(client);
-  } finally {
-    client.release();
+export async function assertRuntimeDatabaseClient(client: Client): Promise<void> {
+  const result = await client.execute(`
+    SELECT count(*) AS table_count
+    FROM sqlite_master
+    WHERE type IN ('table', 'view')
+      AND name IN ('projects', 'experiences', 'resume_projects', 'career_schema_migrations')
+  `);
+  if (Number(result.rows[0]?.table_count ?? 0) !== 4) {
+    throw new Error("Portfolio career schema is unavailable");
   }
 }
