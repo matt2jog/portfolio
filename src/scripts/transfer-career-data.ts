@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { createPortfolioClient } from "../shared/turso-connection";
+import { readRepeatableReadSnapshot } from "./legacy-postgres-snapshot";
 
 interface TableContract {
   name: string;
@@ -98,16 +99,24 @@ async function exportLegacy(outputPath: string): Promise<void> {
     max: 1,
     ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
   });
-  const tables: Record<string, TransferRow[]> = {};
+  let tables: Record<string, TransferRow[]>;
+  let client: PoolClient | undefined;
   try {
-    for (const contract of TABLES) {
-      const columns = contract.columns.map((column) => `"${column}"`).join(", ");
-      const result = await pool.query<TransferRow>(
-        `SELECT ${columns} FROM portfolio."${contract.name}" ORDER BY id`,
-      );
-      tables[contract.name] = result.rows.map((row) => normalizeRow(row, contract));
-    }
+    const connected = await pool.connect();
+    client = connected;
+    tables = await readRepeatableReadSnapshot(connected, async () => {
+      const snapshot: Record<string, TransferRow[]> = {};
+      for (const contract of TABLES) {
+        const columns = contract.columns.map((column) => `"${column}"`).join(", ");
+        const result = await connected.query<TransferRow>(
+          `SELECT ${columns} FROM portfolio."${contract.name}" ORDER BY id`,
+        );
+        snapshot[contract.name] = result.rows.map((row) => normalizeRow(row, contract));
+      }
+      return snapshot;
+    });
   } finally {
+    client?.release();
     await pool.end();
   }
   const artifact: TransferArtifact = {

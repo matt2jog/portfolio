@@ -17,7 +17,6 @@ env:
   IMAGE_URI: us-east4-docker.pkg.dev/personal-brand-501801/portfolio/portfolio
   STAGING_SERVICE: portfolio--staging
   PROD_SERVICE: portfolio--prod
-  PROD_MIGRATION_JOB: portfolio-migrate--prod
   PROD_E2E_BASE_URL: https://2jog.dev
   PROD_HOST: 2jog.dev
   WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
@@ -88,7 +87,7 @@ jobs:
           echo "digest_uri=${digest_uri}" >> "${GITHUB_OUTPUT}"
           echo "commit_sha=${commit_sha}" >> "${GITHUB_OUTPUT}"
 
-      - name: Migrate, smoke, shift traffic, and retain rollback
+      - name: Smoke, shift traffic, and retain rollback
         shell: bash
         env:
           DIGEST_URI: ${{ steps.staged.outputs.digest_uri }}
@@ -111,14 +110,8 @@ jobs:
             "${service_endpoint}")"
           previous_labels="$(jq -ce '.labels // {}' <<<"${before_v2}")"
           access_token=
-          previous_migration_image="$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')"
-          [[ -n "${previous_migration_image}" ]]
           shifted=0
           labels_touched=0
-          migration_touched=0
           restore_labels() {
             local token current request_body
             token="$(gcloud auth print-access-token)" || return 1
@@ -181,23 +174,6 @@ jobs:
                 echo "::error::Automatic rollback failed to restore the prior service labels."
                 rollback_failed=1
               fi
-              if [[ ${migration_touched} -eq 1 ]]; then
-                if ! gcloud run jobs update "${PROD_MIGRATION_JOB}" \
-                  --project "${GCP_PROJECT_ID}" \
-                  --region "${GCP_REGION}" \
-                  --image "${previous_migration_image}" \
-                  --quiet; then
-                  echo "::error::Automatic rollback failed to restore the prior migration-job image."
-                  rollback_failed=1
-                elif [[ "$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
-                  --project "${GCP_PROJECT_ID}" \
-                  --region "${GCP_REGION}" \
-                  --format='value(spec.template.spec.template.spec.containers[0].image)')" != \
-                  "${previous_migration_image}" ]]; then
-                  echo "::error::The production migration-job image did not converge during rollback."
-                  rollback_failed=1
-                fi
-              fi
               if [[ ${rollback_failed} -ne 0 ]]; then
                 echo "::error::Automatic production rollback was incomplete."
               fi
@@ -205,20 +181,6 @@ jobs:
             exit "${status}"
           }
           trap rollback EXIT
-
-          migration_touched=1
-          gcloud run jobs update "${PROD_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --image "${DIGEST_URI}" \
-            --quiet
-          [[ "$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')" == "${DIGEST_URI}" ]]
-          gcloud run jobs execute "${PROD_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --wait
 
           candidate_tag="cand"
           labels_touched=1

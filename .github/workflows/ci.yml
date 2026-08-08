@@ -22,7 +22,6 @@ env:
   IMAGE_NAME: portfolio
   LOCAL_IMAGE: portfolio-ci:${{ github.sha }}
   STAGING_SERVICE: portfolio--staging
-  STAGING_MIGRATION_JOB: portfolio-migrate--staging
   STAGING_E2E_BASE_URL: ${{ vars.STAGING_E2E_BASE_URL || 'https://portfolio-staging.2jog.dev' }}
   WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
   DEPLOY_SERVICE_ACCOUNT: portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com
@@ -107,7 +106,7 @@ jobs:
           npm run test:coverage
           npm run test:client-coverage
 
-      - name: Prove the canonical libSQL migration and backend integration
+      - name: Prove read-model schema compatibility and backend integration
         run: |
           npm run db:migrate
           npm run test:backend-integration
@@ -304,12 +303,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          migration_image="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')"
-          [[ -n "${migration_image}" ]]
-
           service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -330,25 +323,9 @@ jobs:
           access_token=
 
           {
-            echo "migration_image=${migration_image}"
             echo "revision=${previous_revision}"
             echo "labels=${previous_labels}"
           } >> "${GITHUB_OUTPUT}"
-
-      - name: Run staging migration
-        run: |
-          gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --image "${{ needs.publish.outputs.digest_uri }}" \
-            --quiet
-          [[ "$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')" == "${{ needs.publish.outputs.digest_uri }}" ]]
-          gcloud run jobs execute "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --wait
 
       - name: Deploy exact digest to staging
         id: staging
@@ -514,12 +491,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          migration_digest_uri="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')"
-          [[ "${migration_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
-
           service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
           service_endpoint="https://run.googleapis.com/v2/${service_name}"
           access_token="$(gcloud auth print-access-token)"
@@ -582,33 +553,14 @@ jobs:
           [[ "${deployed_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
 
       - name: Restore staging release after failure
-        if: ${{ failure() && steps.rollback_baseline.outputs.migration_image != '' }}
+        if: ${{ failure() && steps.rollback_baseline.outputs.revision != '' }}
         shell: bash
         env:
-          PREVIOUS_MIGRATION_IMAGE: ${{ steps.rollback_baseline.outputs.migration_image }}
           PREVIOUS_REVISION: ${{ steps.rollback_baseline.outputs.revision }}
           PREVIOUS_LABELS: ${{ steps.rollback_baseline.outputs.labels }}
         run: |
           set -uo pipefail
           rollback_failed=0
-
-          if ! gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --image "${PREVIOUS_MIGRATION_IMAGE}" \
-            --quiet; then
-            echo "::error::Automatic staging rollback failed to restore the prior migration-job image."
-            rollback_failed=1
-          else
-            restored_migration_image="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-              --project "${GCP_PROJECT_ID}" \
-              --region "${GCP_REGION}" \
-              --format='value(spec.template.spec.template.spec.containers[0].image)' 2>/dev/null)"
-            if [[ "${restored_migration_image}" != "${PREVIOUS_MIGRATION_IMAGE}" ]]; then
-              echo "::error::The staging migration-job image did not converge during rollback."
-              rollback_failed=1
-            fi
-          fi
 
           if current_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
