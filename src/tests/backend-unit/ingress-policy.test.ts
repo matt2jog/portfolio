@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createCanonicalHostMiddleware,
   discardVisitorNetworkHeaders,
+  rejectRetiredBrowserAuth,
 } from "../../backend/ingress-policy";
 
 function responseFixture() {
@@ -72,4 +73,14 @@ test("visitor network identity headers are discarded before application code", (
   discardVisitorNetworkHeaders(request, {} as any, () => { continued = true; });
   assert.equal(continued, true);
   assert.deepEqual(request.headers, { "x-request-id": "request-7" });
+});
+
+test("retired browser-auth paths fail closed before the SPA fallback", () => {
+  const response = responseFixture();
+  rejectRetiredBrowserAuth({} as any, response as any, () => {
+    assert.fail("retired browser auth continued");
+  });
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.body, { error: "route_not_found" });
+  assert.equal(response.headers.get("cache-control"), "no-store");
 });

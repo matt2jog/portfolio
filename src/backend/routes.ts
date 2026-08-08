@@ -37,6 +37,7 @@ import {
   buildChatOwnerContext,
   buildPublicPersonalInformationResponse,
 } from "./personal-information";
+import { rejectRetiredBrowserAuth } from "./ingress-policy";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
@@ -160,6 +161,11 @@ export async function registerRoutes(
       : "https://admin.2jog.dev/";
     res.redirect(308, target);
   });
+
+  // Portfolio is public and has no browser identity surface. Keep legacy auth
+  // paths out of the SPA fallback so release checks and clients see an honest
+  // HTTP 404 instead of a rendered not-found page with a 200 status.
+  app.use("/auth", rejectRetiredBrowserAuth);
 
   // ========== LEGAL DOCUMENTS ==========
   // The API serves the checked-in legal text used by the matching SPA routes.

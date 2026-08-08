@@ -10,6 +10,7 @@ test("Portfolio exposes public career reads but no embedded Admin API or UI", ()
   assert.match(routes, /app\.get\("\/api\/public\/(?:projects|bio|experiences|personal-information|welcome-message)/);
   assert.doesNotMatch(routes, /["']\/api\/admin(?:\/|["'])/);
   assert.match(routes, /app\.get\("\/admin"/);
+  assert.match(routes, /app\.use\("\/auth", rejectRetiredBrowserAuth\)/);
   assert.match(routes, /https:\/\/admin\.2jog\.dev\//);
   assert.match(routes, /https:\/\/admin-staging\.2jog\.dev\//);
   assert.match(routes, /process\.env\.DEPLOYMENT_STAGE === "staging"/);

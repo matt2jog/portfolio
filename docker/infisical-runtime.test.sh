@@ -108,4 +108,3 @@ PATH="$temporary_dir/bin:$PATH" \
   fail "disabled runtime unexpectedly invoked Infisical"
 
 printf '%s\n' "infisical-runtime tag filtering tests passed"
-
