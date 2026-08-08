@@ -111,8 +111,14 @@ jobs:
             "${service_endpoint}")"
           previous_labels="$(jq -ce '.labels // {}' <<<"${before_v2}")"
           access_token=
+          previous_migration_image="$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)')"
+          [[ -n "${previous_migration_image}" ]]
           shifted=0
           labels_touched=0
+          migration_touched=0
           restore_labels() {
             local token current request_body
             token="$(gcloud auth print-access-token)" || return 1
@@ -175,6 +181,23 @@ jobs:
                 echo "::error::Automatic rollback failed to restore the prior service labels."
                 rollback_failed=1
               fi
+              if [[ ${migration_touched} -eq 1 ]]; then
+                if ! gcloud run jobs update "${PROD_MIGRATION_JOB}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --image "${previous_migration_image}" \
+                  --quiet; then
+                  echo "::error::Automatic rollback failed to restore the prior migration-job image."
+                  rollback_failed=1
+                elif [[ "$(gcloud run jobs describe "${PROD_MIGRATION_JOB}" \
+                  --project "${GCP_PROJECT_ID}" \
+                  --region "${GCP_REGION}" \
+                  --format='value(spec.template.spec.template.spec.containers[0].image)')" != \
+                  "${previous_migration_image}" ]]; then
+                  echo "::error::The production migration-job image did not converge during rollback."
+                  rollback_failed=1
+                fi
+              fi
               if [[ ${rollback_failed} -ne 0 ]]; then
                 echo "::error::Automatic production rollback was incomplete."
               fi
@@ -183,6 +206,7 @@ jobs:
           }
           trap rollback EXIT
 
+          migration_touched=1
           gcloud run jobs update "${PROD_MIGRATION_JOB}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \

@@ -293,6 +293,42 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
+      - name: Capture staging rollback baseline
+        id: rollback_baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_image="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)')"
+          [[ -n "${migration_image}" ]]
+
+          service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          previous_revision="$(jq -er \
+            '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")"
+
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          access_token="$(gcloud auth print-access-token)"
+          service_v2="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${access_token}" \
+            "${service_endpoint}")"
+          previous_labels="$(jq -ce '.labels // {}' <<<"${service_v2}")"
+          access_token=
+
+          {
+            echo "migration_image=${migration_image}"
+            echo "revision=${previous_revision}"
+            echo "labels=${previous_labels}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Run staging migration
         run: |
           gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
@@ -538,3 +574,118 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')"
           [[ "${deployed_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
+
+      - name: Restore staging release after failure
+        if: ${{ failure() && steps.rollback_baseline.outputs.migration_image != '' }}
+        shell: bash
+        env:
+          PREVIOUS_MIGRATION_IMAGE: ${{ steps.rollback_baseline.outputs.migration_image }}
+          PREVIOUS_REVISION: ${{ steps.rollback_baseline.outputs.revision }}
+          PREVIOUS_LABELS: ${{ steps.rollback_baseline.outputs.labels }}
+        run: |
+          set -uo pipefail
+          rollback_failed=0
+
+          if ! gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${PREVIOUS_MIGRATION_IMAGE}" \
+            --quiet; then
+            echo "::error::Automatic staging rollback failed to restore the prior migration-job image."
+            rollback_failed=1
+          else
+            restored_migration_image="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
+              --project "${GCP_PROJECT_ID}" \
+              --region "${GCP_REGION}" \
+              --format='value(spec.template.spec.template.spec.containers[0].image)' 2>/dev/null)"
+            if [[ "${restored_migration_image}" != "${PREVIOUS_MIGRATION_IMAGE}" ]]; then
+              echo "::error::The staging migration-job image did not converge during rollback."
+              rollback_failed=1
+            fi
+          fi
+
+          if current_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"; then
+            current_count="$(jq \
+              '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+              <<<"${current_json}")"
+            current_revision="$(jq -r \
+              '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+              <<<"${current_json}")"
+            if [[ "${current_count}" != "1" || "${current_revision}" != "${PREVIOUS_REVISION}" ]]; then
+              if ! gcloud run services update-traffic "${STAGING_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --to-revisions "${PREVIOUS_REVISION}=100" \
+                --quiet; then
+                echo "::error::Automatic staging rollback failed to restore ${PREVIOUS_REVISION}."
+                rollback_failed=1
+              fi
+            fi
+          else
+            echo "::error::Automatic staging rollback could not inspect service traffic."
+            rollback_failed=1
+          fi
+
+          if restored_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"; then
+            restored_count="$(jq \
+              '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+              <<<"${restored_json}")"
+            restored_revision="$(jq -r \
+              '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+              <<<"${restored_json}")"
+            if [[ "${restored_count}" != "1" || "${restored_revision}" != "${PREVIOUS_REVISION}" ]]; then
+              echo "::error::The staging service traffic did not converge during rollback."
+              rollback_failed=1
+            fi
+          else
+            rollback_failed=1
+          fi
+
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          if access_token="$(gcloud auth print-access-token)" && \
+            current="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${access_token}" \
+              "${service_endpoint}")" && \
+            request_body="$(jq -cn \
+              --arg name "${service_name}" \
+              --arg etag "$(jq -er '.etag' <<<"${current}")" \
+              --argjson labels "${PREVIOUS_LABELS}" \
+              '{name: $name, etag: $etag, labels: $labels}')" && \
+            curl --fail --silent --show-error \
+              --request PATCH \
+              --header "Authorization: Bearer ${access_token}" \
+              --header "Content-Type: application/json" \
+              --data-binary "${request_body}" \
+              "${service_endpoint}?updateMask=labels&forceNewRevision=false" >/dev/null; then
+            labels_restored=0
+            for attempt in {1..60}; do
+              if current="$(curl --fail --silent --show-error \
+                --header "Authorization: Bearer ${access_token}" \
+                "${service_endpoint}")" && \
+                [[ "$(jq -cS '.labels // {}' <<<"${current}")" == \
+                  "$(jq -cS . <<<"${PREVIOUS_LABELS}")" ]]; then
+                labels_restored=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ ${labels_restored} -ne 1 ]]; then
+              echo "::error::The staging service labels did not converge during rollback."
+              rollback_failed=1
+            fi
+          else
+            echo "::error::Automatic staging rollback failed to restore the prior service labels."
+            rollback_failed=1
+          fi
+          access_token=
+
+          if [[ ${rollback_failed} -ne 0 ]]; then
+            exit 1
+          fi
