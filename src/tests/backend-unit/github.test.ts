@@ -3,7 +3,7 @@ import { after, test } from "node:test";
 const originalFetch = globalThis.fetch;
 
 async function fetchGithubActivity(username: string) {
-  process.env.DATABASE_URL ??= "postgresql://portfolio_runtime:fixture@localhost:5432/portfolio";
+  process.env.TURSO_DATABASE_URL ??= "file::memory:";
   const github = await import("../../backend/github");
   return github.fetchGithubActivity(username);
 }

@@ -34,8 +34,8 @@ export async function setupVite(server: Server, app: Express) {
   app.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
     
-    // Don't serve index.html for API routes or auth routes
-    if (url.startsWith("/api/") || url.startsWith("/auth/")) {
+    // Don't serve index.html for API routes.
+    if (url.startsWith("/api/")) {
       return next();
     }
 

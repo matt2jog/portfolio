@@ -22,7 +22,6 @@ env:
   IMAGE_NAME: portfolio
   LOCAL_IMAGE: portfolio-ci:${{ github.sha }}
   STAGING_SERVICE: portfolio--staging
-  STAGING_MIGRATION_JOB: portfolio-migrate--staging
   STAGING_E2E_BASE_URL: ${{ vars.STAGING_E2E_BASE_URL || 'https://portfolio-staging.2jog.dev' }}
   WIF_PROVIDER: projects/601853536613/locations/global/workloadIdentityPools/github-actions/providers/github-actions
   DEPLOY_SERVICE_ACCOUNT: portfolio-deploy@personal-brand-501801.iam.gserviceaccount.com
@@ -31,28 +30,24 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 65
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_DB: portfolio_test
-          POSTGRES_PASSWORD: ${{ format('{0}-{1}', github.run_id, github.run_attempt) }}
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d portfolio_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 8
-    env:
-      DATABASE_URL: ${{ format('postgresql://postgres:{0}-{1}@127.0.0.1:5432/portfolio_test', github.run_id, github.run_attempt) }}
-      TEST_DATABASE_URL: ${{ format('postgresql://postgres:{0}-{1}@127.0.0.1:5432/portfolio_test', github.run_id, github.run_attempt) }}
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - name: Configure the isolated test database
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "TURSO_DATABASE_URL=file:${RUNNER_TEMP}/portfolio-career.db"
+            echo "TEST_TURSO_DATABASE_URL=file:${RUNNER_TEMP}/portfolio-career.db"
+          } >> "${GITHUB_ENV}"
+
+      - name: Verify direct Infisical runtime wrapper
+        shell: bash
+        run: sh docker/infisical-runtime.test.sh
 
       - name: Block committed secrets
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -111,11 +106,8 @@ jobs:
           npm run test:coverage
           npm run test:client-coverage
 
-      - name: Prove migrations and backend integration on PostgreSQL 17
-        run: |
-          npm run db:test:provision
-          npm run db:migrate
-          npm run test:backend-integration
+      - name: Prove Portfolio read-model contract and backend integration
+        run: npm run test:backend-integration
 
       - name: Run UI tests and build the production bundle
         run: |
@@ -304,20 +296,34 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
-      - name: Run staging migration
+      - name: Capture staging rollback baseline
+        id: rollback_baseline
+        shell: bash
         run: |
-          gcloud run jobs update "${STAGING_MIGRATION_JOB}" \
+          set -euo pipefail
+          service_json="$(gcloud run services describe "${STAGING_SERVICE}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --image "${{ needs.publish.outputs.digest_uri }}" \
-            --quiet
-          [[ "$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')" == "${{ needs.publish.outputs.digest_uri }}" ]]
-          gcloud run jobs execute "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --wait
+            --format=json)"
+          [[ "$(jq '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+            <<<"${service_json}")" == "1" ]]
+          previous_revision="$(jq -er \
+            '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+            <<<"${service_json}")"
+
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          access_token="$(gcloud auth print-access-token)"
+          service_v2="$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${access_token}" \
+            "${service_endpoint}")"
+          previous_labels="$(jq -ce '.labels // {}' <<<"${service_v2}")"
+          access_token=
+
+          {
+            echo "revision=${previous_revision}"
+            echo "labels=${previous_labels}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Deploy exact digest to staging
         id: staging
@@ -457,34 +463,17 @@ jobs:
             --connect-timeout 5 --max-time 15 --retry 10 --retry-all-errors \
             --retry-delay 3 "${STAGING_E2E_BASE_URL}/health?release=${COMMIT_SHA}")"
           [[ "$(jq -r '.release_sha' <<<"${public_health}")" == "${COMMIT_SHA}" ]]
-          login_status="$(curl --silent --show-error \
-            --dump-header "${RUNNER_TEMP}/auth-login-headers" --output /dev/null \
-            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/login")"
-          [[ "${login_status}" == "302" ]]
-          auth_location="$(grep --ignore-case '^location:' "${RUNNER_TEMP}/auth-login-headers" |
-            head -1 | cut -d' ' -f2- | tr -d '\r')"
-          AUTH_LOCATION="${auth_location}" EXPECTED_CALLBACK="${STAGING_E2E_BASE_URL}/auth/callback" python3 - <<'PY'
-          import os
-          from urllib.parse import parse_qs, urlparse
-          location = urlparse(os.environ["AUTH_LOCATION"])
-          assert f"{location.scheme}://{location.netloc}{location.path}" == "https://auth.2jog.dev/authorize"
-          query = parse_qs(location.query)
-          assert query.get("response_type") == ["code"]
-          assert query.get("redirect_uri") == [os.environ["EXPECTED_CALLBACK"]]
-          assert query.get("code_challenge_method") == ["S256"]
-          for required in ("state", "nonce", "code_challenge"):
-              assert query.get(required) and query[required][0]
-          PY
-          me_status="$(curl --silent --show-error \
-            --dump-header "${RUNNER_TEMP}/auth-me-headers" --output "${RUNNER_TEMP}/auth-me-body" \
-            --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/api/auth/me")"
-          [[ "${me_status}" == "401" ]]
-          grep --ignore-case --quiet '^content-type: application/json' "${RUNNER_TEMP}/auth-me-headers"
-          jq --exit-status . "${RUNNER_TEMP}/auth-me-body" >/dev/null
+          # Portfolio is public and has no browser-auth surface. Canonical career
+          # mutations belong to Admin, so stale auth endpoints must stay absent.
+          for route in /auth/login /api/auth/me; do
+            status="$(curl --silent --show-error --output /dev/null \
+              --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}${route}")"
+            [[ "${status}" == "404" ]]
+          done
           logout_status="$(curl --silent --show-error --request POST \
             --header 'Origin: https://cross-origin.invalid' --output /dev/null \
             --write-out '%{http_code}' "${STAGING_E2E_BASE_URL}/auth/logout")"
-          [[ "${logout_status}" =~ ^4[0-9]{2}$ ]]
+          [[ "${logout_status}" == "404" ]]
           npm ci
           npx playwright install --with-deps chromium
           PLAYWRIGHT_BASE_URL="${STAGING_E2E_BASE_URL}" npm run test:live-smoke
@@ -500,12 +489,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          migration_digest_uri="$(gcloud run jobs describe "${STAGING_MIGRATION_JOB}" \
-            --project "${GCP_PROJECT_ID}" \
-            --region "${GCP_REGION}" \
-            --format='value(spec.template.spec.template.spec.containers[0].image)')"
-          [[ "${migration_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
-
           service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
           service_endpoint="https://run.googleapis.com/v2/${service_name}"
           access_token="$(gcloud auth print-access-token)"
@@ -566,3 +549,113 @@ jobs:
             --region "${GCP_REGION}" \
             --format='value(spec.containers[0].image)')"
           [[ "${deployed_digest_uri}" == "${{ steps.staging.outputs.digest_uri }}" ]]
+
+      - name: Restore staging release after failure
+        if: ${{ failure() && steps.rollback_baseline.outputs.revision != '' }}
+        shell: bash
+        env:
+          PREVIOUS_REVISION: ${{ steps.rollback_baseline.outputs.revision }}
+          PREVIOUS_LABELS: ${{ steps.rollback_baseline.outputs.labels }}
+        run: |
+          set -uo pipefail
+          rollback_failed=0
+
+          if current_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"; then
+            current_count="$(jq \
+              '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+              <<<"${current_json}")"
+            current_revision="$(jq -r \
+              '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+              <<<"${current_json}")"
+            if [[ "${current_count}" != "1" || "${current_revision}" != "${PREVIOUS_REVISION}" ]]; then
+              if ! gcloud run services update-traffic "${STAGING_SERVICE}" \
+                --project "${GCP_PROJECT_ID}" \
+                --region "${GCP_REGION}" \
+                --to-revisions "${PREVIOUS_REVISION}=100" \
+                --quiet; then
+                echo "::error::Automatic staging rollback failed to restore ${PREVIOUS_REVISION}."
+                rollback_failed=1
+              fi
+            fi
+          else
+            echo "::error::Automatic staging rollback could not inspect service traffic."
+            rollback_failed=1
+          fi
+
+          if ! gcloud run services update-traffic "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --clear-tags \
+            --quiet; then
+            echo "::error::Automatic staging rollback failed to clear candidate tags."
+            rollback_failed=1
+          fi
+
+          if restored_json="$(gcloud run services describe "${STAGING_SERVICE}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format=json)"; then
+            restored_count="$(jq \
+              '[.status.traffic[] | select(.percent == 100 and .revisionName != null)] | length' \
+              <<<"${restored_json}")"
+            restored_revision="$(jq -r \
+              '.status.traffic[] | select(.percent == 100 and .revisionName != null) | .revisionName' \
+              <<<"${restored_json}")"
+            if [[ "${restored_count}" != "1" || "${restored_revision}" != "${PREVIOUS_REVISION}" ]]; then
+              echo "::error::The staging service traffic did not converge during rollback."
+              rollback_failed=1
+            fi
+            if [[ "$(jq '[.status.traffic[] | select(.tag != null)] | length' \
+              <<<"${restored_json}")" != "0" ]]; then
+              echo "::error::The staging candidate tag remained after rollback."
+              rollback_failed=1
+            fi
+          else
+            rollback_failed=1
+          fi
+
+          service_name="projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/services/${STAGING_SERVICE}"
+          service_endpoint="https://run.googleapis.com/v2/${service_name}"
+          if access_token="$(gcloud auth print-access-token)" && \
+            current="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${access_token}" \
+              "${service_endpoint}")" && \
+            request_body="$(jq -cn \
+              --arg name "${service_name}" \
+              --arg etag "$(jq -er '.etag' <<<"${current}")" \
+              --argjson labels "${PREVIOUS_LABELS}" \
+              '{name: $name, etag: $etag, labels: $labels}')" && \
+            curl --fail --silent --show-error \
+              --request PATCH \
+              --header "Authorization: Bearer ${access_token}" \
+              --header "Content-Type: application/json" \
+              --data-binary "${request_body}" \
+              "${service_endpoint}?updateMask=labels&forceNewRevision=false" >/dev/null; then
+            labels_restored=0
+            for attempt in {1..60}; do
+              if current="$(curl --fail --silent --show-error \
+                --header "Authorization: Bearer ${access_token}" \
+                "${service_endpoint}")" && \
+                [[ "$(jq -cS '.labels // {}' <<<"${current}")" == \
+                  "$(jq -cS . <<<"${PREVIOUS_LABELS}")" ]]; then
+                labels_restored=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ ${labels_restored} -ne 1 ]]; then
+              echo "::error::The staging service labels did not converge during rollback."
+              rollback_failed=1
+            fi
+          else
+            echo "::error::Automatic staging rollback failed to restore the prior service labels."
+            rollback_failed=1
+          fi
+          access_token=
+
+          if [[ ${rollback_failed} -ne 0 ]]; then
+            exit 1
+          fi

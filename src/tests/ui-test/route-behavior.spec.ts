@@ -16,7 +16,6 @@ test("home renders the configured public entry point", async ({ page }) => {
 test("first-visit intro can complete without waiting for production animation timers", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.removeItem("__root_intro_seen_until");
-    window.localStorage.removeItem("__consent_record");
     window.__FIRST_VISIT_INTRO_TEST_STATE = {
       stage: "name",
       typingPhase: "button",
@@ -39,7 +38,6 @@ test("first-visit intro advances through the production timer sequence", async (
     window.localStorage.removeItem("__root_intro_seen_until");
     window.localStorage.removeItem("__intro_force_show");
     window.localStorage.removeItem("__intro_welcome_slug");
-    window.localStorage.removeItem("__consent_record");
   });
 
   await page.goto("/");
@@ -269,7 +267,7 @@ test("activity surfaces provider errors and empty timelines", async ({ page }) =
   await expect(page.getByText("GitHub Integration Pending")).toBeVisible();
 });
 
-for (const route of ["/privacy", "/terms", "/tracking"] as const) {
+for (const route of ["/privacy", "/terms"] as const) {
   test(`${route} renders the versioned legal document`, async ({ page }) => {
     await page.goto(route);
     await expect(page.getByRole("heading", { name: "Policy Document" })).toBeVisible();
@@ -280,93 +278,4 @@ for (const route of ["/privacy", "/terms", "/tracking"] as const) {
 test("unknown routes render the not-found boundary", async ({ page }) => {
   await page.goto("/not-a-real-route");
   await expect(page.getByRole("heading", { name: "404 Page Not Found" })).toBeVisible();
-});
-
-test("Portfolio settings exposes no career mutation controls", async ({ page }) => {
-  const careerMutations: string[] = [];
-  page.on("request", (request) => {
-    const pathname = new URL(request.url()).pathname;
-    if (
-      request.method() !== "GET"
-      && /^\/api\/admin\/(?:projects|experiences|bio|personal-information|skills|skills-groups|all-skills)/.test(pathname)
-    ) {
-      careerMutations.push(`${request.method()} ${pathname}`);
-    }
-  });
-
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible();
-  await expect(page.getByText("Career data is read-only in Portfolio.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Admin Dashboard" })).toHaveAttribute(
-    "href",
-    "https://admin.2jog.dev",
-  );
-  await expect(page.getByTestId("admin-project-presentation-panel")).toHaveCount(0);
-  await expect(page.getByText("Shared skill library")).toHaveCount(0);
-  expect(careerMutations).toEqual([]);
-});
-
-test("admin personalization covers create, edit, archive, restore, and delete operations", async ({ page }) => {
-  await page.unroute("**/api/admin/welcome-messages/archived");
-  await page.route("**/api/admin/welcome-messages/archived", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "archived-message",
-          slug: "archived",
-          label: "Archived Visit",
-          message: "This message is archived.",
-          archivedAt: "2026-07-01T00:00:00.000Z",
-          createdAt: "2026-06-01T00:00:00.000Z",
-          updatedAt: "2026-07-01T00:00:00.000Z",
-        },
-      ]),
-    }),
-  );
-
-  await page.goto("/admin");
-  await page.getByTestId("create-welcome-message").click();
-  await page.getByTestId("welcome-label-input").fill("Coverage Visit");
-  await page.getByTestId("welcome-slug-input").fill("coverage-visit");
-  await page.getByTestId("welcome-message-input").fill("Welcome to the coverage suite.");
-  await page.getByTestId("save-welcome-message").click();
-
-  await page.getByRole("button", { name: "Edit" }).first().click();
-  await page.getByTestId("welcome-message-input").fill("Updated welcome message.");
-  await page.getByTestId("save-welcome-message").click();
-
-  await page.getByRole("button", { name: "Archive" }).first().click();
-  await page.getByRole("button", { name: "Show archived messages" }).click();
-  await page.getByRole("button", { name: "Restore" }).click();
-
-  await page.getByRole("button", { name: "Delete" }).first().click();
-  await page.getByTestId("confirm-delete-welcome").click();
-});
-
-test("admin auth and policy boundaries render each protected state", async ({ page }) => {
-  await page.unroute("**/api/auth/me");
-  await page.route("**/api/auth/me", (route) =>
-    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
-  );
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Admin Access" })).toBeVisible();
-});
-
-test("admin requires policy acceptance before rendering controls", async ({ page }) => {
-  await page.unroute("**/api/admin/policy/check-acceptance");
-  await page.route("**/api/admin/policy/check-acceptance", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ accepted: false }),
-    }),
-  );
-
-  await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Accept Terms Before Continuing" })).toBeVisible();
-  await page.getByLabel(/I have read and agree/).click();
-  await page.getByRole("button", { name: "I Agree & Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Portfolio settings" })).toBeVisible();
 });

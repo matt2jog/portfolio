@@ -29,14 +29,15 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
   const startedAt = Date.now();
 
   res.once("finish", () => {
-    const failureCode = res.statusCode >= 500
-      ? "server_error"
-      : res.statusCode >= 400
-        ? "client_error"
-        : undefined;
-    const actorSubject = boundedActorSubject(req.auth0Identity?.subject
-      ?? req.user?.auth0Sub
-      ?? undefined);
+    const localFailureWasSet = res.locals?.failureCode !== undefined;
+    const localFailureCode = boundedFailureCode(res.locals?.failureCode);
+    const failureCode = localFailureWasSet
+      ? localFailureCode ?? "request_failed"
+      : res.statusCode >= 500
+        ? "server_error"
+        : res.statusCode >= 400
+          ? "client_error"
+          : undefined;
     console.log(JSON.stringify({
       event: "portfolio.request.completed",
       request_id: req.requestId,
@@ -45,14 +46,9 @@ export function structuredRequestLogMiddleware(req: Request, res: Response, next
       route: routeTemplate(req),
       status: res.statusCode,
       outcome: failureCode ? "failure" : "success",
-      ...(failureCode
-        ? { failure_code: res.locals?.failureCode ?? failureCode }
-        : {}),
+      ...(failureCode ? { failure_code: failureCode } : {}),
       duration_ms: Date.now() - startedAt,
-      actor_type: req.auth0Identity
-        ? "auth0-admin"
-        : "anonymous",
-      ...(actorSubject ? { actor_subject: actorSubject } : {}),
+      actor_type: "anonymous",
     }));
   });
   next();
@@ -110,9 +106,8 @@ function routeTemplate(req: Request): string {
   return template.length <= 256 && !template.includes("?") ? template : "unmatched";
 }
 
-function boundedActorSubject(value: string | undefined): string | undefined {
-  const candidate = value?.trim();
-  return candidate && /^[A-Za-z0-9|._:-]{1,160}$/.test(candidate)
-    ? candidate
+function boundedFailureCode(value: unknown): string | undefined {
+  return typeof value === "string" && SAFE_CORRELATION_VALUE.test(value)
+    ? value
     : undefined;
 }

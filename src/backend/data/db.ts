@@ -1,46 +1,17 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { readFileSync } from "node:fs";
-import { Pool } from "pg";
-import {
-  postgresConnectionConfig,
-  productionSupabaseConnectionConfig,
-} from "../../shared/postgres-tls";
-import { portfolioDatabaseBoundary } from "../../shared/database-boundary";
+import { drizzle } from "drizzle-orm/libsql";
+import * as schema from "../../shared/schema";
+import { createPortfolioClient } from "../../shared/turso-connection";
 
-const databaseUrl = process.env.DATABASE_URL;
-const caCertPath = process.env.SUPABASE_CA_CERT_PATH;
-const caCertInline = process.env.SUPABASE_CA_CERT;
-const caCertFromPath = caCertPath ? readFileSync(caCertPath, "utf8") : undefined;
-const caCertInlineNormalized = caCertInline ? caCertInline.replace(/\\n/g, "\n") : undefined;
-const caCert = caCertInlineNormalized || caCertFromPath;
-const databaseBoundary = portfolioDatabaseBoundary(process.env);
+const databaseUrl = process.env.TURSO_DATABASE_URL;
+if (!databaseUrl) throw new Error("TURSO_DATABASE_URL is required");
 
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
-}
-
-export const pool = new Pool({
-  ...(process.env.NODE_ENV === "production"
-    ? productionSupabaseConnectionConfig({
-      databaseUrl,
-      projectRef: process.env.SUPABASE_PROJECT_REF ?? "",
-      supabaseCaCert: caCert,
-      expectedCaSha256: process.env.SUPABASE_CA_SHA256,
-      expectedRole: databaseBoundary.runtimeLogin,
-      capabilityRole: databaseBoundary.runtimeRole,
-      searchPath: databaseBoundary.searchPath,
-    })
-    : postgresConnectionConfig(databaseUrl, caCert, databaseBoundary.searchPath)),
+export const client = createPortfolioClient({
+  url: databaseUrl,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+  runtimeGuard: true,
 });
 
-pool.on("error", (error) => {
-  const code = typeof error === "object" && error !== null && "code" in error
-    ? String(error.code)
-    : null;
-  console.error(JSON.stringify({
-    event: "portfolio.database.pool_error",
-    code,
-  }));
-});
+export const db = drizzle(client, { schema });
 
-export const db = drizzle(pool);
+// Kept as a small lifecycle surface for existing test and shutdown callers.
+export const pool = { end: async () => client.close() };

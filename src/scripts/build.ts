@@ -18,7 +18,6 @@ const allowlist = [
   "nanoid",
   "nodemailer",
   "openai",
-  "pg",
   "stripe",
   "uuid",
   "ws",
@@ -42,10 +41,7 @@ async function buildAll() {
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
-    entryPoints: {
-      index: "src/backend/bootstrap.ts",
-      migrate: "src/scripts/migrate.ts",
-    },
+    entryPoints: { index: "src/backend/bootstrap.ts" },
     platform: "node",
     bundle: true,
     format: "cjs",

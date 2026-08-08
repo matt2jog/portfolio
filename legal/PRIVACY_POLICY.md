@@ -1,7 +1,7 @@
 # Privacy Policy
 
-**Last Updated:** July 31, 2026
-**Effective Date:** July 31, 2026
+**Last Updated:** August 4, 2026
+**Effective Date:** August 4, 2026
 
 ## 1. Introduction
 
@@ -21,13 +21,7 @@ The Site is operated from the United States, but the application does not infer 
 
 ### 3.1 Data Collected from All Visitors
 
-**For all visitors (regardless of consent):** Cloudflare and Google Cloud may process network metadata to deliver requests. The application discards forwarded visitor IP and country headers before route handling and does not retain a visitor identifier in its database.
-
-**Additionally, when you have granted analytics consent**, we collect the following through LogRocket:
-
-- **Navigation Data:** Page paths and route names you visit (query parameters are not forwarded to LogRocket).
-- **Session Replay:** A replay of your interactions including clicks, scrolling, form inputs (with masking), page load times, and errors.
-- **Device & Browser Data:** Browser type, OS, device type, screen resolution, and user agent.
+Cloudflare and Google Cloud may process network metadata to deliver requests. The application discards forwarded visitor IP and country headers before route handling and does not retain a visitor identifier in its database. Operational logs contain a generated request ID, route template, status, duration, and bounded failure code; they do not contain URL query values or session replay data.
 
 ### 3.2 Data Collected from Authenticated Admin Users
 
@@ -49,10 +43,8 @@ When authenticated admin users create, edit, or delete portfolio content, we log
 
 We use the following cookie categories:
 
-- **Consent Record:** Stored in local browser storage so the Site can honor your analytics choice.
 - **Essential/Strictly Necessary Cookies:** Secure, host-only Auth0 session and transaction cookies. Duration: Session or until logged out.
 - **Preference Cookies:** `sidebar_state` cookie to remember your UI preferences (sidebar open/closed). Duration: 7 days.
-- **Analytics Cookies:** Set by LogRocket for session replay tracking and analytics (consent required). Duration: Managed by LogRocket according to their default retention policies.
 
 ### 3.5 Data Not Collected
 
@@ -69,32 +61,31 @@ We use the following cookie categories:
 
 We collect data for the following legitimate purposes:
 
-1. **Debugging & Error Tracking:** To identify and fix site issues, errors, and performance problems.
-2. **Analytics & Improvement:** To understand user behavior, improve features, and enhance the user experience.
-3. **Site Operations:** To maintain auth sessions, RBAC (admin access), and audit trails.
-4. **Security:** To ensure unauthorized access is prevented and admin actions are traceable.
+1. **Debugging:** To identify and fix site errors using bounded operational events.
+2. **Site Operations:** To maintain auth sessions, RBAC (admin access), and audit trails.
+3. **Security:** To prevent unauthorized access and make admin actions traceable.
 
 ## 6. Legal Basis for Collection
 
-- **Visitors:** We rely on **consent** for non-essential session replay and analytics, with tracking disabled until explicit opt-in is provided.
+- **Visitors:** We rely on legitimate interests to deliver and secure the public Site. The Site does not use session replay or visitor analytics.
 - **Admin Users:** We rely on **contract** (use of the admin service requires authentication and logging).
 
 ## 7. Data Retention
 
-Collected data is retained for as long as necessary to provide the Site's services and as permitted by applicable law. Retention periods vary by data type and are managed in accordance with third-party service provider terms (e.g., LogRocket's retention policies). Data deletion requests may be submitted through the contact details below and are processed subject to legal obligations and operational requirements.
+Collected data is retained for as long as necessary to provide the Site's services and as permitted by applicable law. Data deletion requests may be submitted through the contact details below and are processed subject to legal obligations and operational requirements.
 
-Older or inactive session data, audit logs, and analytics data may be archived, anonymized, or deleted at our discretion without prior notice.
+Older or inactive session data and audit logs may be archived, anonymized, or deleted at our discretion without prior notice.
 
 ## 8. Data Recipients & Processors
 
 Your data is shared with or processed by:
 
-- **LogRocket (Session Replay Service):** Processes and stores session replay data, DOM events, IP, and analytics. LogRocket is located in the United States and processes data under their own terms and Data Processing Agreement.
 - **Auth0:** Processes administrator authentication and account profile claims.
 - **Cloudflare and Google Cloud:** Deliver DNS, CDN, and application traffic and may process network metadata and operational logs.
-- **Supabase:** Hosts application data for the Site.
+- **Supabase:** Currently hosts or processes the Site's application data during migration.
+- **Turso:** Is the pending canonical database destination. Supabase becomes a temporary read-only migration or rollback processor only after the exact transfer is verified.
 
-For international visitors (especially EU/UK), data transfers to the US are governed by appropriate mechanisms (e.g., Standard Contractual Clauses with LogRocket's DPA).
+These providers may process data in the United States under their respective data-protection terms.
 
 ## 9. Your Privacy Rights
 
@@ -104,23 +95,18 @@ Depending on your jurisdiction, you may have the right to:
 - **Deletion:** Request that we delete or anonymize your personal data (subject to legal retention obligations).
 - **Correction:** Request that we correct inaccurate or incomplete data.
 - **Portability:** Request your data in a portable format.
-- **Withdraw Consent:** If you consented to session replay, you may withdraw consent by disabling tracking in your browser or opting out.
 - **Objection:** Object to processing based on legitimate interest.
 
 **To exercise these rights, contact:** matthew@2jog.dev  
 **Response Time:** We will respond within the timeframe required by applicable law (typically 30–45 days depending on your jurisdiction).
 
-## 10. Opt-Out and Tracking Preferences
+## 10. Browser Storage and Tracking
 
 ### Browser-Level Control
 
-- **Clear Cookies & Storage:** You can delete the consent record, tab-scoped analytics identifier, and `sidebar_state` cookie using your browser's settings (Settings → Privacy → Cookies / Site Data).
-- **Disable JavaScript:** Disabling JavaScript will prevent LogRocket from loading and tracking.
+- **Clear Cookies & Storage:** You can delete the `sidebar_state` preference and authentication storage using your browser's settings (Settings → Privacy → Cookies / Site Data).
 
-### Session Replay Opt-In
-
-- **All Visitors:** Session replay does not load until explicit consent is granted through the consent interface.
-- **Withdrawal:** Consent can be withdrawn at any time by adjusting preferences or contacting the operator.
+The Site does not load session-replay software, create a visitor analytics identifier, or present an analytics-consent interface.
 
 ## 11. Data Security
 
@@ -154,7 +140,7 @@ If you believe we have violated your privacy rights, you may also file a complai
 ## 15. Regional Supplements
 
 ### For EU/UK Residents (GDPR/UK GDPR)
-- Legal basis: Legitimate interest and consent (prior opt-in for replay).
+- Legal basis: Legitimate interest for delivery and security; contract for authenticated administration.
 - Data Protection Officer contact: matthew@2jog.dev.
 - Your rights: DSAR, erasure, restriction, portability, objection, automated decision-making.
 

@@ -2,101 +2,97 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { canonicalCareerMutationRejected } from "../../backend/career-authority";
+import {
+  assertPortfolioRuntimeStatement,
+  createPortfolioClient,
+  validateTursoConnection,
+} from "../../shared/turso-connection";
 
-test("canonical career mutation rejection points callers to Admin without touching storage", () => {
-  let statusCode = 0;
-  let body: unknown;
-  const response = {
-    status(code: number) {
-      statusCode = code;
-      return this;
-    },
-    json(value: unknown) {
-      body = value;
-      return this;
-    },
-  };
-
-  canonicalCareerMutationRejected({} as never, response as never, (() => undefined) as never);
-
-  assert.equal(statusCode, 409);
-  assert.deepEqual(body, {
-    code: "CANONICAL_CAREER_READ_ONLY",
-    message: "Canonical career data is managed by Admin Dashboard.",
-    authority: "https://admin.2jog.dev",
-  });
-});
-
-test("every Portfolio canonical career mutation route is read-only", () => {
+test("Portfolio exposes public career reads but no embedded Admin API or UI", () => {
   const routes = readFileSync(path.join(process.cwd(), "src", "backend", "routes.ts"), "utf8");
-  const rejectedRoutes = [
-    'app.post("/api/admin/projects", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/projects/reorder", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/personal-information", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/skills-groups", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/skills-groups/reorder", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/skills", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/skills/reorder", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/experiences", requireAdmin, canonicalCareerMutationRejected)',
-    'app.put("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.delete("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected)',
-    'app.post("/api/admin/experiences/reorder", requireAdmin, canonicalCareerMutationRejected)',
-  ];
+  const app = readFileSync(path.join(process.cwd(), "src", "client", "src", "App.tsx"), "utf8");
 
-  for (const route of rejectedRoutes) {
-    assert.ok(routes.includes(route), `missing read-only boundary for ${route}`);
-  }
-
-  assert.doesNotMatch(routes, /app\.(?:post|put|patch|delete)\("\/api\/admin\/(?:education|educations)/);
+  assert.match(routes, /app\.get\("\/api\/public\/(?:projects|bio|experiences|personal-information|welcome-message)/);
+  assert.doesNotMatch(routes, /["']\/api\/admin(?:\/|["'])/);
+  assert.match(routes, /app\.get\("\/admin"/);
+  assert.match(routes, /app\.use\("\/auth", rejectRetiredBrowserAuth\)/);
+  assert.match(routes, /https:\/\/admin\.2jog\.dev\//);
+  assert.match(routes, /https:\/\/admin-staging\.2jog\.dev\//);
+  assert.match(routes, /process\.env\.DEPLOYMENT_STAGE === "staging"/);
+  assert.doesNotMatch(app, /pages\/Admin|path="\/admin"|AdminPersonalizationPanel/);
 });
 
-test("Portfolio settings exposes no career editing surface", () => {
-  const adminPage = readFileSync(
-    path.join(process.cwd(), "src", "client", "src", "pages", "Admin.tsx"),
+test("Portfolio runtime loses canonical writes while Admin retains canonical authority", () => {
+  const adapter = readFileSync(
+    path.join(process.cwd(), "src", "shared", "turso-connection.ts"),
     "utf8",
   );
-
-  assert.match(adminPage, /Career data is read-only in Portfolio/);
-  assert.match(adminPage, /AdminPersonalizationPanel/);
-  assert.doesNotMatch(adminPage, /AdminProjectPresentationPanel|AdminSkillsPanel/);
-  assert.doesNotMatch(adminPage, /admin-tab-(?:bio|projects|skills|project-presentation|skill-presentation)/);
-});
-
-test("Portfolio runtime loses canonical writes while Admin gains the missing career grants", () => {
-  const migration = readFileSync(
-    path.join(
-      process.cwd(),
-      "src",
-      "migrations",
-      "013_enforce_career_write_authority.sql",
+  assert.match(adapter, /Portfolio runtime may only read career data or append GitHub activity/);
+  assert.match(adapter, /INSERT\\s\+\(\?:OR\\s\+IGNORE/);
+  assert.match(adapter, /github_timeline_events/);
+  assert.match(adapter, /UPDATE\|DELETE\|REPLACE/);
+  assert.doesNotThrow(() => assertPortfolioRuntimeStatement(
+    "INSERT INTO github_timeline_events (ext_id) VALUES ('new') ON CONFLICT DO NOTHING",
+  ));
+  assert.throws(
+    () => assertPortfolioRuntimeStatement(
+      "INSERT INTO github_timeline_events (ext_id) VALUES ('existing') ON CONFLICT(ext_id) DO UPDATE SET title = 'changed'",
     ),
-    "utf8",
+    /may only read career data or append GitHub activity/,
+  );
+  assert.throws(
+    () => assertPortfolioRuntimeStatement("SELECT 1; DELETE FROM projects"),
+    /exactly one SQL statement/,
+  );
+  assert.throws(
+    () => validateTursoConnection({ url: "not-a-database-url", authToken: "unused" }),
+    /local file or Turso URL/,
+  );
+  assert.equal(
+    validateTursoConnection({ url: "C:\\data\\career.db" }).url,
+    "file:///C:/data/career.db",
+  );
+  assert.doesNotThrow(() => assertPortfolioRuntimeStatement(
+    "WITH career AS (SELECT * FROM projects) SELECT * FROM career",
+  ));
+  assert.throws(
+    () => assertPortfolioRuntimeStatement(
+      "WITH stale AS (SELECT id FROM projects) DELETE FROM projects WHERE id IN (SELECT id FROM stale)",
+    ),
+    /may only read career data or append GitHub activity/,
   );
 
-  assert.match(migration, /to_regrole\('portfolio_runtime'\) IS NOT NULL/);
-  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE[\s\S]+FROM portfolio_runtime/);
-  assert.match(migration, /to_regrole\('admin_runtime'\) IS NOT NULL/);
-  assert.match(
-    migration,
-    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE\s+education,\s+experience_bullets\s+TO admin_runtime/,
-  );
-  assert.match(
-    migration,
-    /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE xyz_bullets TO admin_runtime/,
-  );
+  const guarded = createPortfolioClient({ url: ":memory:", runtimeGuard: true });
+  try {
+    assert.throws(
+      () => guarded.executeMultiple("SELECT 1"),
+      /does not expose bulk or transaction write primitives/,
+    );
+  } finally {
+    guarded.close();
+  }
+});
+
+test("Portfolio releases never run or substitute for Admin's career transfer", () => {
+  const workflowSources = ["ci.yml", "promote.yml"]
+    .map((filename) => ({
+      filename,
+      source: readFileSync(
+        path.join(process.cwd(), ".github", "workflows", filename),
+        "utf8",
+      ),
+    }));
+  const workflows = workflowSources
+    .map(({ source }) => source)
+    .join("\n");
+
+  assert.doesNotMatch(workflows, /(?:STAGING|PROD)_MIGRATION_JOB/);
+  assert.doesNotMatch(workflows, /gcloud run jobs (?:describe|execute|update)/);
+  assert.doesNotMatch(workflows, /verify-career-read-model|db:migrate|db:transfer/);
+  for (const { filename, source } of workflowSources) {
+    assert.ok(
+      [...source.matchAll(/--clear-tags/g)].length >= 2,
+      `${filename} must clear candidate tags on success and rollback`,
+    );
+  }
 });

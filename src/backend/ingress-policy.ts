@@ -19,6 +19,11 @@ export const discardVisitorNetworkHeaders: RequestHandler = (request, _response,
   next();
 };
 
+export const rejectRetiredBrowserAuth: RequestHandler = (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.status(404).json({ error: "route_not_found" });
+};
+
 export function createCanonicalHostMiddleware(publicBaseUrl: string): RequestHandler {
   const canonical = new URL(publicBaseUrl);
   if (

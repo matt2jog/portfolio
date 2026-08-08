@@ -123,7 +123,7 @@ test("chat limiter is one coarse process-local cap that ignores spoofed network 
   assert.equal(spoofed.statusCode, 429);
 });
 
-test("completion log uses route templates, Auth0 subject, and no PII", () => {
+test("completion log uses route templates and no identity or PII", () => {
   const messages: string[] = [];
   const originalLog = console.log;
   console.log = (message?: unknown) => messages.push(String(message));
@@ -134,17 +134,12 @@ test("completion log uses route templates, Auth0 subject, and no PII", () => {
     });
     const request = {
       method: "GET",
-      route: { path: "/api/admin/projects/:projectId" },
+      route: { path: "/api/public/projects/:projectId" },
       baseUrl: "",
-      path: "/api/admin/projects/private-record",
-      originalUrl: "/api/admin/projects/private-record?email=person@example.test",
+      path: "/api/public/projects/private-record",
+      originalUrl: "/api/public/projects/private-record?email=person@example.test",
       requestId: "request-7",
       correlationId: "correlation-7",
-      auth0Identity: { subject: "auth0|admin-7" },
-      user: {
-        email: "person@example.test",
-        auth0Sub: "auth0|admin-7",
-      },
     } as any;
     structuredRequestLogMiddleware(request, response as any, () => undefined);
     response.emit("finish");
@@ -160,12 +155,40 @@ test("completion log uses route templates, Auth0 subject, and no PII", () => {
     request_id: "request-7",
     correlation_id: "correlation-7",
     method: "GET",
-    route: "/api/admin/projects/:projectId",
+    route: "/api/public/projects/:projectId",
     status: 200,
     outcome: "success",
     duration_ms: 0,
-    actor_type: "auth0-admin",
-    actor_subject: "auth0|admin-7",
+    actor_type: "anonymous",
   });
   assert.doesNotMatch(messages[0]!, /private-record|person@example\.test/u);
+});
+
+test("completion log reports an SSE failure after HTTP 200 headers", () => {
+  const messages: string[] = [];
+  const originalLog = console.log;
+  console.log = (message?: unknown) => messages.push(String(message));
+  try {
+    const response = Object.assign(new EventEmitter(), {
+      statusCode: 200,
+      locals: { failureCode: "ai_request_failed" },
+    });
+    const request = {
+      method: "POST",
+      route: { path: "/api/public/chat" },
+      baseUrl: "",
+      requestId: "request-8",
+      correlationId: "correlation-8",
+    } as any;
+    structuredRequestLogMiddleware(request, response as any, () => undefined);
+    response.emit("finish");
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(messages.length, 1);
+  const event = JSON.parse(messages[0]!);
+  assert.equal(event.status, 200);
+  assert.equal(event.outcome, "failure");
+  assert.equal(event.failure_code, "ai_request_failed");
 });

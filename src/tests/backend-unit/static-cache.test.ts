@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
-import { staticCacheControl } from "../../backend/static";
+import { serveStatic, staticCacheControl } from "../../backend/static";
 
 test("only content-hashed build assets receive immutable caching", () => {
   for (const filePath of [
@@ -22,5 +23,20 @@ test("only content-hashed build assets receive immutable caching", () => {
     "public/sw.js",
   ]) {
     assert.equal(staticCacheControl(filePath), "no-store", filePath);
+  }
+});
+
+test("static serving fails clearly when the client bundle is absent", () => {
+  const globals = globalThis as typeof globalThis & { __dirname?: string };
+  const previous = globals.__dirname;
+  globals.__dirname = path.join(process.cwd(), "src", "backend");
+  try {
+    assert.throws(
+      () => serveStatic({} as never),
+      /Could not find the build directory/,
+    );
+  } finally {
+    if (previous === undefined) delete globals.__dirname;
+    else globals.__dirname = previous;
   }
 });

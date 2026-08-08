@@ -1,31 +1,32 @@
-import { assertUnprivilegedDatabaseSession } from "../../shared/postgres-session";
-import { portfolioDatabaseBoundary } from "../../shared/database-boundary";
+import type { Client } from "@libsql/client";
 
-interface Queryable {
-  query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }>;
-}
+export const PORTFOLIO_RUNTIME_DATABASE_OBJECTS = [
+  "ai_models",
+  "all_skills",
+  "bio",
+  "bio_paragraphs",
+  "experiences",
+  "github_timeline_events",
+  "linkedin_timeline_events",
+  "personal_information",
+  "portfolio_skills",
+  "projects",
+  "skills_group",
+  "welcome_messages",
+  "xyz_bullets",
+] as const;
 
-interface ReleasableQueryable extends Queryable {
-  release(): void;
-}
-
-interface ConnectablePool {
-  connect(): Promise<ReleasableQueryable>;
-}
-
-export async function assertRuntimeDatabaseSession(queryable: Queryable): Promise<void> {
-  await assertUnprivilegedDatabaseSession(
-    queryable,
-    portfolioDatabaseBoundary().runtimeRole,
-    "Portfolio runtime",
-  );
-}
-
-export async function assertRuntimeDatabasePool(pool: ConnectablePool): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await assertRuntimeDatabaseSession(client);
-  } finally {
-    client.release();
+export async function assertRuntimeDatabaseClient(client: Client): Promise<void> {
+  const result = await client.execute({
+    sql: `
+      SELECT count(*) AS object_count
+      FROM sqlite_master
+      WHERE type IN ('table', 'view')
+        AND name IN (${PORTFOLIO_RUNTIME_DATABASE_OBJECTS.map(() => "?").join(", ")})
+    `,
+    args: [...PORTFOLIO_RUNTIME_DATABASE_OBJECTS],
+  });
+  if (Number(result.rows[0]?.object_count ?? 0) !== PORTFOLIO_RUNTIME_DATABASE_OBJECTS.length) {
+    throw new Error("Portfolio career schema is unavailable");
   }
 }

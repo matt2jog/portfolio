@@ -1,11 +1,8 @@
 import type { Express, Request, Response } from "express";
 import type { Server } from "http";
 import { createHash } from "crypto";
-import { authRoutes, requireAdmin, requireAuth } from "./auth";
 import { db } from "./data/db";
 import { isValidWelcomeSlug } from "./welcome-message-utils";
-import { canonicalCareerMutationRejected } from "./career-authority";
-import { publicGeoIpHint } from "./geoip";
 import { loadLegalDoc } from "./markdown";
 import { getGithubActivity, getGithubTimeline } from "./github";
 import { getLinkedinActivity, getLinkedinTimeline } from "./linkedin";
@@ -16,17 +13,13 @@ import {
   portfolioSkills,
   projects,
   skillsGroup,
-  auditLogs,
   xyzBullets,
   personalInformation,
   experiences,
   aiModels,
   welcomeMessages,
-  insertWelcomeMessageSchema,
-  updateWelcomeMessageSchema,
 } from "@shared/schema";
-import { adminPolicyAcceptance } from "@shared/schema_policy";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Agent, GradientProvider, FireworksProvider, FallbackProvider } from "./agent";
 import type { LLMProvider } from "./agent";
 import { ensureRenderableMermaid } from "./agent/mermaid";
@@ -44,6 +37,7 @@ import {
   buildChatOwnerContext,
   buildPublicPersonalInformationResponse,
 } from "./personal-information";
+import { rejectRetiredBrowserAuth } from "./ingress-policy";
 
 const DEFAULT_PROJECTS_CACHE_TTL_MINUTES = 60;
 const PROMPT_SUGGESTIONS_VERSION = "v4";
@@ -161,26 +155,17 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.get("/auth/login", authRoutes.start);
-  app.get("/auth/callback", authRoutes.callback);
-
-  // ========== AUTH ==========
-  app.get("/api/auth/me", requireAuth, (req, res) => {
-    return res.json({
-      id: req.user?.id,
-      subject: req.auth0Identity?.subject ?? req.user?.auth0Sub,
-      name: req.user?.name,
-      role: req.user?.role,
-      auth_method: "auth0",
-    });
+  app.get("/admin", (_req, res) => {
+    const target = process.env.DEPLOYMENT_STAGE === "staging"
+      ? "https://admin-staging.2jog.dev/"
+      : "https://admin.2jog.dev/";
+    res.redirect(308, target);
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    return authRoutes.logout(req, res);
-  });
-  app.post("/auth/logout", (req, res) => {
-    return authRoutes.logout(req, res);
-  });
+  // Portfolio is public and has no browser identity surface. Keep legacy auth
+  // paths out of the SPA fallback so release checks and clients see an honest
+  // HTTP 404 instead of a rendered not-found page with a 200 status.
+  app.use("/auth", rejectRetiredBrowserAuth);
 
   // ========== LEGAL DOCUMENTS ==========
   // The API serves the checked-in legal text used by the matching SPA routes.
@@ -192,78 +177,6 @@ export async function registerRoutes(
 
   app.get("/api/legal/privacy", sendLegalDoc("PRIVACY_POLICY.md", "Privacy Policy not found"));
   app.get("/api/legal/terms", sendLegalDoc("TERMS_OF_USE.md", "Terms of Use not found"));
-  app.get("/api/legal/tracking", sendLegalDoc("TRACKING_NOTICE_AND_CONSENT.md", "Tracking Notice not found"));
-
-  // ========== GEOLOCATION ==========
-  app.get("/api/public/geoip", (_req, res) => {
-    res.json(publicGeoIpHint());
-  });
-
-  // ========== POLICY ACCEPTANCE ==========
-  app.get("/api/admin/policy/check-acceptance", requireAuth, async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "Not authenticated" });
-
-    const POLICY_VERSION = "1.0";
-    const TERMS_VERSION = "1.0";
-    const PRIVACY_VERSION = "1.0";
-
-    const [acceptance] = await db
-      .select()
-      .from(adminPolicyAcceptance)
-      .where(
-        sql`${adminPolicyAcceptance.adminId} = ${userId}
-        AND ${adminPolicyAcceptance.policyVersion} = ${POLICY_VERSION}
-        AND ${adminPolicyAcceptance.termsVersion} = ${TERMS_VERSION}
-        AND ${adminPolicyAcceptance.privacyVersion} = ${PRIVACY_VERSION}
-        AND ${adminPolicyAcceptance.accepted} = true`
-      )
-      .limit(1);
-
-    if (acceptance) {
-      return res.json({ accepted: true, acceptance });
-    }
-
-    res.status(403).json({ accepted: false });
-  });
-
-  app.post("/api/admin/policy/accept", requireAuth, async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "Not authenticated" });
-
-    const POLICY_VERSION = "1.0";
-    const TERMS_VERSION = "1.0";
-    const PRIVACY_VERSION = "1.0";
-
-    const [result] = await db
-      .insert(adminPolicyAcceptance)
-      .values({
-        adminId: userId,
-        policyVersion: POLICY_VERSION,
-        termsVersion: TERMS_VERSION,
-        privacyVersion: PRIVACY_VERSION,
-        accepted: true,
-      })
-      .onConflictDoUpdate({
-        target: [
-          adminPolicyAcceptance.adminId,
-          adminPolicyAcceptance.policyVersion,
-          adminPolicyAcceptance.termsVersion,
-          adminPolicyAcceptance.privacyVersion,
-        ],
-        set: { accepted: true, timestamp: new Date() },
-      })
-      .returning();
-
-    await logAudit(req, "policy.admin_accepted", {
-      admin_id: userId,
-      policy_version: POLICY_VERSION,
-      terms_version: TERMS_VERSION,
-      privacy_version: PRIVACY_VERSION,
-    });
-
-    res.json({ ok: true, result });
-  });
 
   // ========== PUBLIC DATA ==========
   
@@ -751,13 +664,14 @@ export async function registerRoutes(
       return;
     } catch (error) {
       if (agent.isRateLimitError(error)) {
+        res.locals.failureCode = "ai_rate_limited";
         writeSseAssistantMessage(res, agent.rateLimitMessage);
         res.end();
         return;
       }
 
+      res.locals.failureCode = "ai_request_failed";
       if (!res.headersSent) {
-        console.error(JSON.stringify({ event: "portfolio.ai.request_failed" }));
         res.status(500).json({ error: "AI request failed" });
       } else {
         res.end();
@@ -797,134 +711,6 @@ export async function registerRoutes(
     res.json(buildPublicPersonalInformationResponse(row));
   });
 
-  app.get("/api/admin/projects", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(projects)
-      .where(sql`${projects.deletedAt} IS NULL`)
-      .orderBy(asc(projects.position));
-    res.json(await hydrateProjectsWithBullets(rows));
-  });
-
-  app.post("/api/admin/projects", requireAdmin, canonicalCareerMutationRejected);
-
-  app.put("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected);
-
-  app.delete("/api/admin/projects/:id", requireAdmin, canonicalCareerMutationRejected);
-
-  app.post("/api/admin/projects/reorder", requireAdmin, canonicalCareerMutationRejected);
-
-  app.get("/api/admin/bio", requireAdmin, async (_req, res) => {
-    const [row] = await db.select().from(bio)
-      .orderBy(desc(bio.createdAt))
-      .limit(1);
-    if (!row) return res.json({ headline: "", paragraphs: [] });
-    const paragraphs = await db.select().from(bioParagraphs)
-      .where(eq(bioParagraphs.bioId, row.id))
-      .orderBy(asc(bioParagraphs.position));
-    res.json({ ...row, paragraphs });
-  });
-
-  app.get("/api/admin/personal-information", requireAdmin, async (_req, res) => {
-    const [row] = await db.select().from(personalInformation)
-      .orderBy(desc(personalInformation.updatedAt))
-      .limit(1);
-    res.json(buildPublicPersonalInformationResponse(row));
-  });
-
-  app.put("/api/admin/personal-information", requireAdmin, canonicalCareerMutationRejected);
-
-  app.post("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected);
-  app.put("/api/admin/bio", requireAdmin, canonicalCareerMutationRejected);
-
-  app.get("/api/admin/bio/versions", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(bio)
-      .orderBy(desc(bio.createdAt));
-    const hydrated = await Promise.all(rows.map(async (row) => {
-      const paragraphs = await db.select().from(bioParagraphs)
-        .where(eq(bioParagraphs.bioId, row.id))
-        .orderBy(asc(bioParagraphs.position));
-      return { ...row, paragraphs };
-    }));
-    res.json(hydrated);
-  });
-
-  app.post("/api/admin/bio/:id/restore", requireAdmin, canonicalCareerMutationRejected);
-  app.delete("/api/admin/bio/:id", requireAdmin, canonicalCareerMutationRejected);
-
-  app.get("/api/admin/skills", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(portfolioSkills)
-      .where(sql`${portfolioSkills.deletedAt} IS NULL`)
-      .orderBy(asc(portfolioSkills.position));
-    res.json(await hydratePortfolioSkills(rows));
-  });
-
-  app.get("/api/admin/skills-groups", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(skillsGroup)
-      .orderBy(asc(skillsGroup.position), asc(skillsGroup.name));
-    res.json(rows);
-  });
-
-  app.post("/api/admin/skills-groups", requireAdmin, canonicalCareerMutationRejected);
-  app.put("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.delete("/api/admin/skills-groups/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.post("/api/admin/skills-groups/reorder", requireAdmin, canonicalCareerMutationRejected);
-
-  app.get("/api/admin/all-skills", requireAdmin, async (_req, res) => {
-    const rows = await db.select({
-      id: allSkills.id,
-      name: allSkills.name,
-      groupingId: allSkills.groupingId,
-      groupingName: skillsGroup.name,
-    })
-      .from(allSkills)
-      .leftJoin(skillsGroup, eq(allSkills.groupingId, skillsGroup.id))
-      .orderBy(asc(allSkills.name));
-    const references = await db
-      .select({
-        allSkillId: portfolioSkills.allSkillId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(portfolioSkills)
-      .groupBy(portfolioSkills.allSkillId);
-    const referencesBySkill = new Map(
-      references.map((row) => [row.allSkillId, Number(row.count)]),
-    );
-    res.json(rows.map((row) => ({
-      ...row,
-      portfolioReferences: referencesBySkill.get(row.id) ?? 0,
-    })));
-  });
-
-  app.post("/api/admin/all-skills", requireAdmin, canonicalCareerMutationRejected);
-  app.put("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.delete("/api/admin/all-skills/:id", requireAdmin, canonicalCareerMutationRejected);
-
-  app.post("/api/admin/skills", requireAdmin, canonicalCareerMutationRejected);
-  app.put("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.delete("/api/admin/skills/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.post("/api/admin/skills/reorder", requireAdmin, canonicalCareerMutationRejected);
-
-  // Experience endpoints
-  app.get("/api/admin/experiences", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(experiences).orderBy(asc(experiences.position));
-    res.json(rows);
-  });
-
-  app.post("/api/admin/experiences", requireAdmin, canonicalCareerMutationRejected);
-  app.put("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected);
-  app.delete("/api/admin/experiences/:id", requireAdmin, canonicalCareerMutationRejected);
-
-  app.post("/api/admin/experiences/reorder", requireAdmin, canonicalCareerMutationRejected);
-
-  // Archived items endpoints
-  app.get("/api/admin/archived/projects", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(projects)
-      .where(sql`${projects.deletedAt} IS NOT NULL`)
-      .orderBy(asc(projects.deletedAt));
-    res.json(rows);
-  });
-
-  app.post("/api/admin/projects/:id/restore", requireAdmin, canonicalCareerMutationRejected);
-
   // ========== WELCOME MESSAGES (PERSONALIZATION) ==========
 
   // Public: look up a welcome message by slug (archived messages are still active)
@@ -944,111 +730,7 @@ export async function registerRoutes(
     res.json({ message: row.message });
   });
 
-  // Admin: list active (non-archived) welcome messages
-  app.get("/api/admin/welcome-messages", requireAdmin, async (_req, res) => {
-    const rows = await db
-      .select()
-      .from(welcomeMessages)
-      .where(isNull(welcomeMessages.archivedAt))
-      .orderBy(desc(welcomeMessages.createdAt));
-    res.json(rows);
-  });
-
-  // Admin: list archived welcome messages
-  app.get("/api/admin/welcome-messages/archived", requireAdmin, async (_req, res) => {
-    const rows = await db
-      .select()
-      .from(welcomeMessages)
-      .where(isNotNull(welcomeMessages.archivedAt))
-      .orderBy(desc(welcomeMessages.archivedAt));
-    res.json(rows);
-  });
-
-  // Admin: create welcome message
-  app.post("/api/admin/welcome-messages", requireAdmin, async (req, res) => {
-    const parsed = insertWelcomeMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-    }
-    if (!isValidWelcomeSlug(parsed.data.slug)) {
-      return res.status(400).json({ error: "Slug must be lowercase alphanumeric with hyphens (no leading/trailing hyphens), max 63 chars" });
-    }
-    const [row] = await db
-      .insert(welcomeMessages)
-      .values(parsed.data)
-      .returning();
-    await logAudit(req, "welcome_message.create", { id: row.id, slug: row.slug });
-    res.status(201).json(row);
-  });
-
-  // Admin: update welcome message
-  app.put("/api/admin/welcome-messages/:id", requireAdmin, async (req, res) => {
-    const id = routeId(req.params.id);
-    const parsed = updateWelcomeMessageSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-    }
-    if (parsed.data.slug !== undefined && !isValidWelcomeSlug(parsed.data.slug)) {
-      return res.status(400).json({ error: "Slug must be lowercase alphanumeric with hyphens (no leading/trailing hyphens), max 63 chars" });
-    }
-    const [row] = await db
-      .update(welcomeMessages)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(eq(welcomeMessages.id, id))
-      .returning();
-    if (!row) return res.status(404).json({ error: "Welcome message not found" });
-    await logAudit(req, "welcome_message.update", { id, changes: parsed.data });
-    res.json(row);
-  });
-
-  // Admin: archive welcome message (hides from admin list, stays active for URL lookup)
-  app.post("/api/admin/welcome-messages/:id/archive", requireAdmin, async (req, res) => {
-    const id = routeId(req.params.id);
-    const [row] = await db
-      .update(welcomeMessages)
-      .set({ archivedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(welcomeMessages.id, id), isNull(welcomeMessages.archivedAt)))
-      .returning();
-    if (!row) return res.status(404).json({ error: "Welcome message not found or already archived" });
-    await logAudit(req, "welcome_message.archive", { id });
-    res.json(row);
-  });
-
-  // Admin: unarchive welcome message
-  app.post("/api/admin/welcome-messages/:id/unarchive", requireAdmin, async (req, res) => {
-    const id = routeId(req.params.id);
-    const [row] = await db
-      .update(welcomeMessages)
-      .set({ archivedAt: null, updatedAt: new Date() })
-      .where(and(eq(welcomeMessages.id, id), isNotNull(welcomeMessages.archivedAt)))
-      .returning();
-    if (!row) return res.status(404).json({ error: "Welcome message not found or not archived" });
-    await logAudit(req, "welcome_message.unarchive", { id });
-    res.json(row);
-  });
-
-  // Admin: hard delete welcome message
-  app.delete("/api/admin/welcome-messages/:id", requireAdmin, async (req, res) => {
-    const id = routeId(req.params.id);
-    const [deleted] = await db
-      .delete(welcomeMessages)
-      .where(eq(welcomeMessages.id, id))
-      .returning();
-    if (!deleted) return res.status(404).json({ error: "Welcome message not found" });
-    await logAudit(req, "welcome_message.delete", { id, slug: deleted.slug });
-    res.json({ ok: true });
-  });
-
   return httpServer;
-}
-
-async function logAudit(req: Request, action: string, payload: unknown) {
-  if (!req.user?.id) return;
-  await db.insert(auditLogs).values({
-    userId: req.user.id,
-    action,
-    payload,
-  });
 }
 function routeId(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";

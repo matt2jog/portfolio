@@ -2,9 +2,7 @@ import type { RequestHandler } from "express";
 
 export function requiresNoStore(pathname: string): boolean {
   return pathname === "/api"
-    || pathname.startsWith("/api/")
-    || pathname === "/auth"
-    || pathname.startsWith("/auth/");
+    || pathname.startsWith("/api/");
 }
 
 export const dynamicResponseCachePolicy: RequestHandler = (request, response, next) => {

@@ -67,13 +67,8 @@ async function mockDbRoute(page: Page, url: string, body: JsonValue) {
 }
 
 export async function installMockApi(page: Page) {
-  await page.route("**/api/admin/**", (route) => fulfillJson(route, { ok: true }));
-  await page.route("**/api/public/geoip", (route) =>
-    fulfillJson(route, { country_code: null, status: "unknown" }),
-  );
   await page.route("**/api/legal/privacy", (route) => fulfillJson(route, legalDocFixture));
   await page.route("**/api/legal/terms", (route) => fulfillJson(route, legalDocFixture));
-  await page.route("**/api/legal/tracking", (route) => fulfillJson(route, legalDocFixture));
 
   await mockDbRoute(page, "**/api/public/personal-information", personalInformationFixture);
   await mockDbRoute(page, "**/api/public/bio", adminFixtures.bio);
@@ -121,70 +116,26 @@ export async function installMockApi(page: Page) {
     return fulfillJson(route, { error: "Welcome message not found" }, 404);
   });
 
-  await page.route("**/api/admin/welcome-messages/archived", (route) =>
-    fulfillJson(route, []),
-  );
-  await page.route("**/api/admin/welcome-messages", (route) =>
-    fulfillJson(route, welcomeMessagesFixture),
-  );
-
-  await page.route("**/api/auth/me", (route) => fulfillJson(route, adminFixtures.me));
-  await page.route("**/api/admin/policy/check-acceptance", (route) =>
-    fulfillJson(route, { accepted: true }),
-  );
 }
 
 export async function seedBrowserState(
   page: Page,
   options: {
     introSeen?: boolean;
-    consent?: "accept_all" | "reject_all" | "none";
-    logRocketTestMode?: boolean;
   } = {},
 ) {
-  const {
-    introSeen = true,
-    consent = "reject_all",
-    logRocketTestMode = true,
-  } = options;
+  const { introSeen = true } = options;
 
   await page.addInitScript(
-    ({ introSeen: shouldSeedIntro, consentChoice, testMode }) => {
+    ({ introSeen: shouldSeedIntro }) => {
       Math.random = () => 0.42;
-
-      if (testMode) {
-        window.__LOGROCKET_TEST_MODE = true;
-        window.__LOGROCKET_TEST_EVENTS = [];
-      }
 
       if (shouldSeedIntro) {
         window.localStorage.setItem("__root_intro_seen_until", String(Date.now() + 3 * 24 * 60 * 60 * 1000));
       } else {
         window.localStorage.removeItem("__root_intro_seen_until");
       }
-
-      if (consentChoice === "none") {
-        window.localStorage.removeItem("__consent_record");
-        return;
-      }
-
-      const categories =
-        consentChoice === "accept_all" ? ["essential", "analytics"] : ["essential"];
-      window.localStorage.setItem(
-        "__consent_record",
-        JSON.stringify({
-          timestamp: new Date().toISOString(),
-          jurisdiction_detected: "US",
-          policy_version: "1.0",
-          categories_accepted: categories,
-          user_action: consentChoice,
-        }),
-      );
     },
-    {
-      introSeen,
-      consentChoice: consent,
-      testMode: logRocketTestMode,
-    },
+    { introSeen },
   );
 }

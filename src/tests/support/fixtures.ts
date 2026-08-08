@@ -221,12 +221,6 @@ export const welcomeMessagesFixture = [
 ];
 
 export const adminFixtures = {
-  me: {
-    id: "admin-test-user",
-    email: "admin@example.com",
-    name: "Local Admin",
-    role: "admin",
-  },
   bio: {
     id: "bio-current",
     headline: "Full stack engineer building useful systems.",
