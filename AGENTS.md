@@ -33,9 +33,10 @@ Keep staging structurally equivalent to production with isolated state/data.
 
 ## Apply platform guardrails
 
-Do not add Kafka, CQRS, event sourcing, application Pub/Sub, Cloudflare Workers,
-global platform skills/profiles/prompts, wrapper CLIs, or parallel catalogs.
-Never expose secrets, visitor identifiers, session data, or private activity.
+Do not add brokered application messaging, split command/read models, event
+sourcing, application Pub/Sub, Cloudflare Workers, global platform
+skills/profiles/prompts, wrapper CLIs, or parallel catalogs. Never expose
+secrets, visitor identifiers, session data, or private activity.
 
 Report metered-change estimates. Email and wait only above `$3/month`, when
 replacing a technology selected in the active goal, or when introducing an

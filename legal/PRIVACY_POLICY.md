@@ -82,8 +82,8 @@ Your data is shared with or processed by:
 
 - **Auth0:** Processes administrator authentication and account profile claims.
 - **Cloudflare and Google Cloud:** Deliver DNS, CDN, and application traffic and may process network metadata and operational logs.
-- **Supabase:** Currently hosts or processes the Site's application data during migration.
-- **Turso:** Is the pending canonical database destination. Supabase becomes a temporary read-only migration or rollback processor only after the exact transfer is verified.
+- **Turso:** Hosts the Site's canonical application database.
+- **Supabase:** Temporarily retains the pre-cutover Portfolio database copy. The live Portfolio application does not query or write it; access is limited to platform administrators for recovery. The copy will be deleted after final data-equivalence and rollback verification.
 
 These providers may process data in the United States under their respective data-protection terms.
 
